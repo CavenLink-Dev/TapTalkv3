@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "TapTalk",
+    "slug": "taptalk",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "taptalk",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.taptalk.app",
+      "deploymentTarget": "16.0"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "sounds": []
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
