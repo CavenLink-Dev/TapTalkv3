@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { Href, useRouter } from 'expo-router';
+import { Href, Redirect } from 'expo-router';
 import { useAppContext } from '../src/hooks/useAppContext';
 
 const routes = {
@@ -10,20 +9,15 @@ const routes = {
 };
 
 export default function Index() {
-  const router = useRouter();
   const { state } = useAppContext();
 
-  useEffect(() => {
-    if (!state.onboardingComplete) {
-      router.replace(routes.splash);
-    } else if (!state.subscriptionComplete) {
-      router.replace(routes.pay);
-    } else if (!state.signedIn) {
-      router.replace(routes.login);
-    } else {
-      router.replace(routes.talk);
-    }
-  }, [router, state.onboardingComplete, state.signedIn, state.subscriptionComplete]);
+  const route = !state.onboardingComplete
+    ? routes.splash
+    : !state.subscriptionComplete
+      ? routes.pay
+      : !state.signedIn
+        ? routes.login
+        : routes.talk;
 
-  return null;
+  return <Redirect href={route} />;
 }
