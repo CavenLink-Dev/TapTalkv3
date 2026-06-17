@@ -22,6 +22,7 @@ import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { DISPLAY_NAME_MAX, validateDisplayName } from '../../src/utils/displayName';
 import { hapticSelection } from '../../src/utils/haptics';
+import { hashPin } from '../../src/utils/pin';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
 import { colors, radii, shadows, spacing, typography } from '../../src/theme/tokens';
 
@@ -144,7 +145,7 @@ export default function Onboarding() {
     }
   };
 
-  const next = () => {
+  const next = async () => {
     if (step < TOTAL_STEPS) {
       hapticSelection();
       setStep((s) => s + 1);
@@ -152,7 +153,8 @@ export default function Onboarding() {
     }
     const legalName = `${firstName.trim()} ${lastName.trim()}`.trim();
     dispatch({ type: 'SET_USER', payload: { legalName, displayName: displayName.trim(), name: legalName, nickname: displayName.trim(), role: 'guardian', useCases: [] } });
-    dispatch({ type: 'SET_PARENT', payload: { lockEnabled, pin, email: parentEmail.trim(), timeoutHours: Number(timeoutHours) || 0 } });
+    const hashedPin = lockEnabled ? await hashPin(pin) : '';
+    dispatch({ type: 'SET_PARENT', payload: { lockEnabled, pin: hashedPin, email: parentEmail.trim(), timeoutHours: Number(timeoutHours) || 0 } });
     dispatch({ type: 'COMPLETE_ONBOARDING' });
     router.replace(payRoute);
   };

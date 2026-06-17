@@ -232,7 +232,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Unknown load error';
-        console.error('Failed to load state:', message);
+        if (__DEV__) console.error('Failed to load state:', message);
         setHydrationError({ phase: 'load', message });
         try {
           await AsyncStorage.removeItem(STORAGE_KEY);
@@ -259,7 +259,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
         const message = e instanceof Error ? e.message : 'Unknown save error';
-        console.error('Failed to save state after retries:', message);
+        if (__DEV__) console.error('Failed to save state after retries:', message);
         saveRetries.current = attempt;
         setHydrationError({ phase: 'save', message });
       }
