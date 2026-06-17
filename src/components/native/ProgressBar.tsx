@@ -71,7 +71,5 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     gap: 10,
-    // Give breathing room between the side icon buttons and the pills.
-    marginHorizontal: 10,
   },
 });

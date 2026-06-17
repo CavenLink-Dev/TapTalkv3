@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { Screen } from '../../src/components/native/Screen';
 import { Card } from '../../src/components/native/Card';
@@ -46,15 +47,28 @@ export default function TalkScreen() {
     () => state.messageWords.map((word) => word.label).join(' '),
     [state.messageWords],
   );
+  const hasWords = state.messageWords.length > 0;
+  const typedText = state.keyboardText.trim();
+  const messageLabel = hasWords
+    ? `Message strip: ${wordsText}`
+    : 'Message strip empty. Tap a word to build a sentence.';
 
   const activeBoard = board === 'main' ? mainBoard : foodBoard;
 
+  const haptic = () => Haptics.selectionAsync().catch(() => undefined);
+  const announce = (message: string) => {
+    AccessibilityInfo.announceForAccessibility(message);
+  };
+
   const addWord = (item: BoardItem) => {
     if (item.kind === 'folder') {
+      haptic();
       setBoard('food');
+      announce(`Opened ${item.label} folder`);
       return;
     }
 
+    haptic();
     dispatch({
       type: 'APPEND_WORD',
       payload: {
@@ -65,13 +79,49 @@ export default function TalkScreen() {
       },
     });
     speak(item.label, { rate: 0.9 });
+    const nextMessage = [...state.messageWords.map((word) => word.label), item.label].join(' ');
+    announce(`Added ${item.label}. Message strip: ${nextMessage}`);
   };
 
   const speakMessage = () => {
-    const text = keyboardMode ? state.keyboardText : wordsText;
+    const text = keyboardMode ? typedText : wordsText;
     if (text.trim()) {
+      haptic();
       speak(text, { rate: 0.9 });
+      announce(`Speaking: ${text}`);
+      return;
     }
+    announce('No message to speak yet');
+  };
+
+  const removeLastWord = () => {
+    if (!hasWords) {
+      announce('Message strip is already empty');
+      return;
+    }
+    haptic();
+    dispatch({ type: 'REMOVE_LAST_WORD' });
+    announce('Removed last word');
+  };
+
+  const clearWords = () => {
+    if (!hasWords) {
+      announce('Message strip is already empty');
+      return;
+    }
+    haptic();
+    dispatch({ type: 'CLEAR_WORDS' });
+    announce('Cleared message strip');
+  };
+
+  const clearTypedMessage = () => {
+    if (!typedText) {
+      announce('Typed message is already empty');
+      return;
+    }
+    haptic();
+    dispatch({ type: 'SET_KEYBOARD_TEXT', payload: '' });
+    announce('Cleared typed message');
   };
 
   if (keyboardMode) {
@@ -80,6 +130,7 @@ export default function TalkScreen() {
         <Card style={styles.messageCard}>
           <TextInput
             accessibilityLabel="Typed TalkBoard message"
+            accessibilityHint="Type a message, then press Speak to hear it aloud"
             multiline
             placeholder="Tap to start..."
             placeholderTextColor={colors.textTertiary}
@@ -91,13 +142,15 @@ export default function TalkScreen() {
             <PrimaryButton
               accessibilityLabel="Speak typed message"
               label="Speak"
+              disabled={!typedText}
               onPress={speakMessage}
               style={styles.smallAction}
             />
             <PrimaryButton
               accessibilityLabel="Clear typed message"
               label="Clear"
-              onPress={() => dispatch({ type: 'SET_KEYBOARD_TEXT', payload: '' })}
+              disabled={!typedText}
+              onPress={clearTypedMessage}
               variant="secondary"
               style={styles.smallAction}
             />
@@ -106,7 +159,10 @@ export default function TalkScreen() {
         <PrimaryButton
           accessibilityLabel="Return to AAC board"
           label="Back to Board"
-          onPress={() => setKeyboardMode(false)}
+          onPress={() => {
+            haptic();
+            setKeyboardMode(false);
+          }}
           variant="secondary"
         />
       </Screen>
@@ -115,13 +171,20 @@ export default function TalkScreen() {
 
   return (
     <Screen title="Talk" subtitle="Tap symbols to build a sentence." scroll={false}>
-      <Card style={styles.messageCard}>
+      <Card
+        style={styles.messageCard}
+        accessibilityLabel={messageLabel}
+        accessibilityLiveRegion="polite"
+      >
         <View style={styles.messageRow}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Speak message"
+            accessibilityHint="Speaks every word currently in the message strip"
+            accessibilityState={{ disabled: !hasWords }}
+            disabled={!hasWords}
             onPress={speakMessage}
-            style={styles.speakerButton}
+            style={[styles.speakerButton, !hasWords && styles.disabledButton]}
           >
             <Text style={styles.speakerText}>🔊</Text>
           </Pressable>
@@ -139,9 +202,12 @@ export default function TalkScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Remove last word"
-            onPress={() => dispatch({ type: 'REMOVE_LAST_WORD' })}
-            onLongPress={() => dispatch({ type: 'CLEAR_WORDS' })}
-            style={styles.clearButton}
+            accessibilityHint="Double tap to remove the last word. Long press to clear the whole message."
+            accessibilityState={{ disabled: !hasWords }}
+            disabled={!hasWords}
+            onPress={removeLastWord}
+            onLongPress={clearWords}
+            style={[styles.clearButton, !hasWords && styles.disabledButton]}
           >
             <Text style={styles.clearText}>⌫</Text>
           </Pressable>
@@ -153,7 +219,11 @@ export default function TalkScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Return to main AAC board"
-            onPress={() => setBoard('main')}
+            onPress={() => {
+              haptic();
+              setBoard('main');
+              announce('Returned to main board');
+            }}
           >
             <Text style={styles.backLink}>‹ Main</Text>
           </Pressable>
@@ -162,7 +232,11 @@ export default function TalkScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open keyboard mode"
-          onPress={() => setKeyboardMode(true)}
+          accessibilityHint="Switches from symbol board to typed message mode"
+          onPress={() => {
+            haptic();
+            setKeyboardMode(true);
+          }}
         >
           <Text style={styles.backLink}>Keys</Text>
         </Pressable>
@@ -174,6 +248,11 @@ export default function TalkScreen() {
             key={item.id}
             accessibilityRole="button"
             accessibilityLabel={`${item.kind === 'folder' ? 'Open folder' : 'Say'} ${item.label}`}
+            accessibilityHint={
+              item.kind === 'folder'
+                ? `Opens the ${item.label} folder`
+                : `Adds ${item.label} to the message strip and speaks it`
+            }
             onPress={() => addWord(item)}
             style={({ pressed }) => [
               styles.aacCell,
@@ -235,6 +314,9 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 18,
     fontWeight: '800',
+  },
+  disabledButton: {
+    opacity: 0.45,
   },
   folderCell: {
     width: '64%',

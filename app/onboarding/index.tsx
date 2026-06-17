@@ -119,7 +119,7 @@ export default function Onboarding() {
     }
     if (step === 3) {
       const pinOk = !lockEnabled || (pin.length === 6 && pin === confirmPin);
-      return pinOk && emailPattern.test(parentEmail.trim());
+      return pinOk && emailPattern.test(parentEmail.trim()) && emailCode.length === 6;
     }
     if (step === 4) return Number(timeoutHours) > 0;
     if (step === 5) return false; // verify happens via the in-card VERIFY button
@@ -127,7 +127,7 @@ export default function Onboarding() {
     return true;
   }, [
     step, firstName, lastName, displayCheck.valid, lockEnabled, pin, confirmPin,
-    parentEmail, timeoutHours, verifyState, appMode,
+    parentEmail, emailCode, timeoutHours, verifyState, appMode,
   ]);
 
   const haptic = () => Haptics.selectionAsync().catch(() => undefined);
@@ -201,13 +201,13 @@ export default function Onboarding() {
         </View>
       </View>
 
-      {/* ── Main content. iOS 16+ ScrollView adjusts for the keyboard natively;
-          we deliberately avoid KeyboardAvoidingView because it conflicts with
-          automaticallyAdjustKeyboardInsets and produces the "button-pinned-
-          above-keyboard, fields hidden" symptom on iPhone 13 Pro Max. ── */}
+      {/* ── Main content. KeyboardAvoidingView owns vertical resizing while the
+          card ScrollView owns form scrolling. Keeping one strategy avoids
+          iOS 16 inset conflicts on iPhone 13 Pro Max. ── */}
       <KeyboardAvoidingView
         style={styles.kbFlex}
-        behavior={Platform.OS === 'android' ? 'height' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
         <Animated.View style={[styles.animWrap, { opacity: enterAnim, transform: [{ translateX: slideAnim }] }]}>
 
@@ -220,7 +220,7 @@ export default function Onboarding() {
                   text={"Welcome to TapTalk! I'm Clo.\nBefore we get started, what would\nyou like me to call you?"}
                   onDone={() => setIntroDone(true)}
                 />
-                <MascotImage mascot="happy_smile" size={180} float blink lookAround style={styles.heroMascot} />
+                <MascotImage mascot="happy_smile" size={180} style={styles.heroMascot} />
               </>
             ) : null}
 
@@ -230,7 +230,7 @@ export default function Onboarding() {
                   animationKey="step2"
                   text={`Please give a parent or guardian your device so they can answer the following few questions. Don't worry, it won't take long!`}
                 />
-                <MascotImage mascot="happy_grin" size={228} float blink lookAround style={styles.heroMascot} />
+                <MascotImage mascot="happy_grin" size={228} style={styles.heroMascot} />
               </>
             ) : null}
 
@@ -258,8 +258,7 @@ export default function Onboarding() {
               contentContainerStyle={[styles.cardScroll, step === 1 && styles.cardScrollName]}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="interactive"
-              // iOS 16+: automatically insets content so focused inputs stay above keyboard
-              automaticallyAdjustKeyboardInsets
+              contentInsetAdjustmentBehavior="always"
             >
               {/* ── STEP 1: Name entry ── */}
               {step === 1 ? (
@@ -306,7 +305,7 @@ export default function Onboarding() {
                       returnKeyType="done"
                       accessibilityLabel="Display name"
                       onFocus={() => {
-                        setTimeout(() => formScrollRef.current?.scrollToEnd({ animated: true }), 180);
+                        setTimeout(() => formScrollRef.current?.scrollToEnd({ animated: true }), 300);
                       }}
                     />
                     {displayCheck.error ? (
@@ -499,7 +498,7 @@ function TitleBlock({ mascot, title, desc }: { mascot: MascotKey; title: string;
   return (
     <View style={styles.titleBlock}>
       <View style={styles.titleRow}>
-        <MascotImage mascot={mascot} size={96} blink lookAround />
+        <MascotImage mascot={mascot} size={96} />
         <View style={styles.titleTextWrap}>
           <Text style={styles.bigTitle}>{title}</Text>
         </View>
@@ -601,8 +600,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
-  headerSlot: { width: 44, height: 32, alignItems: 'center', justifyContent: 'center' },
-  backIconBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  headerSlot: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  backIconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headsUpBody: { color: colors.text, fontSize: 20, lineHeight: 30, textAlign: 'center', marginTop: spacing.lg },
   headsUpTitle: { color: colors.text, fontSize: 34, fontWeight: '900', textAlign: 'center' },
   headsUpWrap: { alignItems: 'center', justifyContent: 'center', minHeight: 220, paddingVertical: spacing.xl, paddingHorizontal: spacing.md },

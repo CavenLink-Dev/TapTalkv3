@@ -38,10 +38,6 @@ export type MascotKey = keyof typeof MASCOT_IMAGES;
 interface MascotImageProps {
   mascot: MascotKey;
   size?: number;
-  /** Accepted but currently unused — kept so callers don't have to change. */
-  float?: boolean;
-  blink?: boolean;
-  lookAround?: boolean;
   style?: StyleProp<ImageStyle>;
 }
 

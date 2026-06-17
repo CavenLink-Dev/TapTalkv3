@@ -31,7 +31,7 @@ export default function Splash() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Animated.View style={{ opacity: fadeAnim }}>
-          <MascotImage mascot="excited_wave" size={200} float />
+          <MascotImage mascot="excited_wave" size={200} />
         </Animated.View>
 
         <Animated.View

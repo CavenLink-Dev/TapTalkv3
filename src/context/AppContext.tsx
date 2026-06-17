@@ -33,6 +33,33 @@ const initialState: AppState = {
   activityStats: { gamesPlayed: 0, minutesToday: 0 },
 };
 
+function mergeStoredState(storedState: Partial<AppState>): AppState {
+  return {
+    ...initialState,
+    ...storedState,
+    user: {
+      ...initialState.user,
+      ...storedState.user,
+    },
+    parent: {
+      ...initialState.parent,
+      ...storedState.parent,
+    },
+    firstThen: {
+      ...initialState.firstThen,
+      ...storedState.firstThen,
+    },
+    talkStats: {
+      ...initialState.talkStats,
+      ...storedState.talkStats,
+    },
+    activityStats: {
+      ...initialState.activityStats,
+      ...storedState.activityStats,
+    },
+  };
+}
+
 export const AppContext = createContext<{
   state: AppState;
   dispatch: React.Dispatch<Action>;
@@ -46,7 +73,7 @@ export const AppContext = createContext<{
 function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'HYDRATE':
-      return action.payload;
+      return mergeStoredState(action.payload);
     case 'SET_USER':
       return { ...state, user: { ...state.user, ...action.payload } };
     case 'SET_PARENT':
@@ -184,7 +211,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       try {
         const storedState = await AsyncStorage.getItem('@TapTalk_state');
         if (storedState) {
-          dispatch({ type: 'HYDRATE', payload: JSON.parse(storedState) });
+          const parsed = JSON.parse(storedState) as Partial<AppState>;
+          dispatch({ type: 'HYDRATE', payload: parsed });
         }
       } catch (e) {
         console.error('Failed to load state', e);

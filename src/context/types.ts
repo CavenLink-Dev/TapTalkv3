@@ -104,7 +104,7 @@ export interface GoalStep {
 }
 
 export type Action =
-  | { type: 'HYDRATE'; payload: AppState }
+  | { type: 'HYDRATE'; payload: Partial<AppState> }
   | { type: 'SET_USER'; payload: Partial<AppState['user']> }
   | { type: 'SET_PARENT'; payload: Partial<AppState['parent']> }
   | { type: 'COMPLETE_ONBOARDING' }

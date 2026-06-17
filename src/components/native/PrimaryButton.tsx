@@ -72,7 +72,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   pressed: {
-    backgroundColor: colors.primaryDark,
     transform: [{ scale: 0.985 }],
   },
   secondary: {
