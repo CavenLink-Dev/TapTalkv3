@@ -39,7 +39,7 @@ const foodBoard: BoardItem[] = [
 
 export default function TalkScreen() {
   const { state, dispatch } = useAppContext();
-  const { speak } = useSpeech();
+  const { speak, lastError: speechError, clearError: clearSpeechError } = useSpeech();
   const [board, setBoard] = useState<BoardName>('main');
   const [keyboardMode, setKeyboardMode] = useState(false);
 
@@ -126,6 +126,16 @@ export default function TalkScreen() {
   if (keyboardMode) {
     return (
       <Screen title="TalkBoard" subtitle="Type a message and hear it spoken aloud.">
+        {speechError ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss speech error"
+            onPress={clearSpeechError}
+            style={styles.speechError}
+          >
+            <Text style={styles.speechErrorText}>Speech unavailable: {speechError.message}</Text>
+          </Pressable>
+        ) : null}
         <Card style={styles.messageCard}>
           <TextInput
             accessibilityLabel="Typed TalkBoard message"
@@ -240,6 +250,17 @@ export default function TalkScreen() {
           <Text style={styles.backLink}>Keys</Text>
         </Pressable>
       </View>
+
+      {speechError ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss speech error"
+          onPress={clearSpeechError}
+          style={styles.speechError}
+        >
+          <Text style={styles.speechErrorText}>Speech unavailable: {speechError.message}</Text>
+        </Pressable>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
         {activeBoard.map((item) => (
@@ -375,6 +396,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 12,
     backgroundColor: colors.primary,
+  },
+  speechError: {
+    borderRadius: radii.button,
+    backgroundColor: colors.danger,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  speechErrorText: {
+    color: colors.surface,
+    fontSize: typography.caption,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   speakerText: {
     color: colors.surface,
