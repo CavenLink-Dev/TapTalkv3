@@ -5,7 +5,7 @@ import { AppState, Action } from './types';
 const STORAGE_KEY = '@TapTalk_state';
 const MAX_SAVE_RETRIES = 2;
 
-const initialState: AppState = {
+export const initialState: AppState = {
   onboardingComplete: false,
   subscriptionComplete: false,
   signedIn: false,
@@ -82,7 +82,7 @@ export const AppContext = createContext<{
   clearHydrationError: () => undefined,
 });
 
-function appReducer(state: AppState, action: Action): AppState {
+export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'HYDRATE':
       return mergeStoredState(action.payload);
