@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, StyleSheet, ViewStyle } from 'react-native';
+import React from 'react';
+import { Image, ImageStyle, StyleProp } from 'react-native';
 
 export const MASCOT_IMAGES = {
   angry: require('../../asset/mascot_angry.png'),
@@ -38,138 +38,30 @@ export type MascotKey = keyof typeof MASCOT_IMAGES;
 interface MascotImageProps {
   mascot: MascotKey;
   size?: number;
-  /** Kept for caller compatibility. Mascots now stay still; only the eyes animate. */
+  /** Accepted but currently unused — kept so callers don't have to change. */
   float?: boolean;
-  /** Smooth eye-only blink every few seconds. */
   blink?: boolean;
-  /** Kept for caller compatibility. */
   lookAround?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ImageStyle>;
 }
 
-export function MascotImage({
-  mascot,
-  size = 140,
-  float = false,
-  blink = false,
-  lookAround = false,
-  style,
-}: MascotImageProps) {
-  void float;
-  void lookAround;
-
-  const blinkAmount = useRef(new Animated.Value(0)).current;
-  const eyeStyle = useMemo(
-    () => ({
-      width: size * 0.17,
-      height: size * 0.19,
-      borderRadius: size * 0.085,
-    }),
-    [size],
-  );
-
-  useEffect(() => {
-    if (!blink) return;
-    let cancelled = false;
-    let pending: ReturnType<typeof setTimeout>;
-
-    function schedule() {
-      if (cancelled) return;
-      pending = setTimeout(doOne, 2200 + Math.random() * 3200);
-    }
-
-    function doOne() {
-      if (cancelled) return;
-      Animated.sequence([
-        Animated.timing(blinkAmount, { toValue: 1, duration: 90, useNativeDriver: true }),
-        Animated.delay(55),
-        Animated.timing(blinkAmount, { toValue: 0, duration: 120, useNativeDriver: true }),
-      ]).start(() => {
-        if (cancelled) return;
-        if (Math.random() < 0.2) {
-          pending = setTimeout(() => {
-            if (cancelled) return;
-            Animated.sequence([
-              Animated.timing(blinkAmount, { toValue: 1, duration: 80, useNativeDriver: true }),
-              Animated.delay(45),
-              Animated.timing(blinkAmount, { toValue: 0, duration: 100, useNativeDriver: true }),
-            ]).start(() => !cancelled && schedule());
-          }, 160);
-        } else {
-          schedule();
-        }
-      });
-    }
-
-    schedule();
-    return () => {
-      cancelled = true;
-      clearTimeout(pending);
-    };
-  }, [blink, blinkAmount]);
-
-  const eyelidScale = blinkAmount.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.04, 1],
-  });
-  const lidOpacity = blinkAmount.interpolate({
-    inputRange: [0, 0.15, 1],
-    outputRange: [0, 1, 1],
-  });
-
+/**
+ * Renders the Clo mascot as a static PNG.
+ *
+ * The previous version tried to fake a blink by overlaying blue rectangles or
+ * cross-fading to a closed-eye PNG. Both were unreliable: per-mascot eye
+ * coordinates differ, and PNG swaps caused face-shape pops. Until we have
+ * dedicated eye-only sprites/SVGs, the mascot stays still — which the user
+ * specifically asked for over a buggy approximation.
+ */
+export function MascotImage({ mascot, size = 140, style }: MascotImageProps) {
   return (
-    <Animated.View
+    <Image
       accessible
       accessibilityLabel={`Clo mascot ${mascot.replace(/_/g, ' ')}`}
-      style={[
-        { width: size, height: size },
-        style,
-      ]}
-    >
-      <Animated.Image
-        source={MASCOT_IMAGES[mascot]}
-        style={{ width: size, height: size }}
-        resizeMode="contain"
-      />
-      {blink ? (
-        <>
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.eyelid,
-              eyeStyle,
-              {
-                left: size * 0.31,
-                top: size * 0.36,
-                opacity: lidOpacity,
-                transform: [{ scaleY: eyelidScale }],
-              },
-            ]}
-          />
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.eyelid,
-              eyeStyle,
-              {
-                right: size * 0.31,
-                top: size * 0.36,
-                opacity: lidOpacity,
-                transform: [{ scaleY: eyelidScale }],
-              },
-            ]}
-          />
-        </>
-      ) : null}
-    </Animated.View>
+      source={MASCOT_IMAGES[mascot]}
+      resizeMode="contain"
+      style={[{ width: size, height: size }, style]}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  eyelid: {
-    position: 'absolute',
-    backgroundColor: '#76baee',
-    borderBottomColor: '#111111',
-    borderBottomWidth: 3,
-  },
-});

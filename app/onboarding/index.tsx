@@ -74,15 +74,31 @@ export default function Onboarding() {
     if (step !== 1) setIntroDone(true);
   }, [step]);
 
-  // Per-step entrance animation
-  const enterAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(16)).current;
+  // Per-step entrance animation: subtle right-to-left slide + fade.
+  // Forward (step grows)  → enter from the right (+24).
+  // Back   (step shrinks) → enter from the left  (-24).
+  const previousStep = useRef(step);
+  const enterAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
+    const direction = step >= previousStep.current ? 1 : -1;
+    previousStep.current = step;
+
     enterAnim.setValue(0);
-    slideAnim.setValue(16);
+    slideAnim.setValue(24 * direction);
+
     Animated.parallel([
-      Animated.timing(enterAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 90, friction: 14 }),
+      Animated.timing(enterAnim, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 110,
+        friction: 16,
+      }),
     ]).start();
   }, [step, enterAnim, slideAnim]);
 
@@ -106,7 +122,7 @@ export default function Onboarding() {
       return pinOk && emailPattern.test(parentEmail.trim());
     }
     if (step === 4) return Number(timeoutHours) > 0;
-    if (step === 5) return verifyState === 'success';
+    if (step === 5) return false; // verify happens via the in-card VERIFY button
     if (step === 8) return appMode !== null;
     return true;
   }, [
@@ -116,10 +132,25 @@ export default function Onboarding() {
 
   const haptic = () => Haptics.selectionAsync().catch(() => undefined);
 
-  const handleVerify = () => setVerifyState(verifyCode.length === 6 ? 'success' : 'failed');
+  // On a successful verify, skip the redundant "VERIFICATION SUCCESS" banner
+  // and advance straight into the canonical Setup-Complete screen (step 6).
+  const handleVerify = () => {
+    if (verifyCode.length === 6) {
+      setVerifyState('success');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      setTimeout(() => setStep(6), 220);
+    } else {
+      setVerifyState('failed');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
+    }
+  };
 
   const next = () => {
-    if (step < TOTAL_STEPS) { setStep((s) => s + 1); return; }
+    if (step < TOTAL_STEPS) {
+      Haptics.selectionAsync().catch(() => undefined);
+      setStep((s) => s + 1);
+      return;
+    }
     const legalName = `${firstName.trim()} ${lastName.trim()}`.trim();
     dispatch({ type: 'SET_USER', payload: { legalName, displayName: displayName.trim(), name: legalName, nickname: displayName.trim(), role: 'guardian', useCases: [] } });
     dispatch({ type: 'SET_PARENT', payload: { lockEnabled, pin, email: parentEmail.trim(), timeoutHours: Number(timeoutHours) || 0 } });
@@ -146,11 +177,12 @@ export default function Onboarding() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      {/* ── Progress header ── */}
+      {/* ── Progress header (single flex row: back | progress | skip).
+          Both icons and the pill bar share the same centered baseline. ── */}
       <View style={styles.header}>
-        <View style={[styles.headerSide, styles.headerLeft]}>
+        <View style={styles.headerSlot}>
           {step > 1 ? (
-            <TouchableOpacity onPress={back} style={styles.iconBtn} hitSlop={10} accessibilityLabel="Go back">
+            <TouchableOpacity onPress={back} style={styles.backIconBtn} hitSlop={10} accessibilityLabel="Go back">
               <Text style={styles.iconText}>{'\u2190'}</Text>
             </TouchableOpacity>
           ) : null}
@@ -160,20 +192,22 @@ export default function Onboarding() {
           <ProgressBar currentStep={step} />
         </View>
 
-        <View style={[styles.headerSide, styles.headerRight]}>
+        <View style={styles.headerSlot}>
           {step === 4 ? (
-            <TouchableOpacity onPress={skip} style={styles.iconBtn} hitSlop={10} accessibilityLabel="Skip this step">
+            <TouchableOpacity onPress={skip} style={styles.backIconBtn} hitSlop={10} accessibilityLabel="Skip this step">
               <Text style={styles.skipText}>{'\u23ED'}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
       </View>
 
-      {/* ── Main content (keyboard-aware) ── */}
+      {/* ── Main content. iOS 16+ ScrollView adjusts for the keyboard natively;
+          we deliberately avoid KeyboardAvoidingView because it conflicts with
+          automaticallyAdjustKeyboardInsets and produces the "button-pinned-
+          above-keyboard, fields hidden" symptom on iPhone 13 Pro Max. ── */}
       <KeyboardAvoidingView
         style={styles.kbFlex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        behavior={Platform.OS === 'android' ? 'height' : undefined}
       >
         <Animated.View style={[styles.animWrap, { opacity: enterAnim, transform: [{ translateX: slideAnim }] }]}>
 
@@ -204,8 +238,8 @@ export default function Onboarding() {
             {step === 4 ? <TitleBlock mascot="thinking_puzzled"   title={'SET PARENTAL\nLOCK AND TIMEOUT'}            desc="Choose how long TapTalk should wait before automatically locking due to inactivity. This can be changed in settings later." /> : null}
             {step === 5 ? (
               <TitleBlock
-                mascot={verifyState === 'success' ? 'happy_grin' : verifyState === 'failed' ? 'sad_worried' : 'neutral_curious'}
-                title={verifyState === 'success' ? 'SETUP COMPLETE' : 'ENTER YOUR\nVERIFICATION CODE'}
+                mascot={verifyState === 'failed' ? 'sad_worried' : 'neutral_curious'}
+                title={'ENTER YOUR\nVERIFICATION CODE'}
                 desc="Check your junk folder for a 6 digit combination"
               />
             ) : null}
@@ -285,6 +319,18 @@ export default function Onboarding() {
                       </View>
                     ) : null}
                   </FieldGroup>
+
+                  {/* Inline footer for step 1: keeps Continue scrollable above
+                      the keyboard so the fields are never hidden on iOS 16+. */}
+                  <PrimaryButton
+                    accessibilityLabel="Continue"
+                    label="CONTINUE"
+                    disabled={!isStepValid}
+                    onPress={next}
+                  />
+                  <Text style={styles.privacyText}>
+                    Check out this <Text style={styles.privacyLink}>LINK</Text> to see how we store confidential data
+                  </Text>
                 </>
               ) : null}
 
@@ -351,12 +397,6 @@ export default function Onboarding() {
                       <BounceCircle color={colors.danger} icon={'\u2715'} />
                       <Text style={styles.resultNote}>The process was incorrect, please try again</Text>
                       <PrimaryButton accessibilityLabel="Retry" label="REDO" onPress={() => { setVerifyCode(''); setVerifyState('idle'); }} style={styles.resultBtn} />
-                    </>
-                  ) : verifyState === 'success' ? (
-                    <>
-                      <Text style={[styles.insetHeading, { color: colors.success }]}>VERIFICATION SUCCESS</Text>
-                      <BounceCircle color={colors.success} icon={'\u2713'} />
-                      <Text style={styles.resultNote}>Please answer the following questions as best you can</Text>
                     </>
                   ) : (
                     <>
@@ -428,21 +468,23 @@ export default function Onboarding() {
               ) : null}
             </ScrollView>
 
-            {/* Footer */}
-            <View style={styles.cardFooter}>
-              <PrimaryButton
-                accessibilityLabel={step === TOTAL_STEPS ? 'Finish onboarding' : 'Continue'}
-                label={buttonLabel()}
-                disabled={!isStepValid}
-                onPress={next}
-              />
-              {step === 1 || step === 3 ? (
-                <Text style={styles.privacyText}>
-                  Check out this <Text style={styles.privacyLink}>LINK</Text> to see how we store confidential data
-                </Text>
-              ) : null}
-              {step === 2 ? <Text style={styles.privacyText}>Answer honestly to get the most accurate results</Text> : null}
-            </View>
+            {/* Footer (hidden on steps that own their button inline) */}
+            {step !== 1 && step !== 5 ? (
+              <View style={styles.cardFooter}>
+                <PrimaryButton
+                  accessibilityLabel={step === TOTAL_STEPS ? 'Finish onboarding' : 'Continue'}
+                  label={buttonLabel()}
+                  disabled={!isStepValid}
+                  onPress={next}
+                />
+                {step === 3 ? (
+                  <Text style={styles.privacyText}>
+                    Check out this <Text style={styles.privacyLink}>LINK</Text> to see how we store confidential data
+                  </Text>
+                ) : null}
+                {step === 2 ? <Text style={styles.privacyText}>Answer honestly to get the most accurate results</Text> : null}
+              </View>
+            ) : null}
           </Animated.View>
 
         </Animated.View>
@@ -535,7 +577,7 @@ const styles = StyleSheet.create({
   },
   cardFooter: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, paddingTop: spacing.md },
   cardScroll: { padding: spacing.xl, paddingBottom: spacing.sm },
-  cardScrollName: { paddingBottom: 180 },
+  cardScrollName: { paddingBottom: 60, gap: spacing.md },
   centeredCard: { alignItems: 'center', paddingVertical: spacing.sm },
   centeredInput: { textAlign: 'center', fontSize: typography.subheading, fontWeight: '700' },
   checkCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.softBlue, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
@@ -554,21 +596,18 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 56,
+    minHeight: 44,
     paddingHorizontal: spacing.lg, // 16
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
-  headerLeft: { left: spacing.lg },
-  headerRight: { right: spacing.lg },
-  headerSide: { position: 'absolute', width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerSlot: { width: 44, height: 32, alignItems: 'center', justifyContent: 'center' },
+  backIconBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   headsUpBody: { color: colors.text, fontSize: 20, lineHeight: 30, textAlign: 'center', marginTop: spacing.lg },
   headsUpTitle: { color: colors.text, fontSize: 34, fontWeight: '900', textAlign: 'center' },
   headsUpWrap: { alignItems: 'center', justifyContent: 'center', minHeight: 220, paddingVertical: spacing.xl, paddingHorizontal: spacing.md },
   heroMascot: { marginTop: spacing.lg },
-  iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadows.card },
-  iconText: { color: colors.text, fontSize: 22, fontWeight: '800' },
+  iconText: { color: colors.text, fontSize: 24, fontWeight: '700', lineHeight: 28 },
   insetBody: { color: colors.textMuted, fontSize: typography.callout, textAlign: 'center', marginBottom: spacing.sm },
   insetHeading: { color: colors.text, fontSize: typography.body, fontWeight: '900', textAlign: 'center', marginBottom: spacing.sm },
   input: { minHeight: 48, backgroundColor: colors.input, borderColor: colors.borderBlue, borderRadius: radii.input, borderWidth: 1.5, color: colors.text, fontSize: typography.callout, paddingHorizontal: 12, paddingVertical: 10 },
@@ -585,7 +624,7 @@ const styles = StyleSheet.create({
   pressedScale: { transform: [{ scale: 0.97 }] },
   privacyLink: { color: colors.primary, fontWeight: '700', textDecorationLine: 'underline' },
   privacyText: { color: colors.textMuted, fontSize: typography.caption, textAlign: 'center', marginTop: spacing.sm },
-  progressWrap: { width: '68%' },
+  progressWrap: { flex: 1, marginHorizontal: spacing.sm, justifyContent: 'center' },
   resendText: { color: colors.primary, fontSize: typography.callout, fontWeight: '700', marginTop: spacing.xs },
   resultBtn: { marginTop: spacing.lg, minWidth: 160 },
   resultCircle: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginVertical: spacing.lg },

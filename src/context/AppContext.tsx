@@ -1,4 +1,4 @@
-import React, { createContext, useReducer, useEffect, ReactNode } from 'react';
+import React, { createContext, useReducer, useEffect, useState, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, Action } from './types';
 
@@ -36,9 +36,11 @@ const initialState: AppState = {
 export const AppContext = createContext<{
   state: AppState;
   dispatch: React.Dispatch<Action>;
+  hydrated: boolean;
 }>({
   state: initialState,
   dispatch: () => null,
+  hydrated: false,
 });
 
 function appReducer(state: AppState, action: Action): AppState {
@@ -175,6 +177,7 @@ function appReducer(state: AppState, action: Action): AppState {
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const loadState = async () => {
@@ -185,12 +188,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (e) {
         console.error('Failed to load state', e);
+      } finally {
+        setHydrated(true);
       }
     };
     loadState();
   }, []);
 
   useEffect(() => {
+    if (!hydrated) return;
     const saveState = async () => {
       try {
         await AsyncStorage.setItem('@TapTalk_state', JSON.stringify(state));
@@ -199,10 +205,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     };
     saveState();
-  }, [state]);
+  }, [state, hydrated]);
 
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
+    <AppContext.Provider value={{ state, dispatch, hydrated }}>
       {children}
     </AppContext.Provider>
   );
