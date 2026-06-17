@@ -1,6 +1,9 @@
-import React, { createContext, useReducer, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useReducer, useEffect, useCallback, useRef, useState, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, Action } from './types';
+
+const STORAGE_KEY = '@TapTalk_state';
+const MAX_SAVE_RETRIES = 2;
 
 const initialState: AppState = {
   onboardingComplete: false,
@@ -60,14 +63,23 @@ function mergeStoredState(storedState: Partial<AppState>): AppState {
   };
 }
 
+export interface HydrationError {
+  phase: 'load' | 'save';
+  message: string;
+}
+
 export const AppContext = createContext<{
   state: AppState;
   dispatch: React.Dispatch<Action>;
   hydrated: boolean;
+  hydrationError: HydrationError | null;
+  clearHydrationError: () => void;
 }>({
   state: initialState,
   dispatch: () => null,
   hydrated: false,
+  hydrationError: null,
+  clearHydrationError: () => undefined,
 });
 
 function appReducer(state: AppState, action: Action): AppState {
@@ -205,17 +217,28 @@ function appReducer(state: AppState, action: Action): AppState {
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [hydrated, setHydrated] = useState(false);
+  const [hydrationError, setHydrationError] = useState<HydrationError | null>(null);
+  const saveRetries = useRef(0);
+
+  const clearHydrationError = useCallback(() => setHydrationError(null), []);
 
   useEffect(() => {
     const loadState = async () => {
       try {
-        const storedState = await AsyncStorage.getItem('@TapTalk_state');
-        if (storedState) {
-          const parsed = JSON.parse(storedState) as Partial<AppState>;
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<AppState>;
           dispatch({ type: 'HYDRATE', payload: parsed });
         }
-      } catch (e) {
-        console.error('Failed to load state', e);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : 'Unknown load error';
+        console.error('Failed to load state:', message);
+        setHydrationError({ phase: 'load', message });
+        try {
+          await AsyncStorage.removeItem(STORAGE_KEY);
+        } catch {
+          // Storage may be entirely unavailable; nothing more to do.
+        }
       } finally {
         setHydrated(true);
       }
@@ -225,18 +248,28 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (!hydrated) return;
-    const saveState = async () => {
+
+    const saveState = async (attempt: number) => {
       try {
-        await AsyncStorage.setItem('@TapTalk_state', JSON.stringify(state));
-      } catch (e) {
-        console.error('Failed to save state', e);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        saveRetries.current = 0;
+      } catch (e: unknown) {
+        if (attempt < MAX_SAVE_RETRIES) {
+          saveState(attempt + 1);
+          return;
+        }
+        const message = e instanceof Error ? e.message : 'Unknown save error';
+        console.error('Failed to save state after retries:', message);
+        saveRetries.current = attempt;
+        setHydrationError({ phase: 'save', message });
       }
     };
-    saveState();
+
+    saveState(0);
   }, [state, hydrated]);
 
   return (
-    <AppContext.Provider value={{ state, dispatch, hydrated }}>
+    <AppContext.Provider value={{ state, dispatch, hydrated, hydrationError, clearHydrationError }}>
       {children}
     </AppContext.Provider>
   );
