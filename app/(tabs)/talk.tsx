@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { hapticSelection } from '../../src/utils/haptics';
 import { Screen } from '../../src/components/native/Screen';
 import { Card } from '../../src/components/native/Card';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
@@ -55,20 +55,19 @@ export default function TalkScreen() {
 
   const activeBoard = board === 'main' ? mainBoard : foodBoard;
 
-  const haptic = () => Haptics.selectionAsync().catch(() => undefined);
   const announce = (message: string) => {
     AccessibilityInfo.announceForAccessibility(message);
   };
 
   const addWord = (item: BoardItem) => {
     if (item.kind === 'folder') {
-      haptic();
+      hapticSelection();
       setBoard('food');
       announce(`Opened ${item.label} folder`);
       return;
     }
 
-    haptic();
+    hapticSelection();
     dispatch({
       type: 'APPEND_WORD',
       payload: {
@@ -86,7 +85,7 @@ export default function TalkScreen() {
   const speakMessage = () => {
     const text = keyboardMode ? typedText : wordsText;
     if (text.trim()) {
-      haptic();
+      hapticSelection();
       speak(text, { rate: 0.9 });
       announce(`Speaking: ${text}`);
       return;
@@ -99,7 +98,7 @@ export default function TalkScreen() {
       announce('Message strip is already empty');
       return;
     }
-    haptic();
+    hapticSelection();
     dispatch({ type: 'REMOVE_LAST_WORD' });
     announce('Removed last word');
   };
@@ -109,7 +108,7 @@ export default function TalkScreen() {
       announce('Message strip is already empty');
       return;
     }
-    haptic();
+    hapticSelection();
     dispatch({ type: 'CLEAR_WORDS' });
     announce('Cleared message strip');
   };
@@ -119,7 +118,7 @@ export default function TalkScreen() {
       announce('Typed message is already empty');
       return;
     }
-    haptic();
+    hapticSelection();
     dispatch({ type: 'SET_KEYBOARD_TEXT', payload: '' });
     announce('Cleared typed message');
   };
@@ -160,7 +159,7 @@ export default function TalkScreen() {
           accessibilityLabel="Return to AAC board"
           label="Back to Board"
           onPress={() => {
-            haptic();
+            hapticSelection();
             setKeyboardMode(false);
           }}
           variant="secondary"
@@ -220,7 +219,7 @@ export default function TalkScreen() {
             accessibilityRole="button"
             accessibilityLabel="Return to main AAC board"
             onPress={() => {
-              haptic();
+              hapticSelection();
               setBoard('main');
               announce('Returned to main board');
             }}
@@ -234,7 +233,7 @@ export default function TalkScreen() {
           accessibilityLabel="Open keyboard mode"
           accessibilityHint="Switches from symbol board to typed message mode"
           onPress={() => {
-            haptic();
+            hapticSelection();
             setKeyboardMode(true);
           }}
         >

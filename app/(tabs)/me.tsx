@@ -7,6 +7,7 @@ import { Screen } from '../../src/components/native/Screen';
 import { TextField } from '../../src/components/native/TextField';
 import { TapTalkMascot } from '../../src/components/TapTalkMascot';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { listStyles } from '../../src/styles/listStyles';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
 const documents = [
@@ -59,8 +60,8 @@ export default function MeScreen() {
         </View>
       </Card>
 
-      <Card style={styles.section}>
-        <Text style={styles.sectionTitle}>Edit Profile</Text>
+      <Card style={listStyles.section}>
+        <Text style={listStyles.sectionTitle}>Edit Profile</Text>
         <TextField
           accessibilityLabel="Display name"
           placeholder="Display name"
@@ -75,8 +76,8 @@ export default function MeScreen() {
         />
       </Card>
 
-      <Card style={styles.section}>
-        <Text style={styles.sectionTitle}>Library & Guides</Text>
+      <Card style={listStyles.section}>
+        <Text style={listStyles.sectionTitle}>Library & Guides</Text>
         {documents.map((doc) => (
           <View key={doc} style={styles.docRow}>
             <Text style={styles.docIcon}>📚</Text>
@@ -85,8 +86,8 @@ export default function MeScreen() {
         ))}
       </Card>
 
-      <Card style={styles.section}>
-        <Text style={styles.sectionTitle}>Caregiver Controls</Text>
+      <Card style={listStyles.section}>
+        <Text style={listStyles.sectionTitle}>Caregiver Controls</Text>
         <Pressable
           accessibilityRole="switch"
           accessibilityLabel="Caregiver lock"
@@ -202,14 +203,6 @@ const styles = StyleSheet.create({
   },
   profileInput: {
     marginVertical: spacing.md,
-  },
-  section: {
-    marginBottom: spacing.lg,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: typography.body,
-    fontWeight: '800',
   },
   settingRow: {
     flexDirection: 'row',

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { colors, radii, typography } from '../../theme/tokens';
+import { hapticSelection } from '../../utils/haptics';
 
 interface PrimaryButtonProps {
   label: string;
@@ -24,7 +24,7 @@ export function PrimaryButton({
   const isDanger = variant === 'danger';
 
   const handlePress = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    hapticSelection();
     onPress();
   };
 

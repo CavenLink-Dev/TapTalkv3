@@ -21,11 +21,12 @@ import { ProgressBar } from '../../src/components/native/ProgressBar';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { DISPLAY_NAME_MAX, validateDisplayName } from '../../src/utils/displayName';
+import { hapticSelection } from '../../src/utils/haptics';
+import { EMAIL_PATTERN } from '../../src/utils/validation';
 import { colors, radii, shadows, spacing, typography } from '../../src/theme/tokens';
 
 const TOTAL_STEPS = 8;
 const payRoute = '/pay' as Href;
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type VerifyState = 'idle' | 'failed' | 'success';
 type AppMode = 'simple' | 'guided' | 'advanced';
@@ -119,7 +120,7 @@ export default function Onboarding() {
     }
     if (step === 3) {
       const pinOk = !lockEnabled || (pin.length === 6 && pin === confirmPin);
-      return pinOk && emailPattern.test(parentEmail.trim()) && emailCode.length === 6;
+      return pinOk && EMAIL_PATTERN.test(parentEmail.trim()) && emailCode.length === 6;
     }
     if (step === 4) return Number(timeoutHours) > 0;
     if (step === 5) return false; // verify happens via the in-card VERIFY button
@@ -129,8 +130,6 @@ export default function Onboarding() {
     step, firstName, lastName, displayCheck.valid, lockEnabled, pin, confirmPin,
     parentEmail, emailCode, timeoutHours, verifyState, appMode,
   ]);
-
-  const haptic = () => Haptics.selectionAsync().catch(() => undefined);
 
   // On a successful verify, skip the redundant "VERIFICATION SUCCESS" banner
   // and advance straight into the canonical Setup-Complete screen (step 6).
@@ -147,7 +146,7 @@ export default function Onboarding() {
 
   const next = () => {
     if (step < TOTAL_STEPS) {
-      Haptics.selectionAsync().catch(() => undefined);
+      hapticSelection();
       setStep((s) => s + 1);
       return;
     }
@@ -159,11 +158,11 @@ export default function Onboarding() {
   };
 
   const back = () => {
-    haptic();
+    hapticSelection();
     setStep((s) => Math.max(1, s - 1));
   };
   const skip = () => {
-    haptic();
+    hapticSelection();
     setStep((s) => s + 1);
   };
 
@@ -367,7 +366,7 @@ export default function Onboarding() {
                     <View style={styles.rowInputs}>
                       <TextInput style={[styles.input, styles.flexInput]} placeholder="Enter Email" placeholderTextColor={colors.textTertiary} keyboardType="email-address" autoCapitalize="none" value={parentEmail} onChangeText={setParentEmail} accessibilityLabel="Parent email" />
                       <TextInput style={[styles.input, styles.flexInput]} placeholder="Code Here" placeholderTextColor={colors.textTertiary} keyboardType="number-pad" maxLength={6} value={emailCode} onChangeText={setEmailCode} accessibilityLabel="Email code" />
-                      <CheckCircle active={emailPattern.test(parentEmail) && emailCode.length === 6} />
+                      <CheckCircle active={EMAIL_PATTERN.test(parentEmail) && emailCode.length === 6} />
                     </View>
                     <TouchableOpacity hitSlop={8}>
                       <Text style={styles.resendText}>Resend Email</Text>
@@ -421,7 +420,7 @@ export default function Onboarding() {
                 <>
                   <Text style={styles.insetHeading}>PICK YOUR THEME</Text>
                   {THEMES.map((theme) => (
-                    <Pressable key={theme.id} onPress={() => { haptic(); setSelectedTheme(theme.id); }} style={({ pressed }) => [styles.themeRow, selectedTheme === theme.id && styles.themeRowSelected, pressed && styles.pressedScale]} accessibilityLabel={`Select ${theme.label} theme`}>
+                    <Pressable key={theme.id} onPress={() => { hapticSelection(); setSelectedTheme(theme.id); }} style={({ pressed }) => [styles.themeRow, selectedTheme === theme.id && styles.themeRowSelected, pressed && styles.pressedScale]} accessibilityLabel={`Select ${theme.label} theme`}>
                       <View style={[styles.themeChip, { backgroundColor: theme.color }]}>
                         <Text style={styles.themeChipText}>{theme.preview}</Text>
                       </View>
@@ -437,7 +436,7 @@ export default function Onboarding() {
                   <View style={styles.sliderTrack}>
                     <View style={[styles.sliderFill, { width: `${((textScale - 0.25) / 1.75) * 100}%` }]} />
                     {[0.25, 1.0, 2.0].map((val) => (
-                      <TouchableOpacity key={val} onPress={() => { haptic(); setTextScale(val); }} hitSlop={12}
+                      <TouchableOpacity key={val} onPress={() => { hapticSelection(); setTextScale(val); }} hitSlop={12}
                         style={[styles.sliderDot, { left: `${((val - 0.25) / 1.75) * 100}%` }, Math.abs(textScale - val) < 0.01 && styles.sliderDotActive]}
                         accessibilityLabel={`Text size ${val}x`}
                       />
@@ -455,7 +454,7 @@ export default function Onboarding() {
                     { id: 'guided',   label: 'Guided',   bars: 2, desc: 'More buttons, harder to navigate, more options/selections' },
                     { id: 'advanced', label: 'Advanced', bars: 3, desc: 'Most buttons, complex to navigate, more advanced options/selections/settings' },
                   ] as const).map((opt) => (
-                    <Pressable key={opt.id} onPress={() => { haptic(); setAppMode(opt.id); }} style={({ pressed }) => [styles.modeCard, appMode === opt.id && styles.modeCardSelected, pressed && styles.pressedScale]} accessibilityLabel={`Select ${opt.label} mode`}>
+                    <Pressable key={opt.id} onPress={() => { hapticSelection(); setAppMode(opt.id); }} style={({ pressed }) => [styles.modeCard, appMode === opt.id && styles.modeCardSelected, pressed && styles.pressedScale]} accessibilityLabel={`Select ${opt.label} mode`}>
                       <View style={styles.modeCardInner}>
                         <Text style={[styles.modeLabel, appMode === opt.id && styles.modeLabelSelected]}>{opt.label}</Text>
                         <BarChart bars={opt.bars} active={appMode === opt.id} />
