@@ -5,6 +5,7 @@ import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { Screen } from '../../src/components/native/Screen';
 import { TextField } from '../../src/components/native/TextField';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { listStyles } from '../../src/styles/listStyles';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
 const suggestions = ['Brush teeth', 'Eat breakfast', 'Get dressed', 'Read a book'];
@@ -48,9 +49,9 @@ export default function TodayScreen() {
 
   return (
     <Screen title="Today" subtitle="Plan the day in small, clear steps.">
-      <Card style={styles.section}>
-        <Text style={styles.sectionTitle}>Today Tasks</Text>
-        <View style={styles.inputRow}>
+      <Card style={listStyles.section}>
+        <Text style={listStyles.sectionTitle}>Today Tasks</Text>
+        <View style={listStyles.inputRow}>
           <TextField
             accessibilityLabel="New task name"
             placeholder="Add a task..."
@@ -58,18 +59,18 @@ export default function TodayScreen() {
             onChangeText={setTaskName}
             returnKeyType="done"
             onSubmitEditing={addTask}
-            style={styles.input}
+            style={listStyles.input}
           />
           <PrimaryButton
             accessibilityLabel="Add task"
             label="+"
             onPress={addTask}
-            style={styles.addButton}
+            style={listStyles.addButton}
           />
         </View>
         {state.tasks.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📭</Text>
+            <Text style={listStyles.emptyIcon}>📭</Text>
             <Text style={styles.emptyTitle}>No tasks yet</Text>
             <Text style={styles.emptyText}>Add one simple task to start.</Text>
           </View>
@@ -81,12 +82,12 @@ export default function TodayScreen() {
               accessibilityLabel={`Mark ${task.name} ${task.completed ? 'incomplete' : 'complete'}`}
               accessibilityState={{ checked: task.completed }}
               onPress={() => dispatch({ type: 'TOGGLE_TASK', payload: task.id })}
-              style={styles.taskRow}
+              style={listStyles.itemRow}
             >
-              <View style={[styles.checkCircle, task.completed && styles.checkCircleDone]}>
-                {task.completed ? <Text style={styles.checkMark}>✓</Text> : null}
+              <View style={[listStyles.checkCircle, task.completed && listStyles.checkCircleDone]}>
+                {task.completed ? <Text style={listStyles.checkMark}>✓</Text> : null}
               </View>
-              <Text style={[styles.taskText, task.completed && styles.taskTextDone]}>
+              <Text style={[listStyles.itemText, task.completed && listStyles.itemTextDone]}>
                 {task.name}
               </Text>
             </Pressable>
@@ -94,8 +95,8 @@ export default function TodayScreen() {
         )}
       </Card>
 
-      <Card style={styles.section}>
-        <Text style={styles.sectionTitle}>First — Then</Text>
+      <Card style={listStyles.section}>
+        <Text style={listStyles.sectionTitle}>First — Then</Text>
         <Text style={styles.helper}>Use this as a calm visual sequence.</Text>
         <View style={styles.firstThenRow}>
           <View style={styles.slot}>
@@ -143,29 +144,6 @@ export default function TodayScreen() {
 }
 
 const styles = StyleSheet.create({
-  addButton: {
-    width: 50,
-  },
-  checkCircle: {
-    width: 26,
-    height: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.disabled,
-    borderRadius: 13,
-  },
-  checkCircleDone: {
-    borderColor: colors.success,
-    backgroundColor: colors.success,
-  },
-  checkMark: {
-    color: colors.surface,
-    fontWeight: '900',
-  },
-  emptyIcon: {
-    fontSize: 38,
-  },
   emptyState: {
     alignItems: 'center',
     paddingVertical: spacing.xl,
@@ -188,22 +166,6 @@ const styles = StyleSheet.create({
   helper: {
     color: colors.textMuted,
     fontSize: typography.caption,
-  },
-  input: {
-    flex: 1,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  section: {
-    marginBottom: spacing.lg,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: typography.subheading,
-    fontWeight: '800',
   },
   slot: {
     flex: 1,
@@ -243,25 +205,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: typography.caption,
     fontWeight: '700',
-  },
-  taskRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.md,
-    borderRadius: radii.card,
-    backgroundColor: colors.input,
-    padding: spacing.md,
-  },
-  taskText: {
-    flex: 1,
-    color: colors.text,
-    fontSize: typography.callout,
-    fontWeight: '700',
-  },
-  taskTextDone: {
-    color: colors.textTertiary,
-    textDecorationLine: 'line-through',
   },
   thenLabel: {
     color: '#15803D',

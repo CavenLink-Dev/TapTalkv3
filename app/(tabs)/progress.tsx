@@ -6,6 +6,7 @@ import { Screen } from '../../src/components/native/Screen';
 import { TextField } from '../../src/components/native/TextField';
 import { TapTalkMascot } from '../../src/components/TapTalkMascot';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { listStyles } from '../../src/styles/listStyles';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
 export default function ProgressScreen() {
@@ -70,7 +71,7 @@ export default function ProgressScreen() {
       <Card style={styles.encouragement}>
         <TapTalkMascot variant="head" style={styles.mascot} />
         <View style={styles.encouragementText}>
-          <Text style={styles.sectionTitle}>Keep it up!</Text>
+          <Text style={listStyles.sectionTitle}>Keep it up!</Text>
           <Text style={styles.helper}>
             Every word and every activity is a step forward.
           </Text>
@@ -78,23 +79,23 @@ export default function ProgressScreen() {
       </Card>
 
       <Card>
-        <Text style={styles.sectionTitle}>What's Your Goal?</Text>
+        <Text style={listStyles.sectionTitle}>What's Your Goal?</Text>
         <Text style={styles.helper}>
           To find a treasure we need a map, so let's make our map so our trail becomes clear.
         </Text>
-        <View style={styles.inputRow}>
+        <View style={listStyles.inputRow}>
           <TextField
             accessibilityLabel="New goal"
             placeholder="e.g. Ask for help"
             value={goalName}
             onChangeText={setGoalName}
-            style={styles.input}
+            style={listStyles.input}
           />
           <PrimaryButton
             accessibilityLabel="Create goal"
             label="+"
             onPress={addGoal}
-            style={styles.addButton}
+            style={listStyles.addButton}
           />
         </View>
 
@@ -115,12 +116,12 @@ export default function ProgressScreen() {
                   accessibilityLabel={`Toggle step ${step.name}`}
                   accessibilityState={{ checked: step.completed }}
                   onPress={() => dispatch({ type: 'TOGGLE_STEP', payload: { goalId: goal.id, stepId: step.id } })}
-                  style={styles.stepRow}
+                  style={listStyles.itemRow}
                 >
-                  <View style={[styles.stepCircle, step.completed && styles.stepCircleDone]}>
-                    {step.completed ? <Text style={styles.checkMark}>✓</Text> : null}
+                  <View style={[listStyles.checkCircle, step.completed && listStyles.checkCircleDone]}>
+                    {step.completed ? <Text style={listStyles.checkMark}>✓</Text> : null}
                   </View>
-                  <Text style={[styles.stepText, step.completed && styles.stepTextDone]}>{step.name}</Text>
+                  <Text style={[listStyles.itemText, step.completed && listStyles.itemTextDone]}>{step.name}</Text>
                 </Pressable>
               ))}
             </View>
@@ -128,19 +129,19 @@ export default function ProgressScreen() {
         )}
 
         {firstGoal ? (
-          <View style={styles.inputRow}>
+          <View style={listStyles.inputRow}>
             <TextField
               accessibilityLabel="New goal step"
               placeholder="Add a step..."
               value={stepName}
               onChangeText={setStepName}
-              style={styles.input}
+              style={listStyles.input}
             />
             <PrimaryButton
               accessibilityLabel="Add step"
               label="+"
               onPress={addStep}
-              style={styles.addButton}
+              style={listStyles.addButton}
             />
           </View>
         ) : null}
@@ -150,13 +151,6 @@ export default function ProgressScreen() {
 }
 
 const styles = StyleSheet.create({
-  addButton: {
-    width: 50,
-  },
-  checkMark: {
-    color: colors.surface,
-    fontWeight: '900',
-  },
   emptyGoal: {
     alignItems: 'center',
     paddingVertical: spacing.xl,
@@ -200,22 +194,9 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     lineHeight: 18,
   },
-  input: {
-    flex: 1,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
   mascot: {
     width: 72,
     height: 72,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: typography.body,
-    fontWeight: '800',
   },
   statCard: {
     flex: 1,
@@ -238,34 +219,5 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 26,
     fontWeight: '900',
-  },
-  stepCircle: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.disabled,
-    borderRadius: 12,
-  },
-  stepCircleDone: {
-    borderColor: colors.success,
-    backgroundColor: colors.success,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.md,
-  },
-  stepText: {
-    flex: 1,
-    color: colors.text,
-    fontSize: typography.callout,
-    fontWeight: '700',
-  },
-  stepTextDone: {
-    color: colors.textTertiary,
-    textDecorationLine: 'line-through',
   },
 });
