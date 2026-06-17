@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { colors, radii, typography } from '../../theme/tokens';
 
 interface PrimaryButtonProps {
@@ -22,12 +23,17 @@ export function PrimaryButton({
   const isSecondary = variant === 'secondary';
   const isDanger = variant === 'danger';
 
+  const handlePress = () => {
+    Haptics.selectionAsync().catch(() => undefined);
+    onPress();
+  };
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       disabled={disabled}
-      onPress={onPress}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.button,
         isSecondary && styles.secondary,
@@ -66,6 +72,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   pressed: {
+    backgroundColor: colors.primaryDark,
     transform: [{ scale: 0.985 }],
   },
   secondary: {
