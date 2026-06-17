@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
@@ -8,6 +8,7 @@ import { TextField } from '../../src/components/native/TextField';
 import { TapTalkMascot } from '../../src/components/TapTalkMascot';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { listStyles } from '../../src/styles/listStyles';
+import { verifyPin } from '../../src/utils/pin';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
 const documents = [
@@ -23,6 +24,9 @@ export default function MeScreen() {
   const { state, dispatch } = useAppContext();
   const [displayName, setDisplayName] = useState(state.user.displayName || state.user.nickname);
   const [caregiverLocked, setCaregiverLocked] = useState(state.parent.lockEnabled);
+  const [pinPromptVisible, setPinPromptVisible] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
 
   const saveProfile = () => {
     dispatch({
@@ -34,11 +38,31 @@ export default function MeScreen() {
     });
   };
 
-  const toggleLock = () => {
+  const toggleLock = useCallback(() => {
+    if (caregiverLocked && state.parent.pin) {
+      setPinPromptVisible(true);
+      setPinInput('');
+      setPinError('');
+      return;
+    }
     const next = !caregiverLocked;
     setCaregiverLocked(next);
     dispatch({ type: 'SET_PARENT', payload: { lockEnabled: next } });
-  };
+  }, [caregiverLocked, state.parent.pin, dispatch]);
+
+  const confirmPinAndDisable = useCallback(async () => {
+    if (!pinInput) return;
+    const ok = await verifyPin(pinInput, state.parent.pin);
+    if (ok) {
+      setCaregiverLocked(false);
+      dispatch({ type: 'SET_PARENT', payload: { lockEnabled: false } });
+      setPinPromptVisible(false);
+      setPinInput('');
+      setPinError('');
+    } else {
+      setPinError('Incorrect PIN');
+    }
+  }, [pinInput, state.parent.pin, dispatch]);
 
   const signOut = () => {
     dispatch({ type: 'SIGN_OUT' });
@@ -103,6 +127,38 @@ export default function MeScreen() {
             <View style={[styles.switchThumb, caregiverLocked && styles.switchThumbOn]} />
           </View>
         </Pressable>
+        {pinPromptVisible ? (
+          <View style={styles.pinPrompt}>
+            <Text style={styles.pinPromptLabel}>Enter your 6-digit PIN to disable lock</Text>
+            <TextField
+              accessibilityLabel="Enter PIN to disable lock"
+              placeholder="6-digit PIN"
+              secureTextEntry
+              keyboardType="number-pad"
+              maxLength={6}
+              value={pinInput}
+              onChangeText={setPinInput}
+              style={styles.pinInput}
+            />
+            {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
+            <View style={styles.pinActions}>
+              <PrimaryButton
+                accessibilityLabel="Confirm PIN"
+                label="Confirm"
+                disabled={pinInput.length < 6}
+                onPress={confirmPinAndDisable}
+                style={styles.pinButton}
+              />
+              <PrimaryButton
+                accessibilityLabel="Cancel"
+                label="Cancel"
+                onPress={() => setPinPromptVisible(false)}
+                variant="secondary"
+                style={styles.pinButton}
+              />
+            </View>
+          </View>
+        ) : null}
         <View style={styles.parentDetails}>
           <Text style={styles.parentText}>Parent email: {state.parent.email || 'Not set'}</Text>
           <Text style={styles.parentText}>
@@ -240,5 +296,33 @@ const styles = StyleSheet.create({
   },
   switchTrackOn: {
     backgroundColor: colors.success,
+  },
+  pinPrompt: {
+    marginTop: spacing.md,
+    borderRadius: radii.card,
+    backgroundColor: colors.input,
+    padding: spacing.md,
+  },
+  pinPromptLabel: {
+    color: colors.text,
+    fontSize: typography.caption,
+    fontWeight: '800',
+    marginBottom: spacing.sm,
+  },
+  pinInput: {
+    marginBottom: spacing.sm,
+  },
+  pinError: {
+    color: colors.danger,
+    fontSize: typography.caption,
+    fontWeight: '700',
+    marginBottom: spacing.sm,
+  },
+  pinActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  pinButton: {
+    flex: 1,
   },
 });
