@@ -8,8 +8,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.taptalk.app",
-      "deploymentTarget": "16.0"
+      "bundleIdentifier": "com.taptalk.app"
     },
     "plugins": [
       "expo-router",
@@ -18,7 +17,8 @@
         {
           "sounds": []
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": false
