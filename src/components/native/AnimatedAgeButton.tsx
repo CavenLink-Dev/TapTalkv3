@@ -1,15 +1,15 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
+  withTiming,
   FadeInDown,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { colors, radii, shadows, typography } from '../../theme/tokens';
 
-export type AgeRange = 'under-13' | '13-to-15' | '15-to-17' | '16-to-17' | '18-or-older';
+export type AgeRange = 'under-13' | '13-to-15' | '16-to-17' | '18-or-older';
 
 interface AnimatedAgeButtonProps {
   label: string;
@@ -44,63 +44,79 @@ export function AnimatedAgeButton({
   showChevron = true,
 }: AnimatedAgeButtonProps) {
   const scale = useSharedValue(1);
+  const chevronRotation = useSharedValue(selected ? 1 : 0);
+
+  useEffect(() => {
+    chevronRotation.value = withTiming(selected ? 1 : 0, { duration: 200 });
+  }, [selected, chevronRotation]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${chevronRotation.value * 90}deg` }],
+  }));
+
   const handlePressIn = () => {
-    scale.value = withSpring(0.97, { damping: 12, stiffness: 300 });
+    scale.value = withTiming(0.985, { duration: 100 });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 12, stiffness: 300 });
+    scale.value = withTiming(1, { duration: 100 });
   };
 
   return (
     <Animated.View
       entering={FadeInDown.duration(280).delay(entranceDelay)}
-      style={animatedStyle}
+      style={styles.stretch}
     >
-      <Pressable
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        onPress={onPress}
-        style={[
-          styles.button,
-          selected && !blocked && styles.buttonSelected,
-          selected && blocked && styles.buttonBlocked,
-        ]}
-        accessibilityRole="button"
-        accessibilityState={{ selected }}
-      >
-        <Text
+      <Animated.View style={animatedStyle}>
+        <Pressable
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          onPress={onPress}
           style={[
-            styles.label,
-            selected && !blocked && styles.labelSelected,
-            selected && blocked && styles.labelBlocked,
+            styles.button,
+            selected && !blocked && styles.buttonSelected,
+            selected && blocked && styles.buttonBlocked,
           ]}
+          accessibilityRole="button"
+          accessibilityState={{ selected }}
         >
-          {label}
-        </Text>
-        {showChevron && (
           <Text
             style={[
-              styles.chevron,
-              selected && !blocked && styles.chevronSelected,
-              selected && blocked && styles.chevronBlocked,
+              styles.label,
+              selected && !blocked && styles.labelSelected,
+              selected && blocked && styles.labelBlocked,
             ]}
           >
-            {'\u203A'}
+            {label}
           </Text>
-        )}
-      </Pressable>
+          {showChevron && (
+            <Animated.View style={chevronStyle}>
+              <Text
+                style={[
+                  styles.chevron,
+                  selected && !blocked && styles.chevronSelected,
+                  selected && blocked && styles.chevronBlocked,
+                ]}
+              >
+                {'\u203A'}
+              </Text>
+            </Animated.View>
+          )}
+        </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  stretch: {
+    width: '100%',
+  },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -117,13 +133,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primaryDark,
     ...shadows.card,
-    transform: [{ translateY: -1 }],
   },
   buttonBlocked: {
     backgroundColor: colors.danger,
-    borderColor: '#CC0000',
+    borderColor: colors.danger,
     ...shadows.card,
-    transform: [{ translateY: -1 }],
   },
   label: {
     fontSize: typography.body,
@@ -132,10 +146,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   labelSelected: {
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   labelBlocked: {
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   chevron: {
     fontSize: 28,
@@ -144,9 +158,9 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   chevronSelected: {
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   chevronBlocked: {
-    color: '#FFFFFF',
+    color: colors.surface,
   },
 });

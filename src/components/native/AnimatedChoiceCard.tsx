@@ -1,9 +1,9 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
+  withTiming,
   FadeInDown,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -36,48 +36,64 @@ export function AnimatedChoiceCard({
   showChevron = false,
 }: AnimatedChoiceCardProps) {
   const scale = useSharedValue(1);
+  const chevronRotation = useSharedValue(selected ? 1 : 0);
+
+  useEffect(() => {
+    chevronRotation.value = withTiming(selected ? 1 : 0, { duration: 200 });
+  }, [selected, chevronRotation]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${chevronRotation.value * 90}deg` }],
+  }));
+
   const handlePressIn = () => {
-    scale.value = withSpring(0.97, { damping: 12, stiffness: 300 });
+    scale.value = withTiming(0.985, { duration: 100 });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 12, stiffness: 300 });
+    scale.value = withTiming(1, { duration: 100 });
   };
 
   return (
     <Animated.View
       entering={FadeInDown.duration(280).delay(entranceDelay)}
-      style={animatedStyle}
+      style={styles.stretch}
     >
-      <Pressable
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        onPress={onPress}
-        style={[
-          styles.card,
-          selected && styles.cardSelected,
-        ]}
-        accessibilityRole="button"
-        accessibilityState={{ selected }}
-      >
-        <Text style={[styles.label, selected && styles.labelSelected]}>
-          {label}
-        </Text>
-        {showChevron && (
-          <Text style={styles.chevron}>{'\u203A'}</Text>
-        )}
-      </Pressable>
+      <Animated.View style={animatedStyle}>
+        <Pressable
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          onPress={onPress}
+          style={[
+            styles.card,
+            selected && styles.cardSelected,
+          ]}
+          accessibilityRole="button"
+          accessibilityState={{ selected }}
+        >
+          <Text style={[styles.label, selected && styles.labelSelected]}>
+            {label}
+          </Text>
+          {showChevron && (
+            <Animated.View style={chevronStyle}>
+              <Text style={[styles.chevron, selected && styles.chevronSelected]}>{'\u203A'}</Text>
+            </Animated.View>
+          )}
+        </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  stretch: {
+    width: '100%',
+  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -94,8 +110,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primaryDark,
     ...shadows.card,
-    // Slight lift effect
-    transform: [{ translateY: -1 }],
   },
   label: {
     fontSize: typography.body,
@@ -104,12 +118,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   labelSelected: {
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   chevron: {
     fontSize: 28,
     fontWeight: '300',
     color: colors.text,
     marginLeft: 8,
+  },
+  chevronSelected: {
+    color: colors.surface,
   },
 });

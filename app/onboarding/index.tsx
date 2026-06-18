@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Href, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MascotImage, MascotKey } from '../../src/components/MascotImage';
 import { SpeechBubble } from '../../src/components/SpeechBubble';
 import { ProgressBar } from '../../src/components/native/ProgressBar';
@@ -41,6 +41,7 @@ const THEMES = [
 export default function Onboarding() {
   const router = useRouter();
   const { dispatch } = useAppContext();
+  const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState(1);
 
@@ -177,7 +178,7 @@ export default function Onboarding() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* ── Progress header (single flex row: back | progress | skip).
           Both icons and the pill bar share the same centered baseline. ── */}
       <View style={styles.header}>
@@ -470,7 +471,7 @@ export default function Onboarding() {
 
             {/* Footer (hidden on steps that own their button inline) */}
             {step !== 1 && step !== 5 ? (
-              <View style={styles.cardFooter}>
+              <View style={[styles.cardFooter, { paddingBottom: spacing.lg + insets.bottom }]}>
                 <PrimaryButton
                   accessibilityLabel={step === TOTAL_STEPS ? 'Finish onboarding' : 'Continue'}
                   label={buttonLabel()}
@@ -577,7 +578,7 @@ const styles = StyleSheet.create({
   },
   cardFooter: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, paddingTop: spacing.md },
   cardScroll: { padding: spacing.xl, paddingBottom: spacing.sm },
-  cardScrollName: { paddingBottom: 60, gap: spacing.md },
+  cardScrollName: { paddingBottom: 80, gap: spacing.md },
   centeredCard: { alignItems: 'center', paddingVertical: spacing.sm },
   centeredInput: { textAlign: 'center', fontSize: typography.subheading, fontWeight: '700' },
   checkCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.softBlue, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },

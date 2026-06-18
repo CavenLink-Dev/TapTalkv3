@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   warningText: {
     fontSize: typography.caption,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.surface,
     textAlign: 'center',
     lineHeight: 16,
     letterSpacing: 0.5,

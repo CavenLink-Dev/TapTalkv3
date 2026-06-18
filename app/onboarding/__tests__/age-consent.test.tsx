@@ -7,7 +7,18 @@
 
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { ActionSheetIOS } from 'react-native';
 import AgeConsentScreen from '../age-consent';
+
+const AGE_OPTION_INDEX = {
+  'Under 13': 0,
+  '13 to 15': 1,
+  '16 to 17': 2,
+  '18 or older': 3,
+} as const;
+
+let mockSelectedAgeIndex = 0;
+const mockShowActionSheetWithOptions = jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions');
 
 // Mock expo-router
 jest.mock('expo-router', () => ({
@@ -37,7 +48,26 @@ jest.mock('../../../src/components/MascotImage', () => ({
   MascotImage: () => null,
 }));
 
+async function selectAgeRange(
+  getByText: (text: string | RegExp) => ReturnType<ReturnType<typeof render>['getByText']>,
+  ageLabel: keyof typeof AGE_OPTION_INDEX,
+) {
+  mockSelectedAgeIndex = AGE_OPTION_INDEX[ageLabel];
+  fireEvent.press(getByText(/Age Range\?|Under 13|13 to 15|16 to 17|18 or older/));
+  await waitFor(() => {
+    expect(getByText(ageLabel)).toBeTruthy();
+  });
+}
+
 describe('AgeConsentScreen', () => {
+  beforeEach(() => {
+    mockShowActionSheetWithOptions.mockImplementation(
+      (_: unknown, onSelect: (index: number) => void) => {
+        onSelect(mockSelectedAgeIndex);
+      },
+    );
+  });
+
   describe('Initial State', () => {
     it('should render the initial screen with branch selection', () => {
       const { getByText } = render(<AgeConsentScreen />);
@@ -51,7 +81,7 @@ describe('AgeConsentScreen', () => {
     it('should not show age selection initially', () => {
       const { queryByText } = render(<AgeConsentScreen />);
       
-      expect(queryByText('How old are you?')).toBeNull();
+      expect(queryByText('Age Range?')).toBeNull();
       expect(queryByText('Under 13')).toBeNull();
     });
   });
@@ -62,13 +92,12 @@ describe('AgeConsentScreen', () => {
       
       // Select Myself
       fireEvent.press(getByText('Myself'));
-      
+
       await waitFor(() => {
-        expect(getByText('How old are you?')).toBeTruthy();
+        expect(getByText('Age Range?')).toBeTruthy();
       });
-      
-      // Select Under 13
-      fireEvent.press(getByText('Under 13'));
+
+      await selectAgeRange(getByText, 'Under 13');
       
       await waitFor(() => {
         expect(getByText(/THIS APP NEEDS A PARENT OR GUARDIAN/i)).toBeTruthy();
@@ -83,10 +112,8 @@ describe('AgeConsentScreen', () => {
       const { getByText, queryByText } = render(<AgeConsentScreen />);
       
       fireEvent.press(getByText('Myself'));
-      
-      await waitFor(() => {
-        fireEvent.press(getByText('13 to 15'));
-      });
+
+      await selectAgeRange(getByText, '13 to 15');
       
       await waitFor(() => {
         expect(getByText(/THIS APP NEEDS A PARENT OR GUARDIAN/i)).toBeTruthy();
@@ -102,17 +129,8 @@ describe('AgeConsentScreen', () => {
       
       // Select Myself
       fireEvent.press(getByText('Myself'));
-      
-      await waitFor(() => {
-        expect(getByText('16 to 17')).toBeTruthy();
-      });
-      
-      // Select 16 to 17
-      fireEvent.press(getByText('16 to 17'));
-      
-      await waitFor(() => {
-        expect(getByText(/I AM AUTHORIZED/i)).toBeTruthy();
-      });
+
+      await selectAgeRange(getByText, '16 to 17');
       
       // Should not show guardian block
       expect(queryByText(/THIS APP NEEDS A PARENT OR GUARDIAN/i)).toBeNull();
@@ -133,10 +151,8 @@ describe('AgeConsentScreen', () => {
       const { getByText, getByRole } = render(<AgeConsentScreen />);
       
       fireEvent.press(getByText('Myself'));
-      
-      await waitFor(() => {
-        fireEvent.press(getByText('18 or older'));
-      });
+
+      await selectAgeRange(getByText, '18 or older');
       
       await waitFor(() => {
         const checkbox = getByRole('checkbox');
@@ -155,13 +171,8 @@ describe('AgeConsentScreen', () => {
       
       // Select Someone Else
       fireEvent.press(getByText('Someone Else'));
-      
-      await waitFor(() => {
-        expect(getByText('Their age or age range')).toBeTruthy();
-      });
-      
-      // Select Under 13
-      fireEvent.press(getByText('Under 13'));
+
+      await selectAgeRange(getByText, 'Under 13');
       
       await waitFor(() => {
         expect(getByText('Are you their legal guardian?')).toBeTruthy();
@@ -172,10 +183,8 @@ describe('AgeConsentScreen', () => {
       const { getByText, getAllByRole } = render(<AgeConsentScreen />);
       
       fireEvent.press(getByText('Someone Else'));
-      
-      await waitFor(() => {
-        fireEvent.press(getByText('Under 13'));
-      });
+
+      await selectAgeRange(getByText, 'Under 13');
       
       await waitFor(() => {
         fireEvent.press(getByText('Yes'));
@@ -191,10 +200,8 @@ describe('AgeConsentScreen', () => {
       const { getByText, queryByText } = render(<AgeConsentScreen />);
       
       fireEvent.press(getByText('Someone Else'));
-      
-      await waitFor(() => {
-        fireEvent.press(getByText('Under 13'));
-      });
+
+      await selectAgeRange(getByText, 'Under 13');
       
       await waitFor(() => {
         fireEvent.press(getByText('No'));
@@ -211,10 +218,8 @@ describe('AgeConsentScreen', () => {
       const { getByText, getAllByRole } = render(<AgeConsentScreen />);
       
       fireEvent.press(getByText('Someone Else'));
-      
-      await waitFor(() => {
-        fireEvent.press(getByText('13 to 15'));
-      });
+
+      await selectAgeRange(getByText, '13 to 15');
       
       await waitFor(() => {
         fireEvent.press(getByText('Yes'));
@@ -232,10 +237,8 @@ describe('AgeConsentScreen', () => {
       const { getByText, getAllByRole } = render(<AgeConsentScreen />);
       
       fireEvent.press(getByText('Someone Else'));
-      
-      await waitFor(() => {
-        fireEvent.press(getByText('16 to 17'));
-      });
+
+      await selectAgeRange(getByText, '16 to 17');
       
       await waitFor(() => {
         fireEvent.press(getByText('Yes'));
@@ -251,10 +254,8 @@ describe('AgeConsentScreen', () => {
       const { getByText, getAllByRole } = render(<AgeConsentScreen />);
       
       fireEvent.press(getByText('Someone Else'));
-      
-      await waitFor(() => {
-        fireEvent.press(getByText('18 or older'));
-      });
+
+      await selectAgeRange(getByText, '18 or older');
       
       // Guardian question should appear
       await waitFor(() => {
@@ -272,7 +273,7 @@ describe('AgeConsentScreen', () => {
     it('should hide age selection until branch is chosen', () => {
       const { queryByText } = render(<AgeConsentScreen />);
       
-      expect(queryByText('How old are you?')).toBeNull();
+      expect(queryByText('Age Range?')).toBeNull();
       expect(queryByText('Under 13')).toBeNull();
     });
 
@@ -287,9 +288,7 @@ describe('AgeConsentScreen', () => {
       expect(queryByText('Are you their legal guardian?')).toBeNull();
       
       // Shown after age selection
-      await waitFor(() => {
-        fireEvent.press(getByText('Under 13'));
-      });
+      await selectAgeRange(getByText, 'Under 13');
       
       await waitFor(() => {
         expect(getByText('Are you their legal guardian?')).toBeTruthy();
@@ -300,10 +299,8 @@ describe('AgeConsentScreen', () => {
       const { queryByText, getByText } = render(<AgeConsentScreen />);
       
       fireEvent.press(getByText('Myself'));
-      
-      await waitFor(() => {
-        fireEvent.press(getByText('18 or older'));
-      });
+
+      await selectAgeRange(getByText, '18 or older');
       
       await waitFor(() => {
         expect(queryByText('Are you their legal guardian?')).toBeNull();
@@ -325,10 +322,8 @@ describe('AgeConsentScreen', () => {
       const { getByText, getByRole } = render(<AgeConsentScreen />);
       
       fireEvent.press(getByText('Myself'));
-      
-      await waitFor(() => {
-        fireEvent.press(getByText('18 or older'));
-      });
+
+      await selectAgeRange(getByText, '18 or older');
       
       await waitFor(() => {
         const checkbox = getByRole('checkbox');
@@ -344,10 +339,8 @@ describe('AgeConsentScreen', () => {
       const { getByText, queryByText } = render(<AgeConsentScreen />);
       
       fireEvent.press(getByText('Myself'));
-      
-      await waitFor(() => {
-        fireEvent.press(getByText('Under 13'));
-      });
+
+      await selectAgeRange(getByText, 'Under 13');
       
       await waitFor(() => {
         expect(queryByText('CONTINUE USING YOUR EMAIL')).toBeNull();

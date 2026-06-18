@@ -6,7 +6,7 @@ import { LoadingDots } from '../../src/components/LoadingDots';
 import { MascotImage } from '../../src/components/MascotImage';
 import { colors } from '../../src/theme/tokens';
 
-const onboardingRoute = '/onboarding' as Href;
+const onboardingRoute = '/onboarding/age-consent' as Href;
 
 export default function Splash() {
   const router = useRouter();

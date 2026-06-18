@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
+  withTiming,
   FadeInDown,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -34,7 +34,7 @@ export function ProviderIcons({ onProviderPress, entranceDelay = 0 }: ProviderIc
         <ProviderIcon
           icon="📞"
           label="Phone"
-          color="#199aee"
+          color={colors.primary}
           onPress={() => onProviderPress('phone')}
         />
         <ProviderIcon
@@ -75,26 +75,28 @@ function ProviderIcon({ icon, label, color, onPress }: ProviderIconProps) {
   }));
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.9, { damping: 12, stiffness: 300 });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    scale.value = withTiming(0.985, { duration: 100 });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 12, stiffness: 300 });
+    scale.value = withTiming(1, { duration: 100 });
   };
 
   return (
-    <Animated.View style={animatedStyle}>
-      <Pressable
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        onPress={onPress}
-        style={[styles.iconButton, { backgroundColor: color }]}
-        accessibilityRole="button"
-        accessibilityLabel={`Sign in with ${label}`}
-      >
-        <Text style={styles.iconText}>{icon}</Text>
-      </Pressable>
+    <Animated.View style={styles.iconWrap}>
+      <Animated.View style={animatedStyle}>
+        <Pressable
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          onPress={onPress}
+          style={[styles.iconButton, { backgroundColor: color }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Sign in with ${label}`}
+        >
+          <Text style={styles.iconText}>{icon}</Text>
+        </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -118,6 +120,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.lg,
   },
+  iconWrap: {},
   iconButton: {
     width: 56,
     height: 56,
@@ -132,6 +135,6 @@ const styles = StyleSheet.create({
   },
   iconText: {
     fontSize: 28,
-    color: '#FFFFFF',
+    color: colors.surface,
   },
 });

@@ -3,46 +3,38 @@ import { StyleSheet, View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { colors } from '../../theme/tokens';
 
 interface TwoSegmentProgressBarProps {
   /**
-   * Current progress (0-2):
-   * - 0: no segments filled
-   * - 1: first segment filled
-   * - 2: both segments filled
+   * Fractional fill for segment 1 (0 to 1).
+   * Segment 1 = privacy, data, and security steps.
    */
-  progress: number;
+  segment1: number;
   /**
-   * Duration in ms for the fill animation (default: 300)
+   * Fractional fill for segment 2 (0 to 1).
+   * Segment 2 = personalisation and customisation steps.
    */
-  duration?: number;
+  segment2: number;
 }
 
 /**
  * Two-segment progress bar matching the PNG design.
  * Each segment animates smoothly with a spring when progress changes.
  */
-export function TwoSegmentProgressBar({ progress, duration = 300 }: TwoSegmentProgressBarProps) {
-  const segment1Width = useSharedValue(0);
-  const segment2Width = useSharedValue(0);
+export function TwoSegmentProgressBar({ segment1, segment2 }: TwoSegmentProgressBarProps) {
+  const segment1Width = useSharedValue(Math.min(1, Math.max(0, segment1)));
+  const segment2Width = useSharedValue(Math.min(1, Math.max(0, segment2)));
 
   useEffect(() => {
-    // Segment 1 fills when progress >= 1
-    segment1Width.value = withSpring(progress >= 1 ? 1 : 0, {
-      damping: 14,
-      stiffness: 110,
-    });
+    segment1Width.value = withTiming(Math.min(1, Math.max(0, segment1)), { duration: 300 });
+  }, [segment1, segment1Width]);
 
-    // Segment 2 fills when progress >= 2
-    segment2Width.value = withSpring(progress >= 2 ? 1 : 0, {
-      damping: 14,
-      stiffness: 110,
-    });
-  }, [progress, segment1Width, segment2Width]);
+  useEffect(() => {
+    segment2Width.value = withTiming(Math.min(1, Math.max(0, segment2)), { duration: 300 });
+  }, [segment2, segment2Width]);
 
   const segment1Style = useAnimatedStyle(() => ({
     width: `${segment1Width.value * 100}%`,

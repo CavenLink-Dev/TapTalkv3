@@ -11,26 +11,37 @@
 
 import React, { useState, useMemo } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { Href, useRouter } from 'expo-router';
 import { MascotImage } from '../../src/components/MascotImage';
 import { TwoSegmentProgressBar } from '../../src/components/native/TwoSegmentProgressBar';
 import { AnimatedChoiceCard } from '../../src/components/native/AnimatedChoiceCard';
-import { AnimatedAgeButton, AgeRange } from '../../src/components/native/AnimatedAgeButton';
 import { GuardianQuestionButtons } from '../../src/components/native/GuardianQuestionButtons';
 import { ConsentCheckbox } from '../../src/components/native/ConsentCheckbox';
 import { ProviderIcons } from '../../src/components/native/ProviderIcons';
 import { GuardianBlockPanel } from '../../src/components/native/GuardianBlockPanel';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { colors, radii, shadows, spacing, typography } from '../../src/theme/tokens';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+
+import type { AgeRange } from '../../src/components/native/AnimatedAgeButton';
+
+const AGE_OPTIONS: { range: AgeRange; label: string }[] = [
+  { range: 'under-13', label: 'Under 13' },
+  { range: '13-to-15', label: '13 to 15' },
+  { range: '16-to-17', label: '16 to 17' },
+  { range: '18-or-older', label: '18 or older' },
+];
 
 type Branch = 'myself' | 'someone-else' | null;
 type GuardianAnswer = 'yes' | 'no' | null;
@@ -54,13 +65,28 @@ export default function AgeConsentScreen() {
     guardianConsentChecked: false,
   });
 
-  // Calculate progress (0-2 segments)
-  const progress = useMemo(() => {
-    if (!state.branch) return 0;
-    if (state.branch === 'myself' && state.ageRange) return 2;
-    if (state.branch === 'someone-else' && state.ageRange && state.isGuardian) return 2;
-    if (state.branch === 'someone-else' && state.ageRange) return 1;
-    return 1;
+  // Fractional progress for segment 1 (privacy/security steps).
+  // Age-consent is the first screen → small fill. Grows as user answers.
+  const segment1Progress = useMemo(() => {
+    let steps = 0;
+    if (state.branch) steps += 1;
+    if (state.ageRange) steps += 1;
+    if (state.branch === 'someone-else' && state.isGuardian) steps += 1;
+    if (state.consentChecked) steps += 1;
+    if (state.guardianConsentChecked) steps += 1;
+
+    // Denominator reflects the max reachable sub-steps for the active path:
+    // myself:                           branch + ageRange + consentChecked         = 3
+    // someone-else (guardian + <15):    + isGuardian + guardianConsentChecked     = 5
+    // someone-else (other):             + isGuardian + consentChecked             = 4
+    let maxSteps = 3;
+    if (state.branch === 'someone-else') {
+      const needsBothConsents =
+        state.isGuardian === 'yes' &&
+        (state.ageRange === 'under-13' || state.ageRange === '13-to-15');
+      maxSteps = needsBothConsents ? 5 : 4;
+    }
+    return steps / maxSteps;
   }, [state]);
 
   // Determine if user is blocked (needs guardian verification)
@@ -103,15 +129,41 @@ export default function AgeConsentScreen() {
     return false;
   }, [state, isBlocked]);
 
-  // Age ranges based on branch
-  const ageRanges = useMemo(() => {
-    return [
-      { range: 'under-13' as AgeRange, label: 'Under 13' },
-      { range: '13-to-15' as AgeRange, label: '13 to 15' },
-      { range: '16-to-17' as AgeRange, label: '16 to 17' },
-      { range: '18-or-older' as AgeRange, label: '18 or older' },
-    ];
-  }, []);
+  const selectedAgeLabel = useMemo(() => {
+    if (!state.ageRange) return null;
+    return AGE_OPTIONS.find((o) => o.range === state.ageRange)?.label ?? null;
+  }, [state.ageRange]);
+
+  const openAgePicker = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [...AGE_OPTIONS.map((o) => o.label), 'Cancel'],
+          cancelButtonIndex: AGE_OPTIONS.length,
+          title: state.branch === 'myself' ? 'How old are you?' : 'Their age or age range',
+        },
+        (index) => {
+          const option = AGE_OPTIONS[index];
+          if (option) {
+            handleAgeSelect(option.range);
+          }
+        },
+      );
+    } else {
+      Alert.alert(
+        state.branch === 'myself' ? 'How old are you?' : 'Their age or age range',
+        undefined,
+        [
+          ...AGE_OPTIONS.map((o) => ({
+            text: o.label,
+            onPress: () => handleAgeSelect(o.range),
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ],
+      );
+    }
+  };
 
   const handleBranchSelect = (branch: Branch) => {
     setState({
@@ -154,8 +206,12 @@ export default function AgeConsentScreen() {
   const handleContinue = () => {
     if (canContinue) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      // Navigate to next screen (replace with actual route)
-      router.push('/onboarding');
+      if (state.branch === 'myself') {
+        router.push('/onboarding/adult' as Href);
+      } else {
+        // Caregiver / guardian path: proceeds through the shared account setup flow.
+        router.push('/onboarding' as Href);
+      }
     }
   };
 
@@ -182,7 +238,7 @@ export default function AgeConsentScreen() {
         >
           {/* Progress Bar */}
           <View style={styles.progressContainer}>
-            <TwoSegmentProgressBar progress={progress} />
+            <TwoSegmentProgressBar segment1={segment1Progress} segment2={0} />
           </View>
 
           {/* Header with Mascot */}
@@ -219,28 +275,39 @@ export default function AgeConsentScreen() {
               </View>
             </View>
 
-            {/* Age Selection (Progressive Disclosure) */}
+            {/* Age Selection – iOS Dropdown */}
             {state.branch && (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>
-                  {state.branch === 'myself' ? 'How old are you?' : 'Their age or age range'}
-                </Text>
-                <View style={styles.column}>
-                  {ageRanges.map(({ range, label }, index) => (
-                    <AnimatedAgeButton
-                      key={range}
-                      label={label}
-                      ageRange={range}
-                      selected={state.ageRange === range}
-                      onPress={() => handleAgeSelect(range)}
-                      entranceDelay={index * 50}
-                      blocked={
-                        state.ageRange === range &&
-                        isBlocked
-                      }
-                    />
-                  ))}
-                </View>
+                <Pressable
+                  onPress={openAgePicker}
+                  style={({ pressed }) => [
+                    styles.dropdownBtn,
+                    selectedAgeLabel && !isBlocked && styles.dropdownBtnSelected,
+                    selectedAgeLabel && isBlocked && styles.dropdownBtnBlocked,
+                    pressed && styles.dropdownPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={selectedAgeLabel ? `Age range: ${selectedAgeLabel}` : 'Select age range'}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownLabel,
+                      selectedAgeLabel && !isBlocked && styles.dropdownLabelSelected,
+                      selectedAgeLabel && isBlocked && styles.dropdownLabelBlocked,
+                    ]}
+                  >
+                    {selectedAgeLabel ?? 'Age Range?'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.dropdownChevron,
+                      selectedAgeLabel && !isBlocked && styles.dropdownChevronSelected,
+                      selectedAgeLabel && isBlocked && styles.dropdownChevronBlocked,
+                    ]}
+                  >
+                    {'▾'}
+                  </Text>
+                </Pressable>
               </View>
             )}
 
@@ -268,18 +335,20 @@ export default function AgeConsentScreen() {
               (state.branch === 'myself' ||
                 (state.branch === 'someone-else' && state.isGuardian)) && (
                 <View style={styles.section}>
-                  {state.branch === 'someone-else' && state.isGuardian === 'yes' && (
+                  {state.branch === 'someone-else' &&
+                    state.isGuardian === 'yes' &&
+                    (state.ageRange === 'under-13' || state.ageRange === '13-to-15') && (
                     <ConsentCheckbox
                       checked={state.guardianConsentChecked}
                       onToggle={handleGuardianConsentToggle}
-                      label="I AM AUTHORIZED TO SET UP COMMUNICATION FOR THIS PERSON"
+                      label="I confirm I am the legal guardian or authorised carer for this person"
                       entranceDelay={250}
                     />
                   )}
                   <ConsentCheckbox
                     checked={state.consentChecked}
                     onToggle={handleConsentToggle}
-                    label="I AM AUTHORIZED TO SET UP COMMUNICATION FOR THIS PERSON AND AGREE TO TAPTALK'S PRIVACY POLICY"
+                    label="I have read and agree to TapTalk's Privacy Policy and Terms of Use"
                     entranceDelay={state.branch === 'someone-else' ? 300 : 250}
                   />
                 </View>
@@ -340,13 +409,9 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 24,
+    borderRadius: radii.card,
     padding: spacing.xl,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    ...shadows.card,
   },
   cardTitle: {
     fontSize: typography.subheading,
@@ -364,22 +429,57 @@ const styles = StyleSheet.create({
   section: {
     marginTop: spacing.xl,
   },
-  sectionLabel: {
-    fontSize: typography.callout,
-    fontWeight: '600',
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-  },
   row: {
     flexDirection: 'row',
     gap: spacing.md,
   },
-  column: {
-    gap: spacing.md,
-  },
   halfWidth: {
     flex: 1,
+  },
+  dropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.softBlue,
+    borderRadius: radii.card,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    minHeight: 60,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  dropdownBtnSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primaryDark,
+  },
+  dropdownBtnBlocked: {
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
+  },
+  dropdownPressed: {
+    transform: [{ scale: 0.985 }],
+  },
+  dropdownLabel: {
+    fontSize: typography.body,
+    fontWeight: '600',
+    color: colors.textTertiary,
+  },
+  dropdownLabelSelected: {
+    color: colors.surface,
+  },
+  dropdownLabelBlocked: {
+    color: colors.surface,
+  },
+  dropdownChevron: {
+    fontSize: 18,
+    color: colors.textTertiary,
+    marginLeft: 8,
+  },
+  dropdownChevronSelected: {
+    color: colors.surface,
+  },
+  dropdownChevronBlocked: {
+    color: colors.surface,
   },
   footer: {
     marginTop: spacing.xxl,

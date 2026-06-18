@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   checkbox: {
     width: 24,
@@ -94,6 +94,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
+    marginTop: 2,
   },
   checkboxChecked: {
     backgroundColor: colors.success,
@@ -102,12 +103,13 @@ const styles = StyleSheet.create({
   checkmark: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   label: {
     flex: 1,
     fontSize: typography.callout,
+    fontWeight: '600',
     color: colors.text,
-    lineHeight: 20,
+    lineHeight: 22,
   },
 });
