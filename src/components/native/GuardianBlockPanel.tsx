@@ -118,9 +118,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   copyButton: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.primary,
+    backgroundColor: colors.primary,
     borderRadius: radii.button,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
@@ -129,6 +127,6 @@ const styles = StyleSheet.create({
   copyButtonText: {
     fontSize: typography.callout,
     fontWeight: '600',
-    color: colors.primary,
+    color: colors.surface,
   },
 });

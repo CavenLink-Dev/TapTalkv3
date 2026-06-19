@@ -62,17 +62,17 @@ const styles = StyleSheet.create({
     gap: 8,
     width: '100%',
     maxWidth: 320,
-    height: 6,
+    height: 12,
   },
   segment: {
     flex: 1,
-    backgroundColor: colors.border,
-    borderRadius: 3,
+    backgroundColor: colors.softBlue,
+    borderRadius: 10,
     overflow: 'hidden',
   },
   fill: {
     height: '100%',
     backgroundColor: colors.primary,
-    borderRadius: 3,
+    borderRadius: 10,
   },
 });

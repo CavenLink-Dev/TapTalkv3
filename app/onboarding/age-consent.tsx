@@ -31,6 +31,7 @@ import { ConsentCheckbox } from '../../src/components/native/ConsentCheckbox';
 import { ProviderIcons } from '../../src/components/native/ProviderIcons';
 import { GuardianBlockPanel } from '../../src/components/native/GuardianBlockPanel';
 import { colors, radii, shadows, spacing, typography } from '../../src/theme/tokens';
+import { DevSkip } from '../../src/components/DevSkip';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -375,6 +376,7 @@ export default function AgeConsentScreen() {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <DevSkip next="/onboarding/adult" />
     </SafeAreaView>
   );
 }
@@ -389,11 +391,11 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: spacing.lg,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.lg,
   },
   progressContainer: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.xxl,
   },
   header: {
     alignItems: 'center',
@@ -440,29 +442,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.softBlue,
+    backgroundColor: colors.primary,
     borderRadius: radii.card,
     paddingVertical: 16,
     paddingHorizontal: 24,
     minHeight: 60,
-    borderWidth: 2,
-    borderColor: 'transparent',
   },
   dropdownBtnSelected: {
     backgroundColor: colors.primary,
-    borderColor: colors.primaryDark,
   },
   dropdownBtnBlocked: {
     backgroundColor: colors.danger,
-    borderColor: colors.danger,
   },
   dropdownPressed: {
+    backgroundColor: colors.mascot,
     transform: [{ scale: 0.985 }],
   },
   dropdownLabel: {
     fontSize: typography.body,
     fontWeight: '600',
-    color: colors.textTertiary,
+    color: colors.surface,
   },
   dropdownLabelSelected: {
     color: colors.surface,
@@ -472,7 +471,7 @@ const styles = StyleSheet.create({
   },
   dropdownChevron: {
     fontSize: 18,
-    color: colors.textTertiary,
+    color: colors.surface,
     marginLeft: 8,
   },
   dropdownChevronSelected: {

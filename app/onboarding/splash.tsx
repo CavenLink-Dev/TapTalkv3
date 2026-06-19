@@ -3,6 +3,7 @@ import { Animated, Image, StyleSheet, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingDots } from '../../src/components/LoadingDots';
+import { DevSkip } from '../../src/components/DevSkip';
 import { MascotImage } from '../../src/components/MascotImage';
 import { colors } from '../../src/theme/tokens';
 
@@ -53,6 +54,7 @@ export default function Splash() {
       <Animated.View style={[styles.footer, { opacity: dotsOpacity }]}>
         <LoadingDots />
       </Animated.View>
+      <DevSkip next="/onboarding/age-consent" />
     </SafeAreaView>
   );
 }

@@ -5,6 +5,7 @@ import { Card } from '../../src/components/native/Card';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { Screen } from '../../src/components/native/Screen';
 import { TextField } from '../../src/components/native/TextField';
+import { DevSkip } from '../../src/components/DevSkip';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { authFormStyles } from '../../src/styles/authFormStyles';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
@@ -63,6 +64,7 @@ export default function LoginScreen() {
           <Text style={authFormStyles.link}>Need an account? Sign up</Text>
         </Pressable>
       </Card>
+      <DevSkip next="/(tabs)/talk" />
     </Screen>
   );
 }

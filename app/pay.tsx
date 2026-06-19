@@ -4,6 +4,7 @@ import { Href, useRouter } from 'expo-router';
 import { Card } from '../src/components/native/Card';
 import { PrimaryButton } from '../src/components/native/PrimaryButton';
 import { Screen } from '../src/components/native/Screen';
+import { DevSkip } from '../src/components/DevSkip';
 import { useAppContext } from '../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../src/theme/tokens';
 
@@ -52,6 +53,7 @@ export default function PayScreen() {
         onPress={continueToLogin}
         style={styles.cta}
       />
+      <DevSkip next="/auth/login" />
     </Screen>
   );
 }

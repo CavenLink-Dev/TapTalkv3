@@ -69,9 +69,10 @@ export function AnimatedChoiceCard({
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           onPress={onPress}
-          style={[
+          style={({ pressed }) => [
             styles.card,
             selected && styles.cardSelected,
+            pressed && styles.cardPressed,
           ]}
           accessibilityRole="button"
           accessibilityState={{ selected }}
@@ -98,23 +99,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.softBlue,
+    backgroundColor: colors.primary,
     borderRadius: radii.card,
     paddingVertical: 16,
     paddingHorizontal: 24,
     minHeight: 60,
-    borderWidth: 2,
-    borderColor: 'transparent',
   },
   cardSelected: {
     backgroundColor: colors.primary,
-    borderColor: colors.primaryDark,
     ...shadows.card,
+  },
+  cardPressed: {
+    backgroundColor: colors.mascot,
   },
   label: {
     fontSize: typography.body,
     fontWeight: '600',
-    color: colors.text,
+    color: colors.surface,
     textAlign: 'center',
   },
   labelSelected: {
@@ -123,7 +124,7 @@ const styles = StyleSheet.create({
   chevron: {
     fontSize: 28,
     fontWeight: '300',
-    color: colors.text,
+    color: colors.surface,
     marginLeft: 8,
   },
   chevronSelected: {

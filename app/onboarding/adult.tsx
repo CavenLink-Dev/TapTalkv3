@@ -15,6 +15,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import { Href, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DevSkip } from '../../src/components/DevSkip';
 import { MascotImage } from '../../src/components/MascotImage';
 import { SpeechBubble } from '../../src/components/SpeechBubble';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
@@ -433,6 +434,7 @@ export default function AdultOnboarding() {
 
         </Animated.View>
       </KeyboardAvoidingView>
+      <DevSkip next="/pay" />
     </SafeAreaView>
   );
 }
@@ -543,19 +545,19 @@ const styles = StyleSheet.create({
   insetHeading: { color: colors.text, fontSize: typography.body, fontWeight: '900', textAlign: 'center', marginBottom: spacing.sm },
 
   goalGrid:       { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.sm },
-  goalCard:       { flex: 1, minWidth: '44%', borderRadius: radii.card, borderWidth: 2, borderColor: colors.borderBlue, backgroundColor: colors.surface, padding: spacing.lg, alignItems: 'center', gap: spacing.sm, ...shadows.card },
-  goalCardActive: { borderColor: colors.primary, backgroundColor: colors.softBlue },
+  goalCard:       { flex: 1, minWidth: '44%', borderRadius: radii.card, backgroundColor: colors.primary, padding: spacing.lg, alignItems: 'center', gap: spacing.sm },
+  goalCardActive: { backgroundColor: colors.primaryDark },
   goalEmoji:      { fontSize: 32 },
-  goalLabel:      { color: colors.text, fontSize: typography.callout, fontWeight: '700', textAlign: 'center' },
-  goalLabelActive:{ color: colors.primaryDark },
-  pressedScale:   { transform: [{ scale: 0.97 }] },
+  goalLabel:      { color: colors.surface, fontSize: typography.callout, fontWeight: '700', textAlign: 'center' },
+  goalLabelActive:{ color: colors.surface },
+  pressedScale:   { backgroundColor: colors.mascot, transform: [{ scale: 0.97 }] },
 
-  themeRow:         { flexDirection: 'row', alignItems: 'center', borderRadius: radii.card, borderWidth: 2, borderColor: colors.borderBlue, backgroundColor: colors.surface, padding: spacing.md, marginBottom: spacing.sm, ...shadows.card },
-  themeRowSelected: { borderColor: colors.primary, backgroundColor: colors.softBlue },
+  themeRow:         { flexDirection: 'row', alignItems: 'center', borderRadius: radii.card, backgroundColor: colors.primary, padding: spacing.md, marginBottom: spacing.sm },
+  themeRowSelected: { backgroundColor: colors.primaryDark },
   themeChip:        { borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 6, minWidth: 90, alignItems: 'center', marginRight: spacing.md },
   themeChipText:    { color: colors.surface, fontWeight: '800', fontSize: typography.callout },
-  themeLabel:       { flex: 1, color: colors.text, fontSize: typography.callout, fontWeight: '700' },
-  themeLabelSelected: { color: colors.primary },
+  themeLabel:       { flex: 1, color: colors.surface, fontSize: typography.callout, fontWeight: '700' },
+  themeLabelSelected: { color: colors.surface },
 
   textSizeRow:     { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: spacing.md, marginTop: spacing.sm },
   textSizeItem:    { alignItems: 'center', flex: 1 },
