@@ -1,443 +1,722 @@
-import React, { useMemo, useState } from 'react';
-import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import {
+  AccessibilityInfo,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withSequence,
+  withTiming,
+  withRepeat,
+  FadeIn,
+  runOnJS,
+} from 'react-native-reanimated';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { hapticSelection } from '../../src/utils/haptics';
-import { Screen } from '../../src/components/native/Screen';
-import { Card } from '../../src/components/native/Card';
-import { PrimaryButton } from '../../src/components/native/PrimaryButton';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { useSpeech } from '../../src/hooks/useSpeech';
+import { MascotImage, MascotKey } from '../../src/components/MascotImage';
+import { colors, symbolColors, radii } from '../../src/theme/tokens';
 
-type BoardName = 'main' | 'food';
+// ─── Design tokens — sourced from tokens.ts (Figma Mode 1 variables) ─────────
+const BG      = colors.background;   // main_background_colour
+const SURFACE = colors.surface;      // secondary_main_background_white
+const BORDER  = colors.border;       // outline_stroke_rarely_used
 
-interface BoardItem {
-  id: string;
-  label: string;
-  symbol: string;
-  kind: 'word' | 'folder';
-  backgroundColor: string;
-  borderColor: string;
-  labelColor: string;
+/** Word-type colour palette from symbolColors token */
+const WC = symbolColors;
+
+const PILL_ACTIVE   = colors.primaryDark;    // button_selected
+const PILL_INACTIVE = colors.primary;        // button_main_and_progress_bar_filler
+const PILL_W        = 60;
+const PILL_H        = 33;
+const PILL_GAP      = 15;
+const CELL          = 64;
+const CELL_GAP      = 6;
+const CELL_RADIUS   = 5;
+const CELL_BORDER   = colors.symbolOutline;  // outline_black_symbol_folder
+// Horizontal padding so 5 columns fit exactly: (393 - (5×64 + 4×6)) / 2 ≈ 24
+const GRID_PADDING  = 24;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Category = 'Main' | 'Actions' | 'Feelings' | 'Food' | 'Social';
+type CellKind = 'word' | 'folder' | 'article' | 'question';
+
+interface AACSymbol {
+  id:     string;
+  label:  string;
+  symbol: string; // emoji placeholder until ARASAAC symbols are loaded
+  bg:     string;
+  kind:   CellKind;
 }
 
-const mainBoard: BoardItem[] = [
-  { id: 'i', label: 'I', symbol: '👤', kind: 'word', backgroundColor: '#EBF4FF', borderColor: '#93C5FD', labelColor: '#1D4ED8' },
-  { id: 'want', label: 'want', symbol: '🙋', kind: 'word', backgroundColor: '#FFF7ED', borderColor: '#FCA97B', labelColor: '#C2410C' },
-  { id: 'yes', label: 'yes', symbol: '✓', kind: 'word', backgroundColor: '#F0FDF4', borderColor: '#86EFAC', labelColor: '#15803D' },
-  { id: 'please', label: 'please', symbol: '★', kind: 'word', backgroundColor: colors.softBlue, borderColor: '#B3DDEF', labelColor: colors.primary },
-  { id: 'food', label: 'Food', symbol: '🍎', kind: 'folder', backgroundColor: '#FFFBEB', borderColor: '#F59E0B', labelColor: '#B45309' },
-  { id: 'help', label: 'help', symbol: '🤝', kind: 'word', backgroundColor: '#F5F3FF', borderColor: '#C4B5FD', labelColor: '#6D28D9' },
-];
+// ─── Board data ───────────────────────────────────────────────────────────────
+const BOARDS: Record<Category, AACSymbol[]> = {
+  Main: [
+    { id: 'hello',  label: 'Hello',  symbol: '👋', bg: WC.conjunction,  kind: 'word'     },
+    { id: 'car',    label: 'Car',    symbol: '🚗', bg: WC.noun,         kind: 'word'     },
+    { id: 'him',    label: 'Him',    symbol: '👦', bg: WC.pronoun,      kind: 'word'     },
+    { id: 'run',    label: 'Run',    symbol: '🏃', bg: WC.verb,         kind: 'word'     },
+    { id: 'big',    label: 'Big',    symbol: '📦', bg: WC.adjective,    kind: 'word'     },
+    { id: 'where',  label: 'Where',  symbol: '?',  bg: WC.question,     kind: 'question' },
+    { id: 'please', label: 'Please', symbol: '🙏', bg: WC.social,       kind: 'word'     },
+    { id: 'the',    label: 'The',    symbol: '',   bg: WC.article,      kind: 'article'  },
+    { id: 'ouch',   label: 'Ouch',   symbol: '😖', bg: WC.interjection, kind: 'word'     },
+    { id: 'places', label: 'Places', symbol: '📍', bg: WC.folder,       kind: 'folder'   },
+    { id: 'sports', label: 'Sports', symbol: '⚽', bg: WC.folder,       kind: 'folder'   },
+  ],
+  Actions: [
+    { id: 'eat',   label: 'Eat',   symbol: '🍽️', bg: WC.verb,         kind: 'word' },
+    { id: 'drink', label: 'Drink', symbol: '🥤',  bg: WC.verb,         kind: 'word' },
+    { id: 'go',    label: 'Go',    symbol: '🚶',  bg: WC.verb,         kind: 'word' },
+    { id: 'stop',  label: 'Stop',  symbol: '✋',  bg: WC.interjection, kind: 'word' },
+    { id: 'help',  label: 'Help',  symbol: '🤝',  bg: WC.social,       kind: 'word' },
+    { id: 'want',  label: 'Want',  symbol: '🙋',  bg: WC.verb,         kind: 'word' },
+    { id: 'play',  label: 'Play',  symbol: '🎮',  bg: WC.noun,         kind: 'word' },
+    { id: 'sleep', label: 'Sleep', symbol: '😴',  bg: WC.adjective,    kind: 'word' },
+    { id: 'sit',   label: 'Sit',   symbol: '🪑',  bg: WC.verb,         kind: 'word' },
+    { id: 'walk',  label: 'Walk',  symbol: '🚶',  bg: WC.verb,         kind: 'word' },
+  ],
+  Feelings: [
+    { id: 'happy',   label: 'Happy',   symbol: '😊', bg: WC.adjective,    kind: 'word' },
+    { id: 'sad',     label: 'Sad',     symbol: '😢', bg: WC.adjective,    kind: 'word' },
+    { id: 'angry',   label: 'Angry',   symbol: '😠', bg: WC.interjection, kind: 'word' },
+    { id: 'scared',  label: 'Scared',  symbol: '😨', bg: WC.question,     kind: 'word' },
+    { id: 'tired',   label: 'Tired',   symbol: '😴', bg: WC.adjective,    kind: 'word' },
+    { id: 'excited', label: 'Excited', symbol: '🤩', bg: WC.pronoun,      kind: 'word' },
+    { id: 'love',    label: 'Love',    symbol: '❤️', bg: WC.conjunction,  kind: 'word' },
+    { id: 'sick',    label: 'Sick',    symbol: '🤒', bg: WC.noun,         kind: 'word' },
+    { id: 'pain',    label: 'Pain',    symbol: '🤕', bg: WC.interjection, kind: 'word' },
+    { id: 'calm',    label: 'Calm',    symbol: '😌', bg: WC.adjective,    kind: 'word' },
+  ],
+  Food: [
+    { id: 'apple',  label: 'Apple',  symbol: '🍎', bg: WC.noun, kind: 'word' },
+    { id: 'banana', label: 'Banana', symbol: '🍌', bg: WC.noun, kind: 'word' },
+    { id: 'pizza',  label: 'Pizza',  symbol: '🍕', bg: WC.noun, kind: 'word' },
+    { id: 'water',  label: 'Water',  symbol: '💧', bg: WC.noun, kind: 'word' },
+    { id: 'milk',   label: 'Milk',   symbol: '🥛', bg: WC.noun, kind: 'word' },
+    { id: 'cookie', label: 'Cookie', symbol: '🍪', bg: WC.noun, kind: 'word' },
+    { id: 'juice',  label: 'Juice',  symbol: '🍊', bg: WC.noun, kind: 'word' },
+    { id: 'bread',  label: 'Bread',  symbol: '🍞', bg: WC.noun, kind: 'word' },
+    { id: 'cheese', label: 'Cheese', symbol: '🧀', bg: WC.noun, kind: 'word' },
+    { id: 'chips',  label: 'Chips',  symbol: '🍟', bg: WC.noun, kind: 'word' },
+  ],
+  Social: [
+    { id: 'yes',      label: 'Yes',       symbol: '✅', bg: WC.verb,         kind: 'word' },
+    { id: 'no',       label: 'No',        symbol: '❌', bg: WC.interjection, kind: 'word' },
+    { id: 'thankyou', label: 'Thank You', symbol: '🙏', bg: WC.social,       kind: 'word' },
+    { id: 'sorry',    label: 'Sorry',     symbol: '😔', bg: WC.conjunction,  kind: 'word' },
+    { id: 'ok',       label: 'OK',        symbol: '👌', bg: WC.verb,         kind: 'word' },
+    { id: 'bye',      label: 'Bye',       symbol: '👋', bg: WC.conjunction,  kind: 'word' },
+    { id: 'hi',       label: 'Hi',        symbol: '😁', bg: WC.social,       kind: 'word' },
+    { id: 'wait',     label: 'Wait',      symbol: '⏳', bg: WC.question,     kind: 'word' },
+  ],
+};
 
-const foodBoard: BoardItem[] = [
-  { id: 'apple', label: 'apple', symbol: '🍎', kind: 'word', backgroundColor: '#FFFBEB', borderColor: '#FCD34D', labelColor: '#92400E' },
-  { id: 'banana', label: 'banana', symbol: '🍌', kind: 'word', backgroundColor: '#FEFCE8', borderColor: '#FDE047', labelColor: '#854D0E' },
-  { id: 'pizza', label: 'pizza', symbol: '🍕', kind: 'word', backgroundColor: '#FFF7ED', borderColor: '#FDBA74', labelColor: '#C2410C' },
-  { id: 'water', label: 'water', symbol: '💧', kind: 'word', backgroundColor: '#EFF6FF', borderColor: '#93C5FD', labelColor: '#1D4ED8' },
-  { id: 'milk', label: 'milk', symbol: '🥛', kind: 'word', backgroundColor: '#F8FAFC', borderColor: '#CBD5E1', labelColor: '#475569' },
-];
+const CATEGORIES: Category[] = ['Main', 'Actions', 'Feelings', 'Food', 'Social'];
 
+// ─── Mascot emotion logic ─────────────────────────────────────────────────────
+function getMascotEmotion(wordCount: number): MascotKey {
+  if (wordCount === 0) return 'neutral_curious';
+  if (wordCount === 1) return 'happy_smile';
+  if (wordCount === 2) return 'happy_grin';
+  return 'excited_tongue';
+}
+
+// ─── Animated symbol cell ─────────────────────────────────────────────────────
+function SymbolCell({
+  item,
+  onPress,
+}: {
+  item: AACSymbol;
+  onPress: () => void;
+}) {
+  const pressScale = useSharedValue(1);
+
+  const cellAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.cellWrapper, cellAnimStyle]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          item.kind === 'folder' ? `Open ${item.label} folder` : `Say ${item.label}`
+        }
+        onPressIn={() => {
+          pressScale.value = withSpring(0.87, { damping: 12, stiffness: 450 });
+        }}
+        onPressOut={() => {
+          pressScale.value = withSpring(1.0, { damping: 8, stiffness: 300 });
+        }}
+        onPress={onPress}
+        style={[styles.cell, { backgroundColor: item.bg }]}
+      >
+        {/* Folder: dark flap banner at top with label, emoji at bottom */}
+        {item.kind === 'folder' && (
+          <>
+            <View style={styles.folderFlap}>
+              <Text style={styles.folderFlapLabel}>{item.label}</Text>
+            </View>
+            <View style={styles.folderIconArea}>
+              <Text style={styles.cellEmoji}>{item.symbol}</Text>
+            </View>
+          </>
+        )}
+
+        {/* Article (The): large white bold centred text */}
+        {item.kind === 'article' && (
+          <View style={styles.centreBox}>
+            <Text style={styles.articleText}>{item.label}</Text>
+          </View>
+        )}
+
+        {/* Question (Where): small label top + large "?" below */}
+        {item.kind === 'question' && (
+          <>
+            <Text style={styles.cellLabel}>{item.label}</Text>
+            <Text style={styles.questionMark}>{item.symbol}</Text>
+          </>
+        )}
+
+        {/* Standard word: small label top + emoji below */}
+        {item.kind === 'word' && (
+          <>
+            <Text style={styles.cellLabel}>{item.label}</Text>
+            <Text style={styles.cellEmoji}>{item.symbol}</Text>
+          </>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function TalkScreen() {
   const { state, dispatch } = useAppContext();
-  const { speak, lastError: speechError, clearError: clearSpeechError } = useSpeech();
-  const [board, setBoard] = useState<BoardName>('main');
-  const [keyboardMode, setKeyboardMode] = useState(false);
+  const { speak, lastError, clearError } = useSpeech();
+  const [activeCategory, setActiveCategory] = useState<Category>('Main');
+  const [mascotEmotion, setMascotEmotion] = useState<MascotKey>('neutral_curious');
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const wordsText = useMemo(
-    () => state.messageWords.map((word) => word.label).join(' '),
+    () => state.messageWords.map(w => w.label).join(' '),
     [state.messageWords],
   );
   const hasWords = state.messageWords.length > 0;
-  const typedText = state.keyboardText.trim();
-  const messageLabel = hasWords
-    ? `Message strip: ${wordsText}`
-    : 'Message strip empty. Tap a word to build a sentence.';
 
-  const activeBoard = board === 'main' ? mainBoard : foodBoard;
+  const announce = (msg: string) => AccessibilityInfo.announceForAccessibility(msg);
 
-  const announce = (message: string) => {
-    AccessibilityInfo.announceForAccessibility(message);
-  };
+  // ── Mascot animation shared values
+  const mascotFloatY  = useSharedValue(0);
+  const mascotBounceY = useSharedValue(0);
+  const mascotScale   = useSharedValue(1);
+  const mascotRotate  = useSharedValue(0);
+  const mascotOpacity = useSharedValue(1);
 
-  const addWord = (item: BoardItem) => {
+  const mascotAnimStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: mascotFloatY.value + mascotBounceY.value },
+      { scale:      mascotScale.value },
+      { rotate:     `${mascotRotate.value}rad` },
+    ],
+    opacity: mascotOpacity.value,
+  }));
+
+  // Gentle idle float — starts on mount, interrupted by any reaction
+  useEffect(() => {
+    mascotFloatY.value = withRepeat(
+      withSequence(
+        withTiming(-5, { duration: 1400 }),
+        withTiming(0,  { duration: 1400 }),
+      ),
+      -1,
+      false,
+    );
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Schedule a return to neutral after a reaction
+  const scheduleNeutral = useCallback((delay = 1500) => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = setTimeout(() => {
+      setMascotEmotion('neutral_curious');
+      resetTimerRef.current = null;
+    }, delay);
+  }, []);
+
+  // Change mascot emotion with crossfade + physical animation
+  const changeMascot = useCallback(
+    (emotion: MascotKey, anim: 'bounce' | 'shake' | 'jump' | 'spin') => {
+      // Crossfade: dip opacity → swap image → restore opacity
+      mascotOpacity.value = withTiming(0, { duration: 100 }, (done) => {
+        if (done) {
+          runOnJS(setMascotEmotion)(emotion);
+          mascotOpacity.value = withTiming(1, { duration: 150 });
+        }
+      });
+
+      // Physical reaction
+      switch (anim) {
+        case 'bounce':
+          // Happy bounce up and back
+          mascotBounceY.value = withSequence(
+            withSpring(-14, { damping: 5,  stiffness: 320 }),
+            withSpring(0,   { damping: 7,  stiffness: 250 }),
+          );
+          mascotScale.value = withSequence(
+            withSpring(1.2, { damping: 5,  stiffness: 320 }),
+            withSpring(1.0, { damping: 7 }),
+          );
+          break;
+
+        case 'shake':
+          // Sad/surprised wiggle
+          mascotRotate.value = withSequence(
+            withTiming(-0.25, { duration: 65 }),
+            withTiming( 0.25, { duration: 65 }),
+            withTiming(-0.18, { duration: 65 }),
+            withTiming( 0.12, { duration: 65 }),
+            withTiming(0,     { duration: 65 }),
+          );
+          break;
+
+        case 'jump':
+          // Excited big leap (speak)
+          mascotBounceY.value = withSequence(
+            withSpring(-22, { damping: 4, stiffness: 350 }),
+            withSpring(0,   { damping: 5, stiffness: 250 }),
+          );
+          mascotScale.value = withSequence(
+            withSpring(1.3, { damping: 4, stiffness: 350 }),
+            withSpring(1.0, { damping: 6 }),
+          );
+          break;
+
+        case 'spin':
+          // Curious head-tilt (folder / category switch)
+          mascotRotate.value = withSequence(
+            withTiming(-0.3, { duration: 100 }),
+            withTiming( 0.3, { duration: 100 }),
+            withTiming(0,    { duration: 100 }),
+          );
+          mascotScale.value = withSequence(
+            withSpring(1.15, { damping: 6, stiffness: 300 }),
+            withSpring(1.0,  { damping: 7 }),
+          );
+          break;
+      }
+    },
+    [mascotOpacity, mascotBounceY, mascotScale, mascotRotate],
+  );
+
+  // ── Interaction handlers ──────────────────────────────────────────────────
+  const handleSymbolPress = useCallback((item: AACSymbol) => {
+    hapticSelection();
     if (item.kind === 'folder') {
-      hapticSelection();
-      setBoard('food');
+      changeMascot('thinking_puzzled', 'spin');
+      scheduleNeutral(1200);
       announce(`Opened ${item.label} folder`);
       return;
     }
-
-    hapticSelection();
     dispatch({
       type: 'APPEND_WORD',
       payload: {
-        id: `${item.id}-${Date.now()}`,
-        label: item.label,
+        id:       `${item.id}-${Date.now()}`,
+        label:    item.label,
         wordType: 'core',
-        emoji: item.symbol,
+        emoji:    item.symbol,
       },
     });
     speak(item.label, { rate: 0.9 });
-    const nextMessage = [...state.messageWords.map((word) => word.label), item.label].join(' ');
-    announce(`Added ${item.label}. Message strip: ${nextMessage}`);
-  };
+    const nextCount = state.messageWords.length + 1;
+    changeMascot(getMascotEmotion(nextCount), 'bounce');
+    announce(`Added ${item.label}`);
+  }, [dispatch, speak, state.messageWords.length, changeMascot, scheduleNeutral]);
 
-  const speakMessage = () => {
-    const text = keyboardMode ? typedText : wordsText;
-    if (text.trim()) {
-      hapticSelection();
-      speak(text, { rate: 0.9 });
-      announce(`Speaking: ${text}`);
-      return;
-    }
-    announce('No message to speak yet');
-  };
+  const handleSpeak = useCallback(() => {
+    if (!wordsText.trim()) { announce('No message to speak'); return; }
+    hapticSelection();
+    speak(wordsText, { rate: 0.9 });
+    changeMascot('excited_sparkle', 'jump');
+    scheduleNeutral(2500);
+    announce(`Speaking: ${wordsText}`);
+  }, [wordsText, speak, changeMascot, scheduleNeutral]);
 
-  const removeLastWord = () => {
-    if (!hasWords) {
-      announce('Message strip is already empty');
-      return;
-    }
+  const handleBackspace = useCallback(() => {
+    if (!hasWords) return;
     hapticSelection();
     dispatch({ type: 'REMOVE_LAST_WORD' });
+    const nextCount = Math.max(0, state.messageWords.length - 1);
+    changeMascot(
+      nextCount === 0 ? 'sad_worried' : getMascotEmotion(nextCount),
+      'shake',
+    );
+    scheduleNeutral();
     announce('Removed last word');
-  };
+  }, [hasWords, dispatch, state.messageWords.length, changeMascot, scheduleNeutral]);
 
-  const clearWords = () => {
-    if (!hasWords) {
-      announce('Message strip is already empty');
-      return;
-    }
+  const handleClear = useCallback(() => {
+    if (!hasWords) return;
     hapticSelection();
     dispatch({ type: 'CLEAR_WORDS' });
-    announce('Cleared message strip');
-  };
+    changeMascot('shocked', 'shake');
+    scheduleNeutral();
+    announce('Cleared message');
+  }, [hasWords, dispatch, changeMascot, scheduleNeutral]);
 
-  const clearTypedMessage = () => {
-    if (!typedText) {
-      announce('Typed message is already empty');
-      return;
-    }
+  const handleCategorySwitch = useCallback((cat: Category) => {
     hapticSelection();
-    dispatch({ type: 'SET_KEYBOARD_TEXT', payload: '' });
-    announce('Cleared typed message');
-  };
+    setActiveCategory(cat);
+    changeMascot('thinking_puzzled', 'spin');
+    scheduleNeutral(1000);
+  }, [changeMascot, scheduleNeutral]);
 
-  if (keyboardMode) {
-    return (
-      <Screen title="TalkBoard" subtitle="Type a message and hear it spoken aloud.">
-        {speechError ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss speech error"
-            onPress={clearSpeechError}
-            style={styles.speechError}
-          >
-            <Text style={styles.speechErrorText}>Speech unavailable: {speechError.message}</Text>
-          </Pressable>
-        ) : null}
-        <Card style={styles.messageCard}>
-          <TextInput
-            accessibilityLabel="Typed TalkBoard message"
-            accessibilityHint="Type a message, then press Speak to hear it aloud"
-            multiline
-            placeholder="Tap to start..."
-            placeholderTextColor={colors.textTertiary}
-            value={state.keyboardText}
-            onChangeText={(text) => dispatch({ type: 'SET_KEYBOARD_TEXT', payload: text })}
-            style={styles.keyboardInput}
-          />
-          <View style={styles.keyboardActions}>
-            <PrimaryButton
-              accessibilityLabel="Speak typed message"
-              label="Speak"
-              disabled={!typedText}
-              onPress={speakMessage}
-              style={styles.smallAction}
-            />
-            <PrimaryButton
-              accessibilityLabel="Clear typed message"
-              label="Clear"
-              disabled={!typedText}
-              onPress={clearTypedMessage}
-              variant="secondary"
-              style={styles.smallAction}
-            />
-          </View>
-        </Card>
-        <PrimaryButton
-          accessibilityLabel="Return to AAC board"
-          label="Back to Board"
-          onPress={() => {
-            hapticSelection();
-            setKeyboardMode(false);
-          }}
-          variant="secondary"
-        />
-      </Screen>
-    );
-  }
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <Screen title="Talk" subtitle="Tap symbols to build a sentence." scroll={false}>
-      <Card
-        style={styles.messageCard}
-        accessibilityLabel={messageLabel}
-        accessibilityLiveRegion="polite"
-      >
-        <View style={styles.messageRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Speak message"
-            accessibilityHint="Speaks every word currently in the message strip"
-            accessibilityState={{ disabled: !hasWords }}
-            disabled={!hasWords}
-            onPress={speakMessage}
-            style={[styles.speakerButton, !hasWords && styles.disabledButton]}
-          >
-            <Text style={styles.speakerText}>🔊</Text>
-          </Pressable>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {state.messageWords.length === 0 ? (
-              <Text style={styles.placeholder}>Tap a word to build a sentence...</Text>
-            ) : (
-              state.messageWords.map((word, index) => (
-                <View key={`${word.id}-${index}`} style={styles.wordChip}>
-                  <Text style={styles.wordChipText}>{word.label}</Text>
-                </View>
-              ))
-            )}
-          </ScrollView>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Remove last word"
-            accessibilityHint="Double tap to remove the last word. Long press to clear the whole message."
-            accessibilityState={{ disabled: !hasWords }}
-            disabled={!hasWords}
-            onPress={removeLastWord}
-            onLongPress={clearWords}
-            style={[styles.clearButton, !hasWords && styles.disabledButton]}
-          >
-            <Text style={styles.clearText}>⌫</Text>
-          </Pressable>
-        </View>
-      </Card>
+    <SafeAreaView style={styles.safe} edges={['top']}>
 
-      <View style={styles.subheader}>
-        {board === 'food' ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Return to main AAC board"
-            onPress={() => {
-              hapticSelection();
-              setBoard('main');
-              announce('Returned to main board');
-            }}
-          >
-            <Text style={styles.backLink}>‹ Main</Text>
-          </Pressable>
-        ) : null}
-        <Text style={styles.boardTitle}>{board === 'main' ? 'Main Board' : 'Food'}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open keyboard mode"
-          accessibilityHint="Switches from symbol board to typed message mode"
-          onPress={() => {
-            hapticSelection();
-            setKeyboardMode(true);
-          }}
-        >
-          <Text style={styles.backLink}>Keys</Text>
-        </Pressable>
-      </View>
-
-      {speechError ? (
+      {/* ── Speech error banner ─────────────────────────────────────── */}
+      {lastError ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss speech error"
-          onPress={clearSpeechError}
-          style={styles.speechError}
+          onPress={clearError}
+          style={styles.errorBanner}
         >
-          <Text style={styles.speechErrorText}>Speech unavailable: {speechError.message}</Text>
+          <Text style={styles.errorText}>Speech unavailable — {lastError.message}</Text>
         </Pressable>
       ) : null}
 
-      <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
-        {activeBoard.map((item) => (
+      {/* ── Message strip ───────────────────────────────────────────── */}
+      <View style={styles.messageRow}>
+        {/* Main card — tap anywhere to speak */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            hasWords
+              ? `Speak: ${wordsText}`
+              : 'Message strip empty. Tap a symbol to build a sentence.'
+          }
+          onPress={handleSpeak}
+          style={styles.messageCard}
+        >
+          {/* Top: mascot + message text */}
+          <View style={styles.messageContent}>
+            <Animated.View style={mascotAnimStyle}>
+              <MascotImage mascot={mascotEmotion} size={52} />
+            </Animated.View>
+            <Text
+              style={[styles.messageText, !hasWords && styles.messagePlaceholder]}
+              numberOfLines={3}
+            >
+              {hasWords ? wordsText : 'Tap to speak....'}
+            </Text>
+          </View>
+
+          {/* Bottom-right: backspace (long press = clear all) */}
           <Pressable
-            key={item.id}
             accessibilityRole="button"
-            accessibilityLabel={`${item.kind === 'folder' ? 'Open folder' : 'Say'} ${item.label}`}
-            accessibilityHint={
-              item.kind === 'folder'
-                ? `Opens the ${item.label} folder`
-                : `Adds ${item.label} to the message strip and speaks it`
-            }
-            onPress={() => addWord(item)}
-            style={({ pressed }) => [
-              styles.aacCell,
-              {
-                backgroundColor: item.backgroundColor,
-                borderColor: item.borderColor,
-              },
-              item.kind === 'folder' && styles.folderCell,
-              pressed && styles.pressed,
-            ]}
+            accessibilityLabel="Remove last word"
+            accessibilityHint="Long press to clear all words"
+            onPress={handleBackspace}
+            onLongPress={handleClear}
+            disabled={!hasWords}
+            style={[styles.backspaceBtn, !hasWords && styles.dim]}
           >
-            {item.kind === 'folder' ? <Text style={[styles.folderTag, { color: item.labelColor }]}>folder</Text> : null}
-            <Text style={styles.symbol}>{item.symbol}</Text>
-            <Text style={[styles.cellLabel, { color: item.labelColor }]}>{item.label}</Text>
+            <Ionicons name="backspace-outline" size={22} color={colors.danger} />
           </Pressable>
-        ))}
-      </ScrollView>
-    </Screen>
+        </Pressable>
+
+        {/* Side panel: trash + speak */}
+        <View style={styles.sidePanel}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear all words"
+            onPress={handleClear}
+            disabled={!hasWords}
+            style={[styles.sideBtn, styles.sideBtnRed, !hasWords && styles.dim]}
+          >
+            <Ionicons name="trash-outline" size={20} color="#fff" />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Speak full message"
+            onPress={handleSpeak}
+            disabled={!hasWords}
+            style={[styles.sideBtn, styles.sideBtnGreen, !hasWords && styles.dim]}
+          >
+            <Ionicons name="volume-high-outline" size={20} color="#fff" />
+          </Pressable>
+        </View>
+      </View>
+
+      {/* ── Category strip ──────────────────────────────────────────── */}
+      <View style={styles.categoryBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryScroll}
+        >
+          {CATEGORIES.map(cat => (
+            <Pressable
+              key={cat}
+              accessibilityRole="button"
+              accessibilityLabel={`${cat} board`}
+              accessibilityState={{ selected: activeCategory === cat }}
+              onPress={() => handleCategorySwitch(cat)}
+              style={[styles.pill, activeCategory === cat && styles.pillActive]}
+            >
+              <Text style={styles.pillLabel}>{cat}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* ── Symbol grid — key remount triggers FadeIn on every category switch ── */}
+      <Animated.View
+        key={activeCategory}
+        entering={FadeIn.duration(220)}
+        style={styles.gridWrapper}
+      >
+        <ScrollView
+          contentContainerStyle={styles.grid}
+          showsVerticalScrollIndicator={false}
+        >
+          {BOARDS[activeCategory].map(item => (
+            <SymbolCell
+              key={item.id}
+              item={item}
+              onPress={() => handleSymbolPress(item)}
+            />
+          ))}
+        </ScrollView>
+      </Animated.View>
+
+    </SafeAreaView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  aacCell: {
-    width: '31%',
-    minHeight: 104,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: radii.card,
-    borderWidth: 2.5,
-    padding: spacing.md,
+  safe: {
+    flex: 1,
+    backgroundColor: BG,
   },
-  backLink: {
-    color: colors.primary,
-    fontSize: typography.callout,
+
+  // ── Error banner
+  errorBanner: {
+    backgroundColor: colors.danger,
+    marginHorizontal: 19,
+    marginTop: 8,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  errorText: {
+    color: '#fff',
+    fontSize: 12,
     fontWeight: '700',
+    textAlign: 'center',
   },
-  boardTitle: {
-    color: colors.text,
-    fontSize: typography.callout,
-    fontWeight: '800',
-  },
-  cellLabel: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  chipRow: {
-    alignItems: 'center',
+
+  // ── Message strip
+  messageRow: {
+    flexDirection: 'row',
+    marginHorizontal: 19,
+    marginTop: 16,
     gap: 6,
+    height: 120,
   },
-  clearButton: {
-    width: 40,
-    height: 40,
+  messageCard: {
+    flex: 1,
+    backgroundColor: SURFACE,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    padding: 10,
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+  },
+  messageContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  messageText: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '500',
+    color: '#202020',
+  },
+  messagePlaceholder: {
+    color: BORDER,
+    fontStyle: 'italic',
+  },
+  backspaceBtn: {
+    alignSelf: 'flex-end',
+    width: 36,
+    height: 36,
+    borderRadius: radii.button,
+    backgroundColor: '#ffeaea',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.input,
   },
-  clearText: {
-    color: colors.textMuted,
-    fontSize: 18,
-    fontWeight: '800',
+
+  // ── Side panel
+  sidePanel: {
+    width: 54,
+    backgroundColor: SURFACE,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+    paddingVertical: 10,
   },
-  disabledButton: {
-    opacity: 0.45,
+  sideBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  folderCell: {
-    width: '64%',
+  sideBtnRed:   { backgroundColor: colors.danger },
+  sideBtnGreen: { backgroundColor: colors.success },
+  dim: { opacity: 0.35 },
+
+  // ── Category strip
+  categoryBar: {
+    backgroundColor: SURFACE,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: BORDER,
+    height: 57,
+    marginTop: 14,
+    justifyContent: 'center',
   },
-  folderTag: {
-    position: 'absolute',
-    top: 8,
-    right: 10,
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+  categoryScroll: {
+    paddingHorizontal: 16,
+    gap: PILL_GAP,
+    alignItems: 'center',
+  },
+  pill: {
+    width: PILL_W,
+    height: PILL_H,
+    borderRadius: radii.pill,  // pill_shaped_corner_radius = 22
+    backgroundColor: PILL_INACTIVE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillActive: {
+    backgroundColor: PILL_ACTIVE,
+  },
+  pillLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+
+  // ── Symbol grid
+  gridWrapper: {
+    flex: 1,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.md,
-    paddingBottom: 20,
+    gap: CELL_GAP,
+    paddingHorizontal: GRID_PADDING,
+    paddingTop: 12,
+    paddingBottom: 32,
   },
-  keyboardActions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
+
+  // ── Cells
+  cellWrapper: {
+    // Animated.View wrapper — same footprint as the cell
+    width: CELL,
+    height: CELL,
   },
-  keyboardInput: {
-    minHeight: 128,
-    color: colors.text,
-    fontSize: typography.body,
-    lineHeight: 24,
-    textAlignVertical: 'top',
-  },
-  messageCard: {
-    marginBottom: spacing.md,
-    padding: spacing.md,
-  },
-  messageRow: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  placeholder: {
-    color: colors.textTertiary,
-    fontSize: typography.callout,
-    fontStyle: 'italic',
-  },
-  pressed: {
-    transform: [{ scale: 0.97 }],
-  },
-  smallAction: {
-    flex: 1,
-  },
-  speakerButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-  },
-  speechError: {
-    borderRadius: radii.button,
-    backgroundColor: colors.danger,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  speechErrorText: {
-    color: colors.surface,
-    fontSize: typography.caption,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  speakerText: {
-    color: colors.surface,
-    fontSize: 18,
-  },
-  subheader: {
-    minHeight: 44,
-    flexDirection: 'row',
+  cell: {
+    width: CELL,
+    height: CELL,
+    borderRadius: CELL_RADIUS,
+    borderWidth: 0.5,
+    borderColor: CELL_BORDER,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
+    paddingTop: 4,
+    paddingBottom: 4,
+    paddingHorizontal: 2,
   },
-  symbol: {
-    fontSize: 34,
+  cellLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#000000',
+    textAlign: 'center',
   },
-  wordChip: {
-    borderWidth: 1.5,
-    borderColor: '#B3DDEF',
-    borderRadius: 12,
-    backgroundColor: colors.softBlue,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  cellEmoji: {
+    fontSize: 26,
+    textAlign: 'center',
   },
-  wordChipText: {
-    color: colors.primary,
-    fontSize: 13,
+
+  // article — "The" (large white bold centred)
+  centreBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  articleText: {
+    fontSize: 24,
     fontWeight: '800',
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+
+  // question — "Where ?"
+  questionMark: {
+    fontSize: 30,
+    fontWeight: '900',
+    color: '#ffffff',
+    textAlign: 'center',
+    lineHeight: 32,
+  },
+
+  // folder — dark flap + label + emoji below
+  folderFlap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 26,
+    backgroundColor: colors.folderFlap,  // folder_flap_fill_white = rgba(255,255,255,0.81)
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  folderFlapLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#000000',
+    textAlign: 'center',
+  },
+  folderIconArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 4,
+    paddingTop: 26,
   },
 });
