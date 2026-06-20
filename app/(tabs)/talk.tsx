@@ -1,443 +1,468 @@
 import React, { useMemo, useState } from 'react';
-import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  Dimensions,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { hapticSelection } from '../../src/utils/haptics';
-import { Screen } from '../../src/components/native/Screen';
-import { Card } from '../../src/components/native/Card';
-import { PrimaryButton } from '../../src/components/native/PrimaryButton';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { useSpeech } from '../../src/hooks/useSpeech';
 
-type BoardName = 'main' | 'food';
+// ─── Layout constants ────────────────────────────────────────────────────────
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const H_PAD = 12;
+const CARD_GAP = 6;
+const COLS = 5;
+const CARD_SIZE = Math.floor(
+  (SCREEN_WIDTH - H_PAD * 2 - CARD_GAP * (COLS - 1)) / COLS,
+);
 
-interface BoardItem {
+// ─── Types ───────────────────────────────────────────────────────────────────
+type CategoryId = 'main' | 'actions' | 'feelings' | 'food' | 'social';
+
+interface WordCard {
   id: string;
   label: string;
-  symbol: string;
-  kind: 'word' | 'folder';
-  backgroundColor: string;
-  borderColor: string;
-  labelColor: string;
+  category: CategoryId | 'main';
+  image: ReturnType<typeof require>;
 }
 
-const mainBoard: BoardItem[] = [
-  { id: 'i', label: 'I', symbol: '👤', kind: 'word', backgroundColor: '#EBF4FF', borderColor: '#93C5FD', labelColor: '#1D4ED8' },
-  { id: 'want', label: 'want', symbol: '🙋', kind: 'word', backgroundColor: '#FFF7ED', borderColor: '#FCA97B', labelColor: '#C2410C' },
-  { id: 'yes', label: 'yes', symbol: '✓', kind: 'word', backgroundColor: '#F0FDF4', borderColor: '#86EFAC', labelColor: '#15803D' },
-  { id: 'please', label: 'please', symbol: '★', kind: 'word', backgroundColor: colors.softBlue, borderColor: '#B3DDEF', labelColor: colors.primary },
-  { id: 'food', label: 'Food', symbol: '🍎', kind: 'folder', backgroundColor: '#FFFBEB', borderColor: '#F59E0B', labelColor: '#B45309' },
-  { id: 'help', label: 'help', symbol: '🤝', kind: 'word', backgroundColor: '#F5F3FF', borderColor: '#C4B5FD', labelColor: '#6D28D9' },
+// ─── Assets ──────────────────────────────────────────────────────────────────
+const CAT_IMAGES: Record<CategoryId, ReturnType<typeof require>> = {
+  main: require('../../assets/aac/cat_main.png'),
+  actions: require('../../assets/aac/cat_actions.png'),
+  feelings: require('../../assets/aac/cat_feelings.png'),
+  food: require('../../assets/aac/cat_food.png'),
+  social: require('../../assets/aac/cat_social.png'),
+};
+
+const CATEGORIES: { id: CategoryId; label: string }[] = [
+  { id: 'main', label: 'Main' },
+  { id: 'actions', label: 'Actions' },
+  { id: 'feelings', label: 'Feelings' },
+  { id: 'food', label: 'Food' },
+  { id: 'social', label: 'Social' },
 ];
 
-const foodBoard: BoardItem[] = [
-  { id: 'apple', label: 'apple', symbol: '🍎', kind: 'word', backgroundColor: '#FFFBEB', borderColor: '#FCD34D', labelColor: '#92400E' },
-  { id: 'banana', label: 'banana', symbol: '🍌', kind: 'word', backgroundColor: '#FEFCE8', borderColor: '#FDE047', labelColor: '#854D0E' },
-  { id: 'pizza', label: 'pizza', symbol: '🍕', kind: 'word', backgroundColor: '#FFF7ED', borderColor: '#FDBA74', labelColor: '#C2410C' },
-  { id: 'water', label: 'water', symbol: '💧', kind: 'word', backgroundColor: '#EFF6FF', borderColor: '#93C5FD', labelColor: '#1D4ED8' },
-  { id: 'milk', label: 'milk', symbol: '🥛', kind: 'word', backgroundColor: '#F8FAFC', borderColor: '#CBD5E1', labelColor: '#475569' },
+// "Main" tab shows all cards; other tabs filter to their category
+const ALL_CARDS: WordCard[] = [
+  {
+    id: 'hello',
+    label: 'Hello',
+    category: 'main',
+    image: require('../../assets/aac/card_hello.png'),
+  },
+  {
+    id: 'car',
+    label: 'Car',
+    category: 'main',
+    image: require('../../assets/aac/card_car.png'),
+  },
+  {
+    id: 'him',
+    label: 'Him',
+    category: 'main',
+    image: require('../../assets/aac/card_him.png'),
+  },
+  {
+    id: 'run',
+    label: 'Run',
+    category: 'actions',
+    image: require('../../assets/aac/card_run.png'),
+  },
+  {
+    id: 'big',
+    label: 'Big',
+    category: 'main',
+    image: require('../../assets/aac/card_big.png'),
+  },
+  {
+    id: 'where',
+    label: 'Where',
+    category: 'main',
+    image: require('../../assets/aac/card_where.png'),
+  },
+  {
+    id: 'please',
+    label: 'Please',
+    category: 'main',
+    image: require('../../assets/aac/card_please.png'),
+  },
+  {
+    id: 'the',
+    label: 'The',
+    category: 'main',
+    image: require('../../assets/aac/card_the.png'),
+  },
+  {
+    id: 'ouch',
+    label: 'Ouch',
+    category: 'feelings',
+    image: require('../../assets/aac/card_ouch.png'),
+  },
+  {
+    id: 'places',
+    label: 'Places',
+    category: 'main',
+    image: require('../../assets/aac/card_places.png'),
+  },
+  {
+    id: 'sports',
+    label: 'Sports',
+    category: 'main',
+    image: require('../../assets/aac/card_sports.png'),
+  },
 ];
 
-export default function TalkScreen() {
+// ─── Screen component ────────────────────────────────────────────────────────
+export default function BoardScreen() {
   const { state, dispatch } = useAppContext();
-  const { speak, lastError: speechError, clearError: clearSpeechError } = useSpeech();
-  const [board, setBoard] = useState<BoardName>('main');
-  const [keyboardMode, setKeyboardMode] = useState(false);
+  const { speak, lastError: speechError, clearError: clearSpeechError } =
+    useSpeech();
+  const [category, setCategory] = useState<CategoryId>('main');
+  const insets = useSafeAreaInsets();
 
   const wordsText = useMemo(
-    () => state.messageWords.map((word) => word.label).join(' '),
+    () => state.messageWords.map((w) => w.label).join(' '),
     [state.messageWords],
   );
   const hasWords = state.messageWords.length > 0;
-  const typedText = state.keyboardText.trim();
-  const messageLabel = hasWords
-    ? `Message strip: ${wordsText}`
-    : 'Message strip empty. Tap a word to build a sentence.';
 
-  const activeBoard = board === 'main' ? mainBoard : foodBoard;
+  const visibleCards = useMemo(
+    () =>
+      category === 'main'
+        ? ALL_CARDS
+        : ALL_CARDS.filter((c) => c.category === category),
+    [category],
+  );
 
-  const announce = (message: string) => {
-    AccessibilityInfo.announceForAccessibility(message);
-  };
+  const announce = (msg: string) =>
+    AccessibilityInfo.announceForAccessibility(msg);
 
-  const addWord = (item: BoardItem) => {
-    if (item.kind === 'folder') {
-      hapticSelection();
-      setBoard('food');
-      announce(`Opened ${item.label} folder`);
-      return;
-    }
-
+  const addWord = (card: WordCard) => {
     hapticSelection();
     dispatch({
       type: 'APPEND_WORD',
       payload: {
-        id: `${item.id}-${Date.now()}`,
-        label: item.label,
+        id: `${card.id}-${Date.now()}`,
+        label: card.label,
         wordType: 'core',
-        emoji: item.symbol,
+        emoji: '',
       },
     });
-    speak(item.label, { rate: 0.9 });
-    const nextMessage = [...state.messageWords.map((word) => word.label), item.label].join(' ');
-    announce(`Added ${item.label}. Message strip: ${nextMessage}`);
-  };
-
-  const speakMessage = () => {
-    const text = keyboardMode ? typedText : wordsText;
-    if (text.trim()) {
-      hapticSelection();
-      speak(text, { rate: 0.9 });
-      announce(`Speaking: ${text}`);
-      return;
-    }
-    announce('No message to speak yet');
+    speak(card.label, { rate: 0.9 });
+    const next = [
+      ...state.messageWords.map((w) => w.label),
+      card.label,
+    ].join(' ');
+    announce(`Added ${card.label}. Message: ${next}`);
   };
 
   const removeLastWord = () => {
-    if (!hasWords) {
-      announce('Message strip is already empty');
-      return;
-    }
+    if (!hasWords) { announce('Message already empty'); return; }
     hapticSelection();
     dispatch({ type: 'REMOVE_LAST_WORD' });
     announce('Removed last word');
   };
 
   const clearWords = () => {
-    if (!hasWords) {
-      announce('Message strip is already empty');
-      return;
-    }
+    if (!hasWords) { announce('Message already empty'); return; }
     hapticSelection();
     dispatch({ type: 'CLEAR_WORDS' });
-    announce('Cleared message strip');
+    announce('Cleared message');
   };
 
-  const clearTypedMessage = () => {
-    if (!typedText) {
-      announce('Typed message is already empty');
-      return;
-    }
+  const speakMessage = () => {
+    if (!hasWords) { announce('Nothing to speak yet'); return; }
     hapticSelection();
-    dispatch({ type: 'SET_KEYBOARD_TEXT', payload: '' });
-    announce('Cleared typed message');
+    speak(wordsText, { rate: 0.9 });
+    announce(`Speaking: ${wordsText}`);
   };
-
-  if (keyboardMode) {
-    return (
-      <Screen title="TalkBoard" subtitle="Type a message and hear it spoken aloud.">
-        {speechError ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss speech error"
-            onPress={clearSpeechError}
-            style={styles.speechError}
-          >
-            <Text style={styles.speechErrorText}>Speech unavailable: {speechError.message}</Text>
-          </Pressable>
-        ) : null}
-        <Card style={styles.messageCard}>
-          <TextInput
-            accessibilityLabel="Typed TalkBoard message"
-            accessibilityHint="Type a message, then press Speak to hear it aloud"
-            multiline
-            placeholder="Tap to start..."
-            placeholderTextColor={colors.textTertiary}
-            value={state.keyboardText}
-            onChangeText={(text) => dispatch({ type: 'SET_KEYBOARD_TEXT', payload: text })}
-            style={styles.keyboardInput}
-          />
-          <View style={styles.keyboardActions}>
-            <PrimaryButton
-              accessibilityLabel="Speak typed message"
-              label="Speak"
-              disabled={!typedText}
-              onPress={speakMessage}
-              style={styles.smallAction}
-            />
-            <PrimaryButton
-              accessibilityLabel="Clear typed message"
-              label="Clear"
-              disabled={!typedText}
-              onPress={clearTypedMessage}
-              variant="secondary"
-              style={styles.smallAction}
-            />
-          </View>
-        </Card>
-        <PrimaryButton
-          accessibilityLabel="Return to AAC board"
-          label="Back to Board"
-          onPress={() => {
-            hapticSelection();
-            setKeyboardMode(false);
-          }}
-          variant="secondary"
-        />
-      </Screen>
-    );
-  }
 
   return (
-    <Screen title="Talk" subtitle="Tap symbols to build a sentence." scroll={false}>
-      <Card
-        style={styles.messageCard}
-        accessibilityLabel={messageLabel}
-        accessibilityLiveRegion="polite"
-      >
-        <View style={styles.messageRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Speak message"
-            accessibilityHint="Speaks every word currently in the message strip"
-            accessibilityState={{ disabled: !hasWords }}
-            disabled={!hasWords}
-            onPress={speakMessage}
-            style={[styles.speakerButton, !hasWords && styles.disabledButton]}
-          >
-            <Text style={styles.speakerText}>🔊</Text>
-          </Pressable>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {state.messageWords.length === 0 ? (
-              <Text style={styles.placeholder}>Tap a word to build a sentence...</Text>
-            ) : (
-              state.messageWords.map((word, index) => (
-                <View key={`${word.id}-${index}`} style={styles.wordChip}>
-                  <Text style={styles.wordChipText}>{word.label}</Text>
-                </View>
-              ))
-            )}
-          </ScrollView>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Remove last word"
-            accessibilityHint="Double tap to remove the last word. Long press to clear the whole message."
-            accessibilityState={{ disabled: !hasWords }}
-            disabled={!hasWords}
-            onPress={removeLastWord}
-            onLongPress={clearWords}
-            style={[styles.clearButton, !hasWords && styles.disabledButton]}
-          >
-            <Text style={styles.clearText}>⌫</Text>
-          </Pressable>
-        </View>
-      </Card>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
 
-      <View style={styles.subheader}>
-        {board === 'food' ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Return to main AAC board"
-            onPress={() => {
-              hapticSelection();
-              setBoard('main');
-              announce('Returned to main board');
-            }}
-          >
-            <Text style={styles.backLink}>‹ Main</Text>
-          </Pressable>
-        ) : null}
-        <Text style={styles.boardTitle}>{board === 'main' ? 'Main Board' : 'Food'}</Text>
+      {/* ── Input bar ─────────────────────────────────────────────────────── */}
+      <View style={styles.inputRow}>
+        {/* Message / speak area */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open keyboard mode"
-          accessibilityHint="Switches from symbol board to typed message mode"
-          onPress={() => {
-            hapticSelection();
-            setKeyboardMode(true);
-          }}
+          accessibilityLabel={
+            hasWords ? `Speak: ${wordsText}` : 'Tap to speak'
+          }
+          accessibilityHint="Tap to hear your message aloud"
+          onPress={speakMessage}
+          style={styles.inputContainer}
         >
-          <Text style={styles.backLink}>Keys</Text>
+          <Text
+            style={[styles.inputText, !hasWords && styles.inputPlaceholder]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {hasWords ? wordsText : 'Tap to speak....'}
+          </Text>
+
+          {/* Backspace – inside the input on the right */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Delete last word"
+            accessibilityHint="Long press to clear the whole message"
+            onPress={(e) => { e.stopPropagation(); removeLastWord(); }}
+            onLongPress={(e) => { e.stopPropagation(); clearWords(); }}
+            hitSlop={8}
+            style={styles.backspaceBtn}
+          >
+            <Image
+              source={require('../../assets/aac/backspace.png')}
+              style={styles.backspaceIcon}
+              resizeMode="contain"
+              accessibilityLabel="Backspace"
+            />
+          </Pressable>
         </Pressable>
+
+        {/* Delete + Save action buttons */}
+        <View style={styles.actionCol}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear all words"
+            onPress={clearWords}
+            accessibilityState={{ disabled: !hasWords }}
+            style={[styles.actionBtn, !hasWords && styles.dimmed]}
+          >
+            <Image
+              source={require('../../assets/aac/btn_delete.png')}
+              style={styles.actionBtnImg}
+              resizeMode="cover"
+            />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Save message"
+            onPress={() => announce('Save coming soon')}
+            style={styles.actionBtn}
+          >
+            <Image
+              source={require('../../assets/aac/btn_save.png')}
+              style={styles.actionBtnImg}
+              resizeMode="cover"
+            />
+          </Pressable>
+        </View>
       </View>
 
+      {/* ── Speech error banner ───────────────────────────────────────────── */}
       {speechError ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss speech error"
           onPress={clearSpeechError}
-          style={styles.speechError}
+          style={styles.errorBanner}
         >
-          <Text style={styles.speechErrorText}>Speech unavailable: {speechError.message}</Text>
+          <Text style={styles.errorText}>
+            Speech unavailable: {speechError.message}
+          </Text>
         </Pressable>
       ) : null}
 
-      <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
-        {activeBoard.map((item) => (
+      {/* ── Category tabs ─────────────────────────────────────────────────── */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.catScroll}
+        contentContainerStyle={styles.catContent}
+      >
+        {CATEGORIES.map((cat) => {
+          const isActive = category === cat.id;
+          return (
+            <Pressable
+              key={cat.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${cat.label} category${isActive ? ', selected' : ''}`}
+              onPress={() => {
+                hapticSelection();
+                setCategory(cat.id);
+                announce(`${cat.label} selected`);
+              }}
+              style={[styles.catPill, isActive && styles.catPillActive]}
+            >
+              <Image
+                source={CAT_IMAGES[cat.id]}
+                style={styles.catPillImg}
+                resizeMode="contain"
+              />
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {/* ── Word card grid ────────────────────────────────────────────────── */}
+      <ScrollView
+        contentContainerStyle={styles.cardGrid}
+        showsVerticalScrollIndicator={false}
+      >
+        {visibleCards.map((card) => (
           <Pressable
-            key={item.id}
+            key={card.id}
             accessibilityRole="button"
-            accessibilityLabel={`${item.kind === 'folder' ? 'Open folder' : 'Say'} ${item.label}`}
-            accessibilityHint={
-              item.kind === 'folder'
-                ? `Opens the ${item.label} folder`
-                : `Adds ${item.label} to the message strip and speaks it`
-            }
-            onPress={() => addWord(item)}
+            accessibilityLabel={`Say ${card.label}`}
+            accessibilityHint="Adds this word to the message and speaks it"
+            onPress={() => addWord(card)}
             style={({ pressed }) => [
-              styles.aacCell,
-              {
-                backgroundColor: item.backgroundColor,
-                borderColor: item.borderColor,
-              },
-              item.kind === 'folder' && styles.folderCell,
-              pressed && styles.pressed,
+              styles.cardWrapper,
+              pressed && styles.cardPressed,
             ]}
           >
-            {item.kind === 'folder' ? <Text style={[styles.folderTag, { color: item.labelColor }]}>folder</Text> : null}
-            <Text style={styles.symbol}>{item.symbol}</Text>
-            <Text style={[styles.cellLabel, { color: item.labelColor }]}>{item.label}</Text>
+            <Image
+              source={card.image}
+              style={styles.cardImage}
+              resizeMode="cover"
+            />
           </Pressable>
         ))}
       </ScrollView>
-    </Screen>
+
+    </View>
   );
 }
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
+const ACTION_BTN = 56;
+
 const styles = StyleSheet.create({
-  aacCell: {
-    width: '31%',
-    minHeight: 104,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: radii.card,
-    borderWidth: 2.5,
-    padding: spacing.md,
-  },
-  backLink: {
-    color: colors.primary,
-    fontSize: typography.callout,
-    fontWeight: '700',
-  },
-  boardTitle: {
-    color: colors.text,
-    fontSize: typography.callout,
-    fontWeight: '800',
-  },
-  cellLabel: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  chipRow: {
-    alignItems: 'center',
-    gap: 6,
-  },
-  clearButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.input,
-  },
-  clearText: {
-    color: colors.textMuted,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  disabledButton: {
-    opacity: 0.45,
-  },
-  folderCell: {
-    width: '64%',
-  },
-  folderTag: {
-    position: 'absolute',
-    top: 8,
-    right: 10,
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    paddingBottom: 20,
-  },
-  keyboardActions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  keyboardInput: {
-    minHeight: 128,
-    color: colors.text,
-    fontSize: typography.body,
-    lineHeight: 24,
-    textAlignVertical: 'top',
-  },
-  messageCard: {
-    marginBottom: spacing.md,
-    padding: spacing.md,
-  },
-  messageRow: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  placeholder: {
-    color: colors.textTertiary,
-    fontSize: typography.callout,
-    fontStyle: 'italic',
-  },
-  pressed: {
-    transform: [{ scale: 0.97 }],
-  },
-  smallAction: {
+  root: {
     flex: 1,
+    backgroundColor: '#E8EDF2',
   },
-  speakerButton: {
-    width: 40,
-    height: 40,
+
+  // Input row
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: H_PAD,
+    paddingTop: 10,
+    paddingBottom: 8,
+    gap: CARD_GAP,
+  },
+  inputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: ACTION_BTN * 2 + CARD_GAP,
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  inputText: {
+    flex: 1,
+    color: '#202020',
+    fontSize: 17,
+    fontWeight: '500',
+  },
+  inputPlaceholder: {
+    color: '#AEBBCA',
+    fontWeight: '400',
+  },
+  backspaceBtn: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
+  },
+  backspaceIcon: {
+    width: 30,
+    height: 24,
+  },
+
+  // Action buttons (delete + save)
+  actionCol: {
+    gap: CARD_GAP,
+  },
+  actionBtn: {
+    width: ACTION_BTN,
+    height: ACTION_BTN,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  actionBtnImg: {
+    width: ACTION_BTN,
+    height: ACTION_BTN,
+  },
+  dimmed: {
+    opacity: 0.4,
+  },
+
+  // Speech error
+  errorBanner: {
+    marginHorizontal: H_PAD,
+    marginBottom: 6,
     borderRadius: 12,
-    backgroundColor: colors.primary,
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
-  speechError: {
-    borderRadius: radii.button,
-    backgroundColor: colors.danger,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  speechErrorText: {
-    color: colors.surface,
-    fontSize: typography.caption,
+  errorText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
   },
-  speakerText: {
-    color: colors.surface,
-    fontSize: 18,
+
+  // Category tabs
+  catScroll: {
+    flexGrow: 0,
+    marginBottom: 8,
   },
-  subheader: {
-    minHeight: 44,
-    flexDirection: 'row',
+  catContent: {
+    paddingHorizontal: H_PAD,
+    gap: 8,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
+  },
+  catPill: {
+    opacity: 0.65,
+  },
+  catPillActive: {
+    opacity: 1,
+    transform: [{ scale: 1.04 }],
+  },
+  catPillImg: {
+    height: 36,
+    width: 92,
+  },
+
+  // Word card grid
+  cardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: H_PAD,
+    gap: CARD_GAP,
+    paddingBottom: 24,
+  },
+  cardWrapper: {
+    width: CARD_SIZE,
+    height: CARD_SIZE,
     borderRadius: 14,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
+    overflow: 'hidden',
   },
-  symbol: {
-    fontSize: 34,
+  cardImage: {
+    width: '100%',
+    height: '100%',
   },
-  wordChip: {
-    borderWidth: 1.5,
-    borderColor: '#B3DDEF',
-    borderRadius: 12,
-    backgroundColor: colors.softBlue,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  wordChipText: {
-    color: colors.primary,
-    fontSize: 13,
-    fontWeight: '800',
+  cardPressed: {
+    transform: [{ scale: 0.95 }],
+    opacity: 0.88,
   },
 });

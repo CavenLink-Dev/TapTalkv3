@@ -1,21 +1,27 @@
 import React from 'react';
+import { Image, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
 import { colors } from '../../src/theme/tokens';
 
-const icons = {
-  talk: '💬',
-  today: '📅',
-  activities: '✦',
-  progress: '▴',
-  me: '●',
-} as const;
+const boardIcon = require('../../assets/aac/board_icon.png');
+const activitiesIcon = require('../../assets/aac/activities_icon.png');
+const toolsIcon = require('../../assets/aac/tools_icon.png');
+const profileIcon = require('../../assets/aac/profile_icon.png');
 
-function TabIcon({ icon, focused }: { icon: string; focused: boolean }) {
+function TabIcon({
+  source,
+  focused,
+}: {
+  source: ReturnType<typeof require>;
+  focused: boolean;
+}) {
   return (
-    <Text style={{ color: focused ? colors.primary : colors.textTertiary, fontSize: 22 }}>
-      {icon}
-    </Text>
+    <Image
+      source={source}
+      style={[styles.icon, { opacity: focused ? 1 : 0.5 }]}
+      resizeMode="contain"
+      accessibilityIgnoresInvertColors
+    />
   );
 }
 
@@ -24,56 +30,62 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textTertiary,
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           height: 83,
           paddingBottom: 24,
-          paddingTop: 6,
+          paddingTop: 4,
         },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '600',
-        },
+        tabBarShowLabel: false,
       }}
     >
       <Tabs.Screen
         name="talk"
         options={{
-          title: 'Talk',
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.talk} />,
-        }}
-      />
-      <Tabs.Screen
-        name="today"
-        options={{
-          title: 'Today',
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.today} />,
+          title: 'Board',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon source={boardIcon} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="activities"
         options={{
           title: 'Activities',
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.activities} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon source={activitiesIcon} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="progress"
+        name="tools"
         options={{
-          title: 'Progress',
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.progress} />,
+          title: 'Tools',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon source={toolsIcon} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="me"
         options={{
-          title: 'Me',
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.me} />,
+          title: 'Profile',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon source={profileIcon} focused={focused} />
+          ),
         }}
       />
+      {/* Hide legacy tabs from the new nav */}
+      <Tabs.Screen name="today" options={{ href: null }} />
+      <Tabs.Screen name="progress" options={{ href: null }} />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  icon: {
+    width: 48,
+    height: 48,
+  },
+});
