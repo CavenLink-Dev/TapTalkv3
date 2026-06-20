@@ -69,8 +69,8 @@ const BOARDS: Record<Category, AACSymbol[]> = {
     { id: 'please', label: 'Please', symbol: '🙏', bg: WC.social,       kind: 'word'     },
     { id: 'the',    label: 'The',    symbol: '',   bg: WC.article,      kind: 'article'  },
     { id: 'ouch',   label: 'Ouch',   symbol: '😖', bg: WC.interjection, kind: 'word'     },
-    { id: 'places', label: 'Places', symbol: '📍', bg: WC.folder,       kind: 'folder'   },
-    { id: 'sports', label: 'Sports', symbol: '⚽', bg: WC.folder,       kind: 'folder'   },
+    { id: 'places', label: 'Places', symbol: '📍', bg: WC.noun,         kind: 'word'     },
+    { id: 'sports', label: 'Sports', symbol: '⚽', bg: WC.noun,         kind: 'word'     },
   ],
   Actions: [
     { id: 'eat',   label: 'Eat',   symbol: '🍽️', bg: WC.verb,         kind: 'word' },
