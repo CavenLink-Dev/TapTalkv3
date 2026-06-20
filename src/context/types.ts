@@ -37,6 +37,9 @@ export interface AppState {
   goals: Goal[];
   talkStats: { totalWords: number; sessionsToday: number; streakDays: number };
   activityStats: { gamesPlayed: number; minutesToday: number };
+
+  // Today — Habits
+  habits: Habit[];
 }
 
 export interface AACWord {
@@ -103,6 +106,12 @@ export interface GoalStep {
   completed: boolean;
 }
 
+export interface Habit {
+  id: string;
+  name: string;
+  completedDates: string[]; // ISO date strings 'YYYY-MM-DD'
+}
+
 export type Action =
   | { type: 'HYDRATE'; payload: Partial<AppState> }
   | { type: 'SET_USER'; payload: Partial<AppState['user']> }
@@ -129,4 +138,7 @@ export type Action =
   | { type: 'TOGGLE_STEP'; payload: { goalId: string; stepId: string } }
   | { type: 'ADD_STEP'; payload: { goalId: string; step: GoalStep } }
   | { type: 'INCREMENT_TALK_STATS'; payload: { wordsAdded: number } }
-  | { type: 'INCREMENT_ACTIVITY_STATS'; payload: { minutes: number } };
+  | { type: 'INCREMENT_ACTIVITY_STATS'; payload: { minutes: number } }
+  | { type: 'ADD_HABIT'; payload: Habit }
+  | { type: 'TOGGLE_HABIT_TODAY'; payload: { id: string; date: string } }
+  | { type: 'DELETE_HABIT'; payload: string };

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/native/Card';
+import { FocusTimer } from '../../src/components/native/FocusTimer';
+import { HabitTracker } from '../../src/components/native/HabitTracker';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { Screen } from '../../src/components/native/Screen';
 import { TextField } from '../../src/components/native/TextField';
@@ -138,6 +140,14 @@ export default function TodayScreen() {
           label="Save First — Then"
           onPress={saveFirstThen}
         />
+      </Card>
+
+      <Card style={listStyles.section}>
+        <FocusTimer />
+      </Card>
+
+      <Card style={listStyles.section}>
+        <HabitTracker />
       </Card>
     </Screen>
   );
