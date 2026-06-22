@@ -18,7 +18,9 @@
         {
           "sounds": []
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": false

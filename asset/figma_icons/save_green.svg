@@ -1,0 +1,17 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="40" height="40" fill="#1E1E1E"/>
+<g id="example_screens">
+<rect width="3401" height="4237" transform="translate(-3256.65 -409)" fill="#2B2B2B"/>
+<g id="BlankAACLayout">
+<g id="AAC Screen">
+<g id="Container">
+<rect x="-328.147" y="-136" width="393" height="852" rx="10" fill="#F1F5F9"/>
+<g id="si:bin-line">
+<rect width="40" height="40" rx="5" fill="#18B318"/>
+<path id="Vector" d="M14.4444 11.875H10.2778C9.54107 11.875 8.83453 12.2174 8.31359 12.8269C7.79266 13.4364 7.5 14.263 7.5 15.125V29.75C7.5 30.612 7.79266 31.4386 8.31359 32.0481C8.83453 32.6576 9.54107 33 10.2778 33H29.7222C30.4589 33 31.1655 32.6576 31.6864 32.0481C32.2073 31.4386 32.5 30.612 32.5 29.75V15.125C32.5 14.263 32.2073 13.4364 31.6864 12.8269C31.1655 12.2174 30.4589 11.875 29.7222 11.875H25.5556M15.8333 18.375L20 23.25L24.1667 18.375M20 23.25V7" stroke="white" stroke-width="3" stroke-linecap="square" stroke-linejoin="round"/>
+</g>
+</g>
+</g>
+</g>
+</g>
+</svg>
