@@ -1,0 +1,83 @@
+<!-- @dsCard group="Components" viewport="700x560" name="Core primitives" subtitle="Buttons, inputs, pills, toggles, badges, progress" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="../../styles.css" />
+<style>
+  body { margin: 0; background: var(--tt-background); font-family: var(--tt-font-base); color: var(--tt-text); }
+  .wrap { padding: 24px; display: flex; flex-direction: column; gap: 22px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .sect { font-family: var(--tt-font-display); font-weight: 800; font-size: 11px; letter-spacing: 0.6px;
+          text-transform: uppercase; color: var(--tt-text-tertiary); margin-bottom: -8px; }
+</style>
+</head>
+<body>
+<div id="root" class="wrap"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script type="text/babel">
+  const { Button, TextField, Card, Pill, Switch, Checkbox, Badge, ProgressBar } = window.TapTalkDesignSystem_5cf136;
+
+  function Demo() {
+    const [cat, setCat] = React.useState('Main');
+    const [lock, setLock] = React.useState(true);
+    const [agree, setAgree] = React.useState(true);
+    return (
+      <React.Fragment>
+        <div className="sect">Buttons</div>
+        <div className="row">
+          <Button label="Continue" />
+          <Button label="Secondary" variant="secondary" />
+          <Button label="Delete" variant="danger" />
+          <Button label="Skip" variant="ghost" />
+          <Button label="Loading" loading />
+          <Button label="Disabled" disabled />
+        </div>
+        <div className="row">
+          <Button label="Small" size="sm" />
+          <Button label="Medium" size="md" />
+          <Button label="Large" size="lg" />
+        </div>
+
+        <div className="sect">Inputs</div>
+        <div className="row" style={{ alignItems: 'flex-start' }}>
+          <TextField label="Name" placeholder="e.g. Alex Jones" style={{ width: 220 }} />
+          <TextField label="Email" error="Enter a valid email" style={{ width: 220 }} />
+        </div>
+
+        <div className="sect">Pills & badges</div>
+        <div className="row">
+          {['Main','Actions','Feelings','Food'].map(c =>
+            <Pill key={c} label={c} selected={cat===c} onClick={() => setCat(c)} />)}
+        </div>
+        <div className="row">
+          <Badge tone="success">Free forever</Badge>
+          <Badge tone="primary" solid>PREMIUM</Badge>
+          <Badge tone="warning">3 day streak</Badge>
+          <Badge tone="danger">Locked</Badge>
+          <Badge tone="neutral">128 words</Badge>
+        </div>
+
+        <div className="sect">Toggles</div>
+        <div className="row">
+          <Switch checked={lock} onChange={setLock} />
+          <Switch checked={!lock} onChange={() => setLock(!lock)} />
+          <Checkbox checked={agree} onChange={setAgree} label="I agree to the privacy policy" />
+        </div>
+
+        <div className="sect">Progress</div>
+        <div style={{ display:'flex', flexDirection:'column', gap: 14, maxWidth: 340 }}>
+          <ProgressBar value={0.45} segments={2} />
+          <ProgressBar value={0.7} height={6} color="var(--tt-success)" />
+        </div>
+      </React.Fragment>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+</script>
+</body>
+</html>

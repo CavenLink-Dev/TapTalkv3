@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
+import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
 const talkRoute = '/(tabs)/talk' as Href;
@@ -15,15 +16,17 @@ const CONSENTS = [
 
 export default function RegStep10Consent() {
   const router = useRouter();
+  const { dispatch } = useAppContext();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
 
   const allChecked = CONSENTS.every(c => checked[c.id]);
 
-  const toggle = (id: string) => setChecked(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggle = (id: string) => setChecked((prev: Record<string, boolean>) => ({ ...prev, [id]: !prev[id] }));
 
   const createAccount = () => {
     if (!allChecked) return;
-    // TODO: Supabase — create account, auto sign-in, tie device ID
+    dispatch({ type: 'COMPLETE_ONBOARDING' });
+    dispatch({ type: 'SIGN_IN', payload: { email: 'new-user@taptalk.local', displayName: 'TapTalk User' } });
     router.replace(talkRoute);
   };
 

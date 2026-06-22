@@ -1,0 +1,11 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   TapTalk — Fonts
+   The app ships iOS system fonts: SF Compact (base) + SF Compact Rounded (display).
+   Those are NOT available as webfonts, so for web specimens we substitute the
+   closest Google Fonts matches:
+     • SF Compact          → Hanken Grotesk  (clean neutral grotesque, high legibility)
+     • SF Compact Rounded  → Nunito          (rounded terminals, heavy display weights)
+   On Apple devices the real SF fonts are preferred first via the stack below.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Nunito:wght@600;700;800;900&display=swap');

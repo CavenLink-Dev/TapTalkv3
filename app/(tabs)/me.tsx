@@ -84,6 +84,20 @@ export default function MeScreen() {
         </View>
       </Card>
 
+      {/* ── Stats row (from design system MeScreen) */}
+      <View style={styles.statsRow}>
+        {([
+          [String(state.talkStats.totalWords), 'total words'],
+          [String(state.talkStats.streakDays), 'day streak'],
+          [String(state.activityStats.gamesPlayed), 'activities'],
+        ] as [string, string][]).map(([num, label]) => (
+          <Card key={label} style={styles.statCard}>
+            <Text style={styles.statNum}>{num}</Text>
+            <Text style={styles.statLabel}>{label}</Text>
+          </Card>
+        ))}
+      </View>
+
       <Card style={listStyles.section}>
         <Text style={listStyles.sectionTitle}>Edit Profile</Text>
         <TextField
@@ -324,5 +338,30 @@ const styles = StyleSheet.create({
   },
   pinButton: {
     flex: 1,
+  },
+
+  // ── Stats row
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  statCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  statNum: {
+    fontSize: typography.heading,
+    fontWeight: '900',
+    color: colors.primary,
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    marginTop: 2,
+    fontSize: typography.caption,
+    color: colors.textMuted,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });

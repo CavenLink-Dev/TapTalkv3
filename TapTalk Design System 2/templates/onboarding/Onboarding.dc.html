@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Onboarding screen" description="TapTalk welcome / name-entry step — Clo speech bubble, progress bar, and a rising white form card." -->
+<helmet><script src="./ds-base.js"></script></helmet>
+<div style="width:393px;min-height:844px;margin:0 auto;background:var(--tt-background);display:flex;flex-direction:column;font-family:var(--tt-font-base);position:relative;overflow:hidden;">
+
+  <!-- status bar -->
+  <div style="height:50px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px 0 32px;font-family:var(--tt-font-display);font-weight:800;font-size:15px;color:var(--tt-text);">
+    <span>9:41</span>
+    <span style="font-size:13px;letter-spacing:1px;">●●● 📶 🔋</span>
+  </div>
+
+  <!-- progress -->
+  <div style="padding:4px 24px 0;">
+    <x-import component-from-global-scope="TapTalkDesignSystem_5cf136.ProgressBar" value="{{ progress }}" segments="{{ two }}" hint-size="300px,16px"></x-import>
+  </div>
+
+  <!-- speech bubble -->
+  <div style="padding:20px 22px 0;">
+    <x-import component-from-global-scope="TapTalkDesignSystem_5cf136.SpeechBubble" tail="bottom" hint-size="320px,84px">Welcome to TapTalk! I'm <b>Clo</b>. Before we get started, <b>what would you like me to call you?</b></x-import>
+  </div>
+
+  <!-- mascot -->
+  <div style="display:flex;justify-content:center;padding:14px 0 18px;">
+    <img src="../../assets/mascots/happy_smile.png" alt="Clo smiling" width="150" height="150" style="object-fit:contain;" />
+  </div>
+
+  <!-- rising white form card -->
+  <div style="margin-top:auto;background:var(--tt-surface);border-top-left-radius:40px;border-top-right-radius:40px;box-shadow:0 -4px 24px rgba(0,0,0,0.06);padding:28px 26px 30px;display:flex;flex-direction:column;gap:18px;">
+    <x-import component-from-global-scope="TapTalkDesignSystem_5cf136.TextField" label="Name" placeholder="e.g. Alex Jones" helper="Enter your full first and last legal name" hint-size="100%,84px"></x-import>
+    <x-import component-from-global-scope="TapTalkDesignSystem_5cf136.TextField" label="Display name" placeholder="e.g. DragonSlayer20" helper="This is the name that will be displayed on the app!" hint-size="100%,84px"></x-import>
+    <x-import component-from-global-scope="TapTalkDesignSystem_5cf136.Button" label="Continue" full="{{ true }}" hint-size="100%,50px"></x-import>
+    <div style="text-align:center;font-size:12px;color:var(--tt-text-tertiary);">Check out this <b style="color:var(--tt-primary);">LINK</b> to see how we store confidential data</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:393,&quot;height&quot;:844}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { progress: 0.18, two: 2 };
+  }
+}
+</script>
+</body>
+</html>

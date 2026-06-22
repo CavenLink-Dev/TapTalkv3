@@ -33,17 +33,25 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
+          borderTopWidth: 1,
           height: 83,
-          paddingBottom: 24,
-          paddingTop: 4,
+          paddingBottom: 20,
+          paddingTop: 6,
         },
-        tabBarShowLabel: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textTertiary,
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '800',
+          letterSpacing: 0.2,
+          marginTop: 2,
+        },
       }}
     >
       <Tabs.Screen
         name="talk"
         options={{
-          title: 'Board',
+          title: 'Talk',
           tabBarIcon: ({ focused }) => (
             <TabIcon source={boardIcon} focused={focused} />
           ),
@@ -61,7 +69,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="tools"
         options={{
-          title: 'Tools',
+          title: 'Today',
           tabBarIcon: ({ focused }) => (
             <TabIcon source={toolsIcon} focused={focused} />
           ),
@@ -70,7 +78,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="me"
         options={{
-          title: 'Profile',
+          title: 'Me',
           tabBarIcon: ({ focused }) => (
             <TabIcon source={profileIcon} focused={focused} />
           ),
@@ -82,7 +90,7 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   icon: {
-    width: 48,
-    height: 48,
+    width: 28,
+    height: 28,
   },
 });

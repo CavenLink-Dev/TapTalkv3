@@ -17,7 +17,6 @@ const inLength = (s: string) => s.length >= 8 && s.length <= 16;
 export default function RegStep8Password() {
   const router = useRouter();
   const [password, setPassword] = useState('');
-  const [show, setShow] = useState(false);
 
   const lengthOk = inLength(password);
   const numberOk = hasNumber(password);
@@ -39,7 +38,7 @@ export default function RegStep8Password() {
           <TextField
             accessibilityLabel="Password"
             placeholder="8–16 characters"
-            secureTextEntry={!show}
+            secureTextEntry
             value={password}
             onChangeText={setPassword}
             style={authFormStyles.field}

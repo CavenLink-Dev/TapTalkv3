@@ -162,4 +162,36 @@ export const shadows = {
     shadowRadius:  8,
     elevation:     2,
   },
+  pop: {
+    shadowColor:   '#199AEE',
+    shadowOffset:  { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius:  16,
+    elevation:     6,
+  },
+  cardRaise: {
+    shadowColor:   '#000000',
+    shadowOffset:  { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius:  24,
+    elevation:     8,
+  },
+} as const;
+
+// ─── Animation ────────────────────────────────────────────────────────────────
+// Source: TapTalk Design System 2 / tokens/animations.css
+
+export const animation = {
+  /** standard ease — page/fade transitions */
+  easeStandard: [0.4, 0, 0.2, 1] as const,
+  /** spring ease — pops and scales */
+  easeSpring:   [0.34, 1.3, 0.64, 1] as const,
+  /** press feedback */
+  durFast:   120,
+  /** fades / cross-fades */
+  durBase:   260,
+  /** page slides */
+  durSlide:  300,
+  /** mascot idle float (one half-cycle) */
+  durFloat:  1400,
 } as const;

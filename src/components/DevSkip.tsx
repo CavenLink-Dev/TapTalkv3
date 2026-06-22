@@ -3,7 +3,7 @@
  * Delete this file and all <DevSkip /> usages to remove it entirely.
  *
  * Sequence:
- *   splash → age-consent → adult → pay → login → /(tabs)/talk
+ *   splash → get-started → registration → login → /(tabs)/talk
  *
  * Each call dispatches whatever state that screen normally writes so guards
  * in index.tsx don't redirect back.
@@ -15,9 +15,8 @@ import { Href, useRouter } from 'expo-router';
 import { useAppContext } from '../hooks/useAppContext';
 
 type Route =
-  | '/onboarding/age-consent'
-  | '/onboarding/adult'
-  | '/pay'
+  | '/onboarding/get-started'
+  | '/registration/01-who'
   | '/auth/login'
   | '/(tabs)/talk';
 
@@ -34,13 +33,13 @@ export function DevSkip({ next }: DevSkipProps) {
 
   const handleSkip = () => {
     // Dispatch whatever the current screen normally writes before leaving.
-    if (next === '/pay') {
-      // adult.tsx normally calls COMPLETE_ONBOARDING + SET_USER
+    if (next === '/(tabs)/talk') {
       dispatch({
         type: 'SET_USER',
         payload: {
           legalName: 'Dev User',
           displayName: 'DevUser',
+          email: 'dev@dev.com',
           name: 'Dev User',
           nickname: 'DevUser',
           role: 'myself',
@@ -48,12 +47,7 @@ export function DevSkip({ next }: DevSkipProps) {
         },
       });
       dispatch({ type: 'COMPLETE_ONBOARDING' });
-    } else if (next === '/auth/login') {
-      // pay.tsx normally calls COMPLETE_SUBSCRIPTION
-      dispatch({ type: 'COMPLETE_SUBSCRIPTION' });
-    } else if (next === '/(tabs)/talk') {
-      // login.tsx normally calls SIGN_IN
-      dispatch({ type: 'SIGN_IN', payload: { email: 'dev@dev.com' } });
+      dispatch({ type: 'SIGN_IN', payload: { email: 'dev@dev.com', displayName: 'DevUser' } });
     }
 
     router.replace(next as Href);

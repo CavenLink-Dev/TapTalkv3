@@ -6,7 +6,7 @@ import { colors, spacing, typography } from '../../theme/tokens';
 interface ScreenProps {
   title?: string;
   subtitle?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   scroll?: boolean;
 }
 

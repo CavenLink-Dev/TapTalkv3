@@ -1,0 +1,21 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Text & neutrals" subtitle="Text ramp, background, border" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; background: var(--tt-surface); font-family: var(--tt-font-base); }
+  .grid { display: flex; gap: 12px; padding: 16px; }
+  .sw { flex: 1; }
+  .chip { height: 64px; border-radius: 12px; border: 1.5px solid var(--tt-border); }
+  .name { font-family: var(--tt-font-display); font-weight: 800; font-size: 13px; color: var(--tt-text); margin-top: 8px; }
+  .hex { font-size: 12px; color: var(--tt-text-tertiary); margin-top: 1px; letter-spacing: 0.3px; }
+</style></head><body>
+<div class="grid">
+  <div class="sw"><div class="chip" style="background:#202020"></div><div class="name">Text</div><div class="hex">#202020</div></div>
+  <div class="sw"><div class="chip" style="background:#434343"></div><div class="name">Muted</div><div class="hex">#434343</div></div>
+  <div class="sw"><div class="chip" style="background:#A4A4A4"></div><div class="name">Tertiary</div><div class="hex">#A4A4A4</div></div>
+  <div class="sw"><div class="chip" style="background:#F1F5F9"></div><div class="name">Background</div><div class="hex">#F1F5F9</div></div>
+  <div class="sw"><div class="chip" style="background:#EAEEF2"></div><div class="name">Input</div><div class="hex">#EAEEF2</div></div>
+  <div class="sw"><div class="chip" style="background:#BBC0C7"></div><div class="name">Border</div><div class="hex">#BBC0C7</div></div>
+</div>
+</body></html>

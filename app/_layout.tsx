@@ -7,11 +7,14 @@ import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { AppProvider } from '../src/context/AppContext';
 import { typography } from '../src/theme/tokens';
 
-Text.defaultProps = Text.defaultProps ?? {};
-Text.defaultProps.style = [{ fontFamily: typography.fontFamilyDisplay }, Text.defaultProps.style];
+const DefaultText = Text as typeof Text & { defaultProps?: { style?: unknown } };
+const DefaultTextInput = TextInput as typeof TextInput & { defaultProps?: { style?: unknown } };
 
-TextInput.defaultProps = TextInput.defaultProps ?? {};
-TextInput.defaultProps.style = [{ fontFamily: typography.fontFamily }, TextInput.defaultProps.style];
+DefaultText.defaultProps = DefaultText.defaultProps ?? {};
+DefaultText.defaultProps.style = [{ fontFamily: typography.fontFamilyDisplay }, DefaultText.defaultProps.style];
+
+DefaultTextInput.defaultProps = DefaultTextInput.defaultProps ?? {};
+DefaultTextInput.defaultProps.style = [{ fontFamily: typography.fontFamily }, DefaultTextInput.defaultProps.style];
 
 export default function RootLayout() {
   return (

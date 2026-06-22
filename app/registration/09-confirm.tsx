@@ -15,8 +15,7 @@ export default function RegStep9Confirm() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
 
-  // TODO: receive real password from registration context
-  const matches = confirm.length > 0 && password === confirm;
+  const matches = password.length > 0 && confirm.length > 0 && password === confirm;
   const mismatch = confirm.length > 0 && password !== confirm;
 
   return (
@@ -26,7 +25,16 @@ export default function RegStep9Confirm() {
         <Text style={styles.title}>Confirm Password</Text>
 
         <Card>
-          <Text style={authFormStyles.label}>Re-enter Password</Text>
+          <Text style={authFormStyles.label}>Password</Text>
+          <TextField
+            accessibilityLabel="Password"
+            placeholder="Enter your password again"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            style={authFormStyles.field}
+          />
+          <Text style={authFormStyles.label}>Confirm Password</Text>
           <TextField
             accessibilityLabel="Confirm password"
             placeholder="Re-enter your password"
