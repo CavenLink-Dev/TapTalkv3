@@ -7,7 +7,7 @@ import { DevSkip } from '../../src/components/DevSkip';
 import { MascotImage } from '../../src/components/MascotImage';
 import { colors } from '../../src/theme/tokens';
 
-const onboardingRoute = '/onboarding/age-consent' as Href;
+const onboardingRoute = '/onboarding/get-started' as Href;
 
 export default function Splash() {
   const router = useRouter();
@@ -54,7 +54,7 @@ export default function Splash() {
       <Animated.View style={[styles.footer, { opacity: dotsOpacity }]}>
         <LoadingDots />
       </Animated.View>
-      <DevSkip next="/onboarding/age-consent" />
+      <DevSkip next="/onboarding/get-started" />
     </SafeAreaView>
   );
 }

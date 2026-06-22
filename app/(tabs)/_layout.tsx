@@ -76,9 +76,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-      {/* Hide legacy tabs from the new nav */}
-      <Tabs.Screen name="today" options={{ href: null }} />
-      <Tabs.Screen name="progress" options={{ href: null }} />
     </Tabs>
   );
 }

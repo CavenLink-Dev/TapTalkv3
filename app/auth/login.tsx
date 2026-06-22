@@ -9,7 +9,8 @@ import { DevSkip } from '../../src/components/DevSkip';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { authFormStyles } from '../../src/styles/authFormStyles';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
-const signUpRoute = '/auth/sign-up' as Href;
+const signUpRoute = '/registration/01-who' as Href;
+const forgotRoute = '/auth/forgot-password' as Href;
 const talkRoute = '/(tabs)/talk' as Href;
 
 export default function LoginScreen() {
@@ -57,11 +58,19 @@ export default function LoginScreen() {
         />
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel="Go to sign up"
+          accessibilityLabel="Forgot password"
+          onPress={() => router.push(forgotRoute)}
+          style={authFormStyles.linkButton}
+        >
+          <Text style={authFormStyles.link}>Forgot password?</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Create a new account"
           onPress={() => router.push(signUpRoute)}
           style={authFormStyles.linkButton}
         >
-          <Text style={authFormStyles.link}>Need an account? Sign up</Text>
+          <Text style={authFormStyles.link}>Don't have an account? Get started</Text>
         </Pressable>
       </Card>
       <DevSkip next="/(tabs)/talk" />
