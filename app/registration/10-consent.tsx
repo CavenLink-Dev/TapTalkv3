@@ -6,7 +6,7 @@ import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
-const talkRoute = '/(tabs)/talk' as Href;
+const tourRoute = '/onboarding/tour' as Href;
 
 const CONSENTS = [
   { id: 'terms', label: 'I agree to the Terms & Conditions' },
@@ -27,7 +27,7 @@ export default function RegStep10Consent() {
     if (!allChecked) return;
     dispatch({ type: 'COMPLETE_ONBOARDING' });
     dispatch({ type: 'SIGN_IN', payload: { email: 'new-user@taptalk.local', displayName: 'TapTalk User' } });
-    router.replace(talkRoute);
+    router.replace(tourRoute);
   };
 
   return (

@@ -46,81 +46,26 @@ const CELL_BORDER   = colors.symbolOutline;  // outline_black_symbol_folder
 const GRID_PADDING  = 24;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Category = 'Main' | 'Actions' | 'Feelings' | 'Food' | 'Social';
+type Category = 'Home';
 type CellKind = 'word' | 'folder' | 'article' | 'question';
 
 interface AACSymbol {
   id:     string;
   label:  string;
-  symbol: string; // emoji placeholder until ARASAAC symbols are loaded
+  symbol: string;
   bg:     string;
   kind:   CellKind;
 }
 
-// ─── Board data ───────────────────────────────────────────────────────────────
+// ─── Board data — blank starter: one folder (first) + one symbol (last) ──────
 const BOARDS: Record<Category, AACSymbol[]> = {
-  Main: [
-    { id: 'hello',  label: 'Hello',  symbol: '👋', bg: WC.conjunction,  kind: 'word'     },
-    { id: 'car',    label: 'Car',    symbol: '🚗', bg: WC.noun,         kind: 'word'     },
-    { id: 'him',    label: 'Him',    symbol: '👦', bg: WC.pronoun,      kind: 'word'     },
-    { id: 'run',    label: 'Run',    symbol: '🏃', bg: WC.verb,         kind: 'word'     },
-    { id: 'big',    label: 'Big',    symbol: '📦', bg: WC.adjective,    kind: 'word'     },
-    { id: 'where',  label: 'Where',  symbol: '?',  bg: WC.question,     kind: 'question' },
-    { id: 'please', label: 'Please', symbol: '🙏', bg: WC.social,       kind: 'word'     },
-    { id: 'the',    label: 'The',    symbol: '',   bg: WC.article,      kind: 'article'  },
-    { id: 'ouch',   label: 'Ouch',   symbol: '😖', bg: WC.interjection, kind: 'word'     },
-    { id: 'places', label: 'Places', symbol: '📍', bg: WC.noun,         kind: 'word'     },
-    { id: 'sports', label: 'Sports', symbol: '⚽', bg: WC.noun,         kind: 'word'     },
-  ],
-  Actions: [
-    { id: 'eat',   label: 'Eat',   symbol: '🍽️', bg: WC.verb,         kind: 'word' },
-    { id: 'drink', label: 'Drink', symbol: '🥤',  bg: WC.verb,         kind: 'word' },
-    { id: 'go',    label: 'Go',    symbol: '🚶',  bg: WC.verb,         kind: 'word' },
-    { id: 'stop',  label: 'Stop',  symbol: '✋',  bg: WC.interjection, kind: 'word' },
-    { id: 'help',  label: 'Help',  symbol: '🤝',  bg: WC.social,       kind: 'word' },
-    { id: 'want',  label: 'Want',  symbol: '🙋',  bg: WC.verb,         kind: 'word' },
-    { id: 'play',  label: 'Play',  symbol: '🎮',  bg: WC.noun,         kind: 'word' },
-    { id: 'sleep', label: 'Sleep', symbol: '😴',  bg: WC.adjective,    kind: 'word' },
-    { id: 'sit',   label: 'Sit',   symbol: '🪑',  bg: WC.verb,         kind: 'word' },
-    { id: 'walk',  label: 'Walk',  symbol: '🚶',  bg: WC.verb,         kind: 'word' },
-  ],
-  Feelings: [
-    { id: 'happy',   label: 'Happy',   symbol: '😊', bg: WC.adjective,    kind: 'word' },
-    { id: 'sad',     label: 'Sad',     symbol: '😢', bg: WC.adjective,    kind: 'word' },
-    { id: 'angry',   label: 'Angry',   symbol: '😠', bg: WC.interjection, kind: 'word' },
-    { id: 'scared',  label: 'Scared',  symbol: '😨', bg: WC.question,     kind: 'word' },
-    { id: 'tired',   label: 'Tired',   symbol: '😴', bg: WC.adjective,    kind: 'word' },
-    { id: 'excited', label: 'Excited', symbol: '🤩', bg: WC.pronoun,      kind: 'word' },
-    { id: 'love',    label: 'Love',    symbol: '❤️', bg: WC.conjunction,  kind: 'word' },
-    { id: 'sick',    label: 'Sick',    symbol: '🤒', bg: WC.noun,         kind: 'word' },
-    { id: 'pain',    label: 'Pain',    symbol: '🤕', bg: WC.interjection, kind: 'word' },
-    { id: 'calm',    label: 'Calm',    symbol: '😌', bg: WC.adjective,    kind: 'word' },
-  ],
-  Food: [
-    { id: 'apple',  label: 'Apple',  symbol: '🍎', bg: WC.noun, kind: 'word' },
-    { id: 'banana', label: 'Banana', symbol: '🍌', bg: WC.noun, kind: 'word' },
-    { id: 'pizza',  label: 'Pizza',  symbol: '🍕', bg: WC.noun, kind: 'word' },
-    { id: 'water',  label: 'Water',  symbol: '💧', bg: WC.noun, kind: 'word' },
-    { id: 'milk',   label: 'Milk',   symbol: '🥛', bg: WC.noun, kind: 'word' },
-    { id: 'cookie', label: 'Cookie', symbol: '🍪', bg: WC.noun, kind: 'word' },
-    { id: 'juice',  label: 'Juice',  symbol: '🍊', bg: WC.noun, kind: 'word' },
-    { id: 'bread',  label: 'Bread',  symbol: '🍞', bg: WC.noun, kind: 'word' },
-    { id: 'cheese', label: 'Cheese', symbol: '🧀', bg: WC.noun, kind: 'word' },
-    { id: 'chips',  label: 'Chips',  symbol: '🍟', bg: WC.noun, kind: 'word' },
-  ],
-  Social: [
-    { id: 'yes',      label: 'Yes',       symbol: '✅', bg: WC.verb,         kind: 'word' },
-    { id: 'no',       label: 'No',        symbol: '❌', bg: WC.interjection, kind: 'word' },
-    { id: 'thankyou', label: 'Thank You', symbol: '🙏', bg: WC.social,       kind: 'word' },
-    { id: 'sorry',    label: 'Sorry',     symbol: '😔', bg: WC.conjunction,  kind: 'word' },
-    { id: 'ok',       label: 'OK',        symbol: '👌', bg: WC.verb,         kind: 'word' },
-    { id: 'bye',      label: 'Bye',       symbol: '👋', bg: WC.conjunction,  kind: 'word' },
-    { id: 'hi',       label: 'Hi',        symbol: '😁', bg: WC.social,       kind: 'word' },
-    { id: 'wait',     label: 'Wait',      symbol: '⏳', bg: WC.question,     kind: 'word' },
+  Home: [
+    { id: 'folder-1', label: 'Folder', symbol: '', bg: WC.folder, kind: 'folder' },
+    { id: 'symbol-1', label: 'Symbol', symbol: '', bg: WC.noun,   kind: 'word'   },
   ],
 };
 
-const CATEGORIES: Category[] = ['Main', 'Actions', 'Feelings', 'Food', 'Social'];
+const CATEGORIES: Category[] = ['Home'];
 
 // ─── Mascot emotion logic ─────────────────────────────────────────────────────
 function getMascotEmotion(wordCount: number): MascotKey {
@@ -203,7 +148,7 @@ function SymbolCell({
 export default function TalkScreen() {
   const { state, dispatch } = useAppContext();
   const { speak, lastError, clearError } = useSpeech();
-  const [activeCategory, setActiveCategory] = useState<Category>('Main');
+  const [activeCategory, setActiveCategory] = useState<Category>('Home');
   const [mascotEmotion, setMascotEmotion] = useState<MascotKey>('neutral_curious');
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -462,27 +407,29 @@ export default function TalkScreen() {
         </View>
       </View>
 
-      {/* ── Category strip ──────────────────────────────────────────── */}
-      <View style={styles.categoryBar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryScroll}
-        >
-          {CATEGORIES.map(cat => (
-            <Pressable
-              key={cat}
-              accessibilityRole="button"
-              accessibilityLabel={`${cat} board`}
-              accessibilityState={{ selected: activeCategory === cat }}
-              onPress={() => handleCategorySwitch(cat)}
-              style={[styles.pill, activeCategory === cat && styles.pillActive]}
-            >
-              <Text style={styles.pillLabel}>{cat}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
+      {/* ── Category strip — hidden when only one category ─────────── */}
+      {CATEGORIES.length > 1 && (
+        <View style={styles.categoryBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryScroll}
+          >
+            {CATEGORIES.map(cat => (
+              <Pressable
+                key={cat}
+                accessibilityRole="button"
+                accessibilityLabel={`${cat} board`}
+                accessibilityState={{ selected: activeCategory === cat }}
+                onPress={() => handleCategorySwitch(cat)}
+                style={[styles.pill, activeCategory === cat && styles.pillActive]}
+              >
+                <Text style={styles.pillLabel}>{cat}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* ── Symbol grid — key remount triggers FadeIn on every category switch ── */}
       <Animated.View

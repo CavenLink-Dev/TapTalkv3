@@ -30,8 +30,6 @@
 ### 2. Get Started Screen (NOT FOR REGISTERED USERS)
 - [ ] **New screen**
 - **Purpose:** Welcome to TapTalk
-- What we specialize in: (Write it)
-- Welcome message: "Welcome to TapTalk"
 - [Get Started] button navigates to Registration screen (3.)
 - Notes: Simple and fast No Fussing straight to Register Account. Helps users with speech impairment need minimal friction to get back to communicating.
 
@@ -154,6 +152,8 @@
 - **Notes:** Keep it minimal — one field, one button, one confirmation
 
 ---
+
+### As they get into thee main screen after login and onboarding, 
 
 ### 6. AAC Board
 - [ ] **Keep existing — core of the app**

@@ -93,7 +93,7 @@ export default function ActivitiesScreen() {
   }
 
   return (
-    <Screen title="Activities" subtitle="Practice focus, memory, language, and numbers.">
+    <Screen title="Activity" subtitle="Practice focus, memory, language, and numbers.">
       {activities.map((activity) => (
         <Card key={activity.id} style={styles.activityCard}>
           <View style={styles.activityHeader}>

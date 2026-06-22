@@ -73,7 +73,7 @@ export default function MeScreen() {
   const initial = name.charAt(0).toUpperCase() || '?';
 
   return (
-    <Screen title="Me" subtitle="Profile, supports, and calm controls.">
+    <Screen title="Profile" subtitle="Your account, voice, and controls.">
       <Card style={styles.profileCard}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initial}</Text>

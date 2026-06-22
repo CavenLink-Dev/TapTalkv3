@@ -1,464 +1,291 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
-import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
-const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-function getTodayLabel(): string {
-  const d = new Date();
-  return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+interface SettingRow {
+  id: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  iconColor: string;
+  iconBg: string;
+  label: string;
+  subtitle: string;
+  premium?: boolean;
 }
 
-function buildWeekDays(): { letter: string; date: number; isToday: boolean }[] {
-  const today = new Date();
-  const dow = today.getDay();
-  return DAY_LETTERS.map((letter, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() - dow + i);
-    return { letter, date: d.getDate(), isToday: i === dow };
-  });
+const APP_SETTINGS: SettingRow[] = [
+  {
+    id: 'voice',
+    icon: 'volume-high-outline',
+    iconColor: colors.primary,
+    iconBg: '#E6F4FD',
+    label: 'Voice & Speech',
+    subtitle: 'Choose voice, speed, and pitch',
+  },
+  {
+    id: 'display',
+    icon: 'contrast-outline',
+    iconColor: '#5CD65C',
+    iconBg: '#E8FAE8',
+    label: 'Display',
+    subtitle: 'Text size, contrast, theme',
+  },
+  {
+    id: 'haptics',
+    icon: 'radio-button-on-outline',
+    iconColor: '#FF9500',
+    iconBg: '#FFF4E0',
+    label: 'Haptics',
+    subtitle: 'Vibration feedback on symbol tap',
+  },
+  {
+    id: 'notifications',
+    icon: 'notifications-outline',
+    iconColor: '#BD73FF',
+    iconBg: '#F3EAFF',
+    label: 'Notifications',
+    subtitle: 'Reminders and daily check-ins',
+  },
+];
+
+const PREMIUM_TOOLS: SettingRow[] = [
+  {
+    id: 'first-then',
+    icon: 'git-compare-outline',
+    iconColor: colors.primary,
+    iconBg: '#E6F4FD',
+    label: 'First & Then',
+    subtitle: 'Visual step-by-step task guide',
+    premium: true,
+  },
+  {
+    id: 'daily-planner',
+    icon: 'calendar-outline',
+    iconColor: '#FF9500',
+    iconBg: '#FFF4E0',
+    label: 'Daily Planner',
+    subtitle: 'Break the day into simple steps',
+    premium: true,
+  },
+  {
+    id: 'visual-timer',
+    icon: 'timer-outline',
+    iconColor: '#5CD65C',
+    iconBg: '#E8FAE8',
+    label: 'Visual Timers',
+    subtitle: 'Animated countdown for transitions',
+    premium: true,
+  },
+  {
+    id: 'visual-cues',
+    icon: 'eye-outline',
+    iconColor: '#BD73FF',
+    iconBg: '#F3EAFF',
+    label: 'Visual Cues',
+    subtitle: 'On-screen reminders and prompts',
+    premium: true,
+  },
+];
+
+function SettingItem({ row }: { row: SettingRow }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={row.label}
+      style={styles.settingRow}
+    >
+      <View style={[styles.settingIcon, { backgroundColor: row.iconBg }]}>
+        <Ionicons name={row.icon} size={22} color={row.iconColor} />
+      </View>
+      <View style={styles.settingCopy}>
+        <Text style={styles.settingLabel}>{row.label}</Text>
+        <Text style={styles.settingSubtitle}>{row.subtitle}</Text>
+      </View>
+      {row.premium ? (
+        <View style={styles.premiumBadge}>
+          <Ionicons name="lock-closed" size={12} color={colors.surface} />
+          <Text style={styles.premiumText}>PRO</Text>
+        </View>
+      ) : (
+        <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+      )}
+    </Pressable>
+  );
 }
 
-export default function ToolsScreen() {
-  const { state, dispatch } = useAppContext();
-
-  const [editFirst, setEditFirst] = useState(false);
-  const [editThen, setEditThen] = useState(false);
-  const [firstDraft, setFirstDraft] = useState('');
-  const [thenDraft, setThenDraft] = useState('');
-  const [newTask, setNewTask] = useState('');
-
-  const weekDays = buildWeekDays();
-  const doneTasks = state.tasks.filter(t => t.completed).length;
-
-  const commitFirst = () => {
-    dispatch({
-      type: 'SET_FIRST_THEN',
-      payload: { first: firstDraft.trim() || null, then: state.firstThen.then },
-    });
-    setEditFirst(false);
-  };
-
-  const commitThen = () => {
-    dispatch({
-      type: 'SET_FIRST_THEN',
-      payload: { first: state.firstThen.first, then: thenDraft.trim() || null },
-    });
-    setEditThen(false);
-  };
-
-  const addTask = () => {
-    const name = newTask.trim();
-    if (!name) return;
-    dispatch({
-      type: 'ADD_TASK',
-      payload: {
-        id: `task-${Date.now()}`,
-        name,
-        description: '',
-        tags: [],
-        dueDate: null,
-        startDate: null,
-        reminders: [],
-        completed: false,
-        completedAt: null,
-      },
-    });
-    setNewTask('');
-  };
+export default function SettingsScreen() {
+  const { state } = useAppContext();
+  const isPremium = state.subscriptionComplete;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* ── Header ──────────────────────────────────────────────── */}
-          <View style={styles.headerRow}>
-            <Text style={styles.title}>Today</Text>
-            <Text style={styles.dateLabel}>{getTodayLabel()}</Text>
-          </View>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-          {/* ── Week strip ──────────────────────────────────────────── */}
-          <View style={styles.weekStrip}>
-            {weekDays.map((wd, i) => (
-              <View key={i} style={styles.weekDay}>
-                <Text style={styles.weekDayLetter}>{wd.letter}</Text>
-                <View style={[styles.weekDateBox, wd.isToday && styles.weekDateBoxToday]}>
-                  <Text style={[styles.weekDateText, wd.isToday && styles.weekDateTextToday]}>
-                    {wd.date}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
+        {/* ── Header */}
+        <Text style={styles.title}>SETTINGS</Text>
 
-          {/* ── First → Then ────────────────────────────────────────── */}
-          <Card>
-            <Text style={styles.sectionLabel}>FIRST · THEN</Text>
-            <View style={styles.firstThenRow}>
-              {/* FIRST cell */}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Set First task"
-                style={styles.ftCell}
-                onPress={() => {
-                  setFirstDraft(state.firstThen.first ?? '');
-                  setEditFirst(true);
-                }}
-              >
-                <Text style={styles.ftTag}>FIRST</Text>
-                {editFirst ? (
-                  <TextInput
-                    style={styles.ftInput}
-                    value={firstDraft}
-                    onChangeText={setFirstDraft}
-                    autoFocus
-                    onBlur={commitFirst}
-                    onSubmitEditing={commitFirst}
-                    placeholder="e.g. Brush teeth"
-                    placeholderTextColor={colors.textTertiary}
-                    returnKeyType="done"
-                  />
-                ) : (
-                  <Text style={styles.ftValue} numberOfLines={2}>
-                    {state.firstThen.first || 'Tap to set'}
-                  </Text>
-                )}
-              </Pressable>
-
-              <Text style={styles.ftArrow}>→</Text>
-
-              {/* THEN cell */}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Set Then reward"
-                style={styles.ftCell}
-                onPress={() => {
-                  setThenDraft(state.firstThen.then ?? '');
-                  setEditThen(true);
-                }}
-              >
-                <Text style={styles.ftTag}>THEN</Text>
-                {editThen ? (
-                  <TextInput
-                    style={styles.ftInput}
-                    value={thenDraft}
-                    onChangeText={setThenDraft}
-                    autoFocus
-                    onBlur={commitThen}
-                    onSubmitEditing={commitThen}
-                    placeholder="e.g. Play time"
-                    placeholderTextColor={colors.textTertiary}
-                    returnKeyType="done"
-                  />
-                ) : (
-                  <Text style={styles.ftValue} numberOfLines={2}>
-                    {state.firstThen.then || 'Tap to set'}
-                  </Text>
-                )}
-              </Pressable>
+        {/* ── App settings */}
+        <Text style={styles.sectionHeading}>APP</Text>
+        <Card style={styles.section}>
+          {APP_SETTINGS.map((row, i) => (
+            <View key={row.id}>
+              <SettingItem row={row} />
+              {i < APP_SETTINGS.length - 1 && <View style={styles.divider} />}
             </View>
-          </Card>
+          ))}
+        </Card>
 
-          {/* ── Tasks header ────────────────────────────────────────── */}
-          <View style={styles.tasksHeader}>
-            <Text style={styles.tasksTitle}>Tasks</Text>
-            {state.tasks.length > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {doneTasks}/{state.tasks.length} done
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* ── Task list ────────────────────────────────────────────── */}
-          {state.tasks.length > 0 && (
-            <Card style={styles.taskListCard}>
-              {state.tasks.map((task, i) => (
-                <Pressable
-                  key={task.id}
-                  accessibilityRole="checkbox"
-                  accessibilityLabel={task.name}
-                  accessibilityState={{ checked: task.completed }}
-                  onPress={() => dispatch({ type: 'TOGGLE_TASK', payload: task.id })}
-                  style={[
-                    styles.taskRow,
-                    i < state.tasks.length - 1 && styles.taskRowBorder,
-                  ]}
-                >
-                  <View style={[styles.checkbox, task.completed && styles.checkboxDone]}>
-                    {task.completed && <Text style={styles.checkmark}>✓</Text>}
-                  </View>
-                  <Text
-                    style={[styles.taskName, task.completed && styles.taskNameDone]}
-                    numberOfLines={2}
-                  >
-                    {task.name}
-                  </Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete ${task.name}`}
-                    onPress={() => dispatch({ type: 'DELETE_TASK', payload: task.id })}
-                    style={styles.deleteBtn}
-                    hitSlop={8}
-                  >
-                    <Text style={styles.deleteBtnText}>✕</Text>
-                  </Pressable>
-                </Pressable>
-              ))}
-            </Card>
+        {/* ── Premium tools */}
+        <View style={styles.premiumHeader}>
+          <Text style={styles.sectionHeading}>PREMIUM TOOLS</Text>
+          {!isPremium && (
+            <View style={styles.upgradePill}>
+              <Ionicons name="star" size={11} color="#FFD700" />
+              <Text style={styles.upgradeText}>Upgrade</Text>
+            </View>
           )}
+        </View>
 
-          {/* ── Add task ─────────────────────────────────────────────── */}
-          <Card style={styles.addRow}>
-            <TextInput
-              style={styles.addInput}
-              placeholder="Add a task..."
-              placeholderTextColor={colors.textTertiary}
-              value={newTask}
-              onChangeText={setNewTask}
-              onSubmitEditing={addTask}
-              returnKeyType="done"
-            />
-            <PrimaryButton
-              accessibilityLabel="Add task"
-              label="ADD"
-              onPress={addTask}
-              style={styles.addBtn}
-            />
+        {!isPremium && (
+          <Card style={styles.upgradeCard}>
+            <Ionicons name="star-outline" size={28} color={colors.primary} />
+            <Text style={styles.upgradeTitle}>Unlock All Tools</Text>
+            <Text style={styles.upgradeDesc}>
+              First &amp; Then, Daily Planner, Visual Timers, and more — designed with OT therapy principles for meaningful daily support.
+            </Text>
           </Card>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        )}
+
+        <Card style={styles.section}>
+          {PREMIUM_TOOLS.map((row, i) => (
+            <View key={row.id}>
+              <SettingItem row={isPremium ? { ...row, premium: false } : row} />
+              {i < PREMIUM_TOOLS.length - 1 && <View style={styles.divider} />}
+            </View>
+          ))}
+        </Card>
+
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
-  content: { padding: spacing.lg, paddingBottom: 32, gap: spacing.lg },
+  content: { padding: spacing.lg, paddingBottom: 40, gap: spacing.lg },
 
-  // ── Header
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
   title: {
     fontSize: typography.title,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.text,
-    letterSpacing: -0.4,
-  },
-  dateLabel: {
-    fontSize: typography.caption,
-    color: colors.textMuted,
-  },
-
-  // ── Week strip
-  weekStrip: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  weekDay: { flex: 1, alignItems: 'center' },
-  weekDayLetter: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textTertiary,
-    marginBottom: 6,
-  },
-  weekDateBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weekDateBoxToday: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  weekDateText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.textMuted,
-  },
-  weekDateTextToday: {
-    color: colors.surface,
-  },
-
-  // ── First-Then
-  sectionLabel: {
-    fontSize: typography.caption,
-    fontWeight: '800',
-    color: colors.textTertiary,
-    letterSpacing: 0.6,
-    marginBottom: spacing.md,
-  },
-  firstThenRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  ftCell: {
-    flex: 1,
-    backgroundColor: colors.inputBg,
-    borderRadius: radii.card,
-    padding: spacing.md,
-    alignItems: 'center',
-    minHeight: 82,
-    justifyContent: 'center',
-  },
-  ftTag: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: 0.4,
+    letterSpacing: -0.5,
     marginBottom: spacing.xs,
   },
-  ftValue: {
-    fontSize: typography.callout,
-    fontWeight: '700',
-    color: colors.text,
-    textAlign: 'center',
-  },
-  ftInput: {
-    fontSize: typography.callout,
-    fontWeight: '600',
-    color: colors.text,
-    textAlign: 'center',
-    padding: 0,
-    width: '100%',
-  },
-  ftArrow: {
-    fontSize: 24,
+
+  sectionHeading: {
+    fontSize: typography.caption,
+    fontWeight: '800',
     color: colors.textTertiary,
-    fontWeight: '300',
+    letterSpacing: 0.8,
+    marginBottom: spacing.xs,
   },
 
-  // ── Tasks
-  tasksHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: spacing.xs,
-  },
-  tasksTitle: {
-    fontSize: typography.subheading,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.3,
-  },
-  badge: {
-    backgroundColor: colors.softBlue,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  badgeText: {
-    fontSize: typography.caption,
-    fontWeight: '700',
-    color: colors.primaryDark,
-  },
-  taskListCard: {
+  section: {
     padding: 0,
     overflow: 'hidden',
   },
-  taskRow: {
+
+  settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: 14,
   },
-  taskRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEF2F6',
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: colors.border,
+  settingIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.button,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
   },
-  checkboxDone: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
-  },
-  checkmark: {
-    color: colors.surface,
-    fontSize: 13,
-    fontWeight: '900',
-    lineHeight: 16,
-  },
-  taskName: {
-    flex: 1,
+  settingCopy: { flex: 1 },
+  settingLabel: {
     fontSize: typography.callout,
-    fontWeight: '600',
-    color: colors.text,
-    lineHeight: 20,
-  },
-  taskNameDone: {
-    textDecorationLine: 'line-through',
-    color: colors.textTertiary,
-  },
-  deleteBtn: {
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteBtnText: {
-    fontSize: 14,
-    color: colors.textTertiary,
     fontWeight: '700',
+    color: colors.text,
   },
-
-  // ── Add task row
-  addRow: {
+  settingSubtitle: {
+    marginTop: 2,
+    fontSize: typography.caption,
+    color: colors.textMuted,
+  },
+  premiumBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
+    gap: 3,
+    backgroundColor: colors.primaryDark,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
   },
-  addInput: {
-    flex: 1,
-    fontSize: typography.callout,
+  premiumText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: colors.surface,
+    letterSpacing: 0.4,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: '#EEF2F6',
+    marginLeft: 56 + spacing.md,
+  },
+
+  premiumHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  upgradePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.primary,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+  },
+  upgradeText: {
+    fontSize: typography.caption,
+    fontWeight: '800',
+    color: colors.surface,
+  },
+
+  upgradeCard: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xl,
+    backgroundColor: '#F0F8FF',
+  },
+  upgradeTitle: {
+    fontSize: typography.subheading,
+    fontWeight: '900',
     color: colors.text,
-    padding: 0,
-    minHeight: 40,
   },
-  addBtn: {
-    paddingHorizontal: spacing.lg,
-    minHeight: 40,
+  upgradeDesc: {
+    fontSize: typography.callout,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });
