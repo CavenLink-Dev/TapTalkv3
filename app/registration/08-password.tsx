@@ -59,7 +59,7 @@ export default function RegStep8Password() {
       </View>
 
       <View style={styles.footer}>
-        <PrimaryButton accessibilityLabel="Continue" label="Continue" disabled={!canContinue} onPress={() => router.push({ pathname: nextRoute, params: { password } } as Href)} />
+        <PrimaryButton accessibilityLabel="Continue" label="Continue" disabled={!canContinue} onPress={() => router.push(nextRoute)} />
       </View>
     </SafeAreaView>
   );
