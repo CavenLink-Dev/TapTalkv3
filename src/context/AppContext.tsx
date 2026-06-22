@@ -34,6 +34,7 @@ export const initialState: AppState = {
   goals: [],
   talkStats: { totalWords: 0, sessionsToday: 0, streakDays: 0 },
   activityStats: { gamesPlayed: 0, minutesToday: 0 },
+  habits: [],
 };
 
 function mergeStoredState(storedState: Partial<AppState>): AppState {
@@ -209,6 +210,24 @@ export function appReducer(state: AppState, action: Action): AppState {
           minutesToday: state.activityStats.minutesToday + action.payload.minutes,
         },
       };
+    case 'ADD_HABIT':
+      return { ...state, habits: [...state.habits, action.payload] };
+    case 'TOGGLE_HABIT_TODAY':
+      return {
+        ...state,
+        habits: state.habits.map((h) => {
+          if (h.id !== action.payload.id) return h;
+          const already = h.completedDates.includes(action.payload.date);
+          return {
+            ...h,
+            completedDates: already
+              ? h.completedDates.filter((d) => d !== action.payload.date)
+              : [...h.completedDates, action.payload.date],
+          };
+        }),
+      };
+    case 'DELETE_HABIT':
+      return { ...state, habits: state.habits.filter((h) => h.id !== action.payload) };
     default:
       return state;
   }
