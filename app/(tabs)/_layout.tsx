@@ -1,22 +1,24 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/tokens';
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+type MciName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 function TabIcon({
   name,
   focused,
+  size = 28,
 }: {
-  name: IoniconName;
+  name: MciName;
   focused: boolean;
+  size?: number;
 }) {
   return (
-    <Ionicons
-      name={focused ? (name.replace('-outline', '') as IoniconName) : name}
-      size={26}
-      color={focused ? colors.primary : colors.textTertiary}
+    <MaterialCommunityIcons
+      name={name}
+      size={size}
+      color={focused ? colors.primary : colors.textMuted}
     />
   );
 }
@@ -26,21 +28,20 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarShowLabel: false,
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 83,
-          paddingBottom: 20,
-          paddingTop: 6,
+          height: 76,
+          paddingTop: 10,
+          paddingBottom: 22,
         },
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textTertiary,
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '800',
-          letterSpacing: 0.2,
-          marginTop: 2,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarItemStyle: {
+          justifyContent: 'center',
+          alignItems: 'center',
         },
       }}
     >
@@ -49,7 +50,7 @@ export default function TabsLayout() {
         options={{
           title: 'Talk',
           tabBarIcon: ({ focused }) => (
-            <TabIcon name="chatbubble-ellipses-outline" focused={focused} />
+            <TabIcon name="account-voice" focused={focused} />
           ),
         }}
       />
@@ -58,7 +59,7 @@ export default function TabsLayout() {
         options={{
           title: 'Activity',
           tabBarIcon: ({ focused }) => (
-            <TabIcon name="bulb-outline" focused={focused} />
+            <TabIcon name="lightbulb-on" focused={focused} size={26} />
           ),
         }}
       />
@@ -67,7 +68,7 @@ export default function TabsLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ focused }) => (
-            <TabIcon name="settings-outline" focused={focused} />
+            <TabIcon name="cog" focused={focused} />
           ),
         }}
       />
@@ -76,7 +77,7 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ focused }) => (
-            <TabIcon name="person-outline" focused={focused} />
+            <TabIcon name="account" focused={focused} />
           ),
         }}
       />
