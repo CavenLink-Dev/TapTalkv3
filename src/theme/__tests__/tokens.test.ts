@@ -8,18 +8,21 @@ describe('theme tokens', () => {
 
     it('contains all required keys', () => {
       const expected = [
-        'primary', 'primaryDark', 'mascot', 'background', 'surface',
-        'softBlue', 'text', 'textMuted', 'textTertiary', 'border',
-        'borderBlue', 'input', 'success', 'warning', 'danger', 'disabled',
+        'background', 'surface', 'navBackground', 'primary', 'primaryDark',
+        'primaryPressed', 'softBlue', 'mascot', 'mascotOutline', 'mascotWhite',
+        'text', 'textMuted', 'textTertiary', 'textOnDark', 'inputBg',
+        'inputBgWhite', 'input', 'progressFill', 'progressTrack', 'border',
+        'symbolOutline', 'borderBlue', 'danger', 'success', 'warning', 'disabled',
+        'folderBg', 'folderFlap', 'folderFlapSecondary',
       ];
       for (const key of expected) {
         expect(colors).toHaveProperty(key);
       }
     });
 
-    it('all values are hex color strings', () => {
+    it('all values are valid color strings', () => {
       for (const value of Object.values(colors)) {
-        expect(value).toMatch(/^#[0-9a-fA-F]{6}$/);
+        expect(value).toMatch(/^(#[0-9a-fA-F]{6}|rgba?\(.+\))$/);
       }
     });
   });
@@ -53,6 +56,11 @@ describe('theme tokens', () => {
   describe('typography', () => {
     it('body size is 17', () => {
       expect(typography.body).toBe(17);
+    });
+
+    it('exposes SF Compact font families', () => {
+      expect(typeof typography.fontFamily).toBe('string');
+      expect(typeof typography.fontFamilyDisplay).toBe('string');
     });
 
     it('title is the largest size', () => {

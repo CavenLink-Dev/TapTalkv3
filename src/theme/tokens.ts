@@ -1,8 +1,10 @@
 /**
  * TapTalk design tokens — single source of truth.
- * All values are sourced directly from `Mode 1.tokens.json` (Figma variables).
+ * All source values are derived from `src/theme/figma_source/Mode 1.tokens.json`.
  * Variable names are preserved as comments so you can cross-reference the Figma file.
  */
+
+import { Platform } from 'react-native';
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +24,8 @@ export const colors = {
   primaryDark:        '#006DD3',
   /** button_pressed (tap feedback) — VariableID:1:1139 */
   primaryPressed:     '#62C1FF',
+  /** compatibility alias mapped from progress_bar_background */
+  softBlue:           '#D5E1E8',
 
   // ── Mascot palette
   /** mascot_main_base_colour_baby_blue — VariableID:1:1124 */
@@ -46,6 +50,8 @@ export const colors = {
   inputBg:            '#EAEEF2',
   /** input_background_full_white — VariableID:45:257 */
   inputBgWhite:       '#FFFFFF',
+  /** compatibility alias mapped from input_box_background */
+  input:              '#EAEEF2',
 
   // ── Progress bar
   /** button_main_and_progress_bar_filler (reused) */
@@ -58,12 +64,16 @@ export const colors = {
   border:             '#BBC0C7',
   /** outline_black_symbol_folder — VariableID:45:510 */
   symbolOutline:      '#434343',
+  /** compatibility alias mapped from outline_stroke_rarely_used */
+  borderBlue:         '#BBC0C7',
 
   // ── Status
   /** error_colour_red — VariableID:1:1122 */
   danger:             '#F3312A',
   success:            '#30D158',
   warning:            '#FF9500',
+  /** compatibility alias mapped from progress_bar_background */
+  disabled:           '#D5E1E8',
 
   // ── Folder cells
   /** folder_main_colour — VariableID:45:522 */
@@ -131,7 +141,8 @@ export const spacing = {
 // ─── Typography ───────────────────────────────────────────────────────────────
 
 export const typography = {
-  fontFamily:  'System',
+  fontFamily:  Platform.select({ ios: 'SF Compact', default: 'System' }) ?? 'System',
+  fontFamilyDisplay: Platform.select({ ios: 'SF Compact Rounded', default: 'System' }) ?? 'System',
   title:       30,
   heading:     24,
   subheading:  20,
