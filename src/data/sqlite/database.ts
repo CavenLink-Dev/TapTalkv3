@@ -32,15 +32,13 @@ export async function migrateSymbolBrainDatabase(db: TapTalkDatabase) {
   const currentVersion = await getUserVersion(db);
   if (currentVersion >= SYMBOL_BRAIN_DB_VERSION) return;
 
-  await db.withTransactionAsync(async () => {
-    for (let index = currentVersion; index < SYMBOL_BRAIN_MIGRATIONS.length; index += 1) {
-      const migration = SYMBOL_BRAIN_MIGRATIONS[index];
-      if (migration) {
-        await db.execAsync(migration);
-      }
+  for (let index = currentVersion; index < SYMBOL_BRAIN_MIGRATIONS.length; index += 1) {
+    const migration = SYMBOL_BRAIN_MIGRATIONS[index];
+    if (migration) {
+      await db.execAsync(migration);
     }
-    await setUserVersion(db, SYMBOL_BRAIN_DB_VERSION);
-  });
+  }
+  await setUserVersion(db, SYMBOL_BRAIN_DB_VERSION);
 }
 
 export async function resetSymbolBrainDatabaseForDev() {

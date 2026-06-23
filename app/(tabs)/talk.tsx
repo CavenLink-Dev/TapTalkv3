@@ -18,7 +18,7 @@
  * category strip and tab bar are visible in the source frame.
  */
 
-import React, { useCallback, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   Dimensions,
@@ -26,6 +26,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,49 +39,11 @@ import {
   SaveButtonIcon,
   TrashButtonIcon,
 } from '../../src/components/icons/FigmaIcons';
+import { SymbolSuggestionRow } from '../../src/components/aac/symbols/SymbolSuggestionRow';
 import { SymbolTile } from '../../src/components/symbols/SymbolTile';
-import {
-  MulberrySymbol,
-  hasMulberrySymbol,
-} from '../../src/components/symbols/MulberrySymbol';
-
-// ─── Demo symbols — Mulberry pictograms on Fitzgerald-key tiles ─────────────
-// Mulberry ships strong noun/verb illustrations; pronouns and function words
-// (`you`, `yes`, `no`, `please`, `the`) get text-only tiles for now.
-const DEMO_SYMBOLS: { label: string; color: string; mulberry?: string }[] = [
-  { label: 'I',     color: symbolColors.pronoun,      mulberry: 'i'     },
-  { label: 'you',   color: symbolColors.pronoun                          },
-  { label: 'want',  color: symbolColors.verb,         mulberry: 'want'  },
-  { label: 'go',    color: symbolColors.verb,         mulberry: 'go'    },
-  { label: 'come',  color: symbolColors.verb,         mulberry: 'come'  },
-  { label: 'help',  color: symbolColors.social,       mulberry: 'help'  },
-  { label: 'more',  color: symbolColors.adjective,    mulberry: 'more'  },
-  { label: 'food',  color: symbolColors.noun,         mulberry: 'food'  },
-  { label: 'eat',   color: symbolColors.verb,         mulberry: 'eat'   },
-  { label: 'drink', color: symbolColors.verb,         mulberry: 'drink' },
-  { label: 'play',  color: symbolColors.verb,         mulberry: 'play'  },
-  { label: 'look',  color: symbolColors.verb,         mulberry: 'look'  },
-  { label: 'walk',  color: symbolColors.verb,         mulberry: 'walk'  },
-  { label: 'good',  color: symbolColors.adjective,    mulberry: 'good'  },
-  { label: 'bad',   color: symbolColors.adjective,    mulberry: 'bad'   },
-  { label: 'hot',   color: symbolColors.adjective,    mulberry: 'hot'   },
-  { label: 'little',color: symbolColors.adjective,    mulberry: 'little'},
-  { label: 'happy', color: symbolColors.adjective,    mulberry: 'happy' },
-  { label: 'sad',   color: symbolColors.adjective,    mulberry: 'sad'   },
-  { label: 'mum',   color: symbolColors.noun,         mulberry: 'mum'   },
-  { label: 'dad',   color: symbolColors.noun,         mulberry: 'dad'   },
-  { label: 'milk',  color: symbolColors.noun,         mulberry: 'milk'  },
-  { label: 'water', color: symbolColors.noun,         mulberry: 'water' },
-  { label: 'hello', color: symbolColors.social,       mulberry: 'hello' },
-  { label: 'what',  color: symbolColors.question,     mulberry: 'what'  },
-  { label: 'where', color: symbolColors.question,     mulberry: 'where' },
-  { label: 'who',   color: symbolColors.question,     mulberry: 'who'   },
-  { label: 'why',   color: symbolColors.question,     mulberry: 'why'   },
-  { label: 'how',   color: symbolColors.question,     mulberry: 'how'   },
-  { label: 'yes',   color: symbolColors.social                          },
-  { label: 'no',    color: symbolColors.negation                        },
-  { label: 'please',color: symbolColors.social                          },
-];
+import { MulberrySymbol } from '../../src/components/symbols/MulberrySymbol';
+import { searchSymbols } from '../../src/features/symbol-brain/symbolSearchService';
+import { SearchResult } from '../../src/features/symbol-brain/types';
 
 // Grid sizing — 6 cols, 2 px gap, 4 px side padding inside the safe area.
 const GRID_SIDE_PAD = 4;
@@ -102,10 +65,87 @@ const CATEGORIES = [
 
 type CategoryId = (typeof CATEGORIES)[number]['id'];
 
+type StableBoardWord = {
+  id: string;
+  category: CategoryId;
+  label: string;
+  searchTerm: string;
+  color: string;
+};
+
+const STABLE_BOARD_WORDS: StableBoardWord[] = [
+  { id: 'main-i', category: 'main', label: 'I', searchTerm: 'I', color: symbolColors.pronoun },
+  { id: 'main-you', category: 'main', label: 'you', searchTerm: 'you', color: symbolColors.pronoun },
+  { id: 'main-want', category: 'main', label: 'want', searchTerm: 'want', color: symbolColors.verb },
+  { id: 'main-go', category: 'main', label: 'go', searchTerm: 'go', color: symbolColors.verb },
+  { id: 'main-more', category: 'main', label: 'more', searchTerm: 'more', color: symbolColors.adjective },
+  { id: 'main-help', category: 'main', label: 'help', searchTerm: 'help', color: symbolColors.social },
+  { id: 'main-yes', category: 'main', label: 'yes', searchTerm: 'yes', color: symbolColors.social },
+  { id: 'main-no', category: 'main', label: 'no', searchTerm: 'no', color: symbolColors.negation },
+  { id: 'main-what', category: 'main', label: 'what', searchTerm: 'what', color: symbolColors.question },
+  { id: 'main-where', category: 'main', label: 'where', searchTerm: 'where', color: symbolColors.question },
+  { id: 'actions-eat', category: 'actions', label: 'eat', searchTerm: 'eat', color: symbolColors.verb },
+  { id: 'actions-drink', category: 'actions', label: 'drink', searchTerm: 'drink', color: symbolColors.verb },
+  { id: 'actions-play', category: 'actions', label: 'play', searchTerm: 'play', color: symbolColors.verb },
+  { id: 'actions-look', category: 'actions', label: 'look', searchTerm: 'look', color: symbolColors.verb },
+  { id: 'actions-walk', category: 'actions', label: 'walk', searchTerm: 'walk', color: symbolColors.verb },
+  { id: 'actions-come', category: 'actions', label: 'come', searchTerm: 'come', color: symbolColors.verb },
+  { id: 'feelings-happy', category: 'feelings', label: 'happy', searchTerm: 'happy', color: symbolColors.adjective },
+  { id: 'feelings-sad', category: 'feelings', label: 'sad', searchTerm: 'sad', color: symbolColors.adjective },
+  { id: 'feelings-good', category: 'feelings', label: 'good', searchTerm: 'good', color: symbolColors.adjective },
+  { id: 'feelings-bad', category: 'feelings', label: 'bad', searchTerm: 'bad', color: symbolColors.adjective },
+  { id: 'feelings-hot', category: 'feelings', label: 'hot', searchTerm: 'hot', color: symbolColors.adjective },
+  { id: 'feelings-little', category: 'feelings', label: 'little', searchTerm: 'little', color: symbolColors.adjective },
+  { id: 'food-food', category: 'food', label: 'food', searchTerm: 'food', color: symbolColors.noun },
+  { id: 'food-water', category: 'food', label: 'water', searchTerm: 'water', color: symbolColors.noun },
+  { id: 'food-milk', category: 'food', label: 'milk', searchTerm: 'milk', color: symbolColors.noun },
+  { id: 'food-eat', category: 'food', label: 'eat', searchTerm: 'eat', color: symbolColors.verb },
+  { id: 'social-hello', category: 'social', label: 'hello', searchTerm: 'hello', color: symbolColors.social },
+  { id: 'social-please', category: 'social', label: 'please', searchTerm: 'please', color: symbolColors.social },
+  { id: 'social-mum', category: 'social', label: 'mum', searchTerm: 'mum', color: symbolColors.noun },
+  { id: 'social-dad', category: 'social', label: 'dad', searchTerm: 'dad', color: symbolColors.noun },
+  { id: 'social-who', category: 'social', label: 'who', searchTerm: 'who', color: symbolColors.question },
+  { id: 'social-how', category: 'social', label: 'how', searchTerm: 'how', color: symbolColors.question },
+];
+
+function StableBoardTile({
+  item,
+  result,
+  onPress,
+}: {
+  item: StableBoardWord;
+  result?: SearchResult | null;
+  onPress: () => void;
+}) {
+  const SymbolGlyph = result
+    ? ({ size }: { size?: number }) => (
+        <MulberrySymbol symbolId={result.symbol.id} size={size} />
+      )
+    : undefined;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Say ${item.label}`}
+      onPress={onPress}
+    >
+      <SymbolTile
+        label={item.label}
+        color={item.color}
+        Symbol={SymbolGlyph}
+        size={CELL_SIZE}
+      />
+    </Pressable>
+  );
+}
+
 export default function TalkScreen() {
   const { state, dispatch } = useAppContext();
   const { speak, lastError, clearError } = useSpeech();
   const [activeCategory, setActiveCategory] = useState<CategoryId>('main');
+  const [typedInput, setTypedInput] = useState('');
+  const [boardResults, setBoardResults] = useState<Record<string, SearchResult | null>>({});
+  const [boardLoading, setBoardLoading] = useState(false);
 
   // Visual flash when "save phrase" is pressed
   const [savedFlash, setSavedFlash] = useState(false);
@@ -116,7 +156,76 @@ export default function TalkScreen() {
     [state.messageWords],
   );
   const hasWords = state.messageWords.length > 0;
+  const suggestionQuery = hasWords ? '' : typedInput.trim();
+  const hasTypedInput = typedInput.length > 0;
+  const canBackspace = hasWords || hasTypedInput;
+  const currentBoardWords = useMemo(
+    () => STABLE_BOARD_WORDS.filter(word => word.category === activeCategory),
+    [activeCategory],
+  );
   const announce = (msg: string) => AccessibilityInfo.announceForAccessibility(msg);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function resolveBoard() {
+      setBoardLoading(true);
+      const unresolved = currentBoardWords.filter(word => boardResults[word.id] === undefined);
+      try {
+        const entries = await Promise.all(unresolved.map(async (word) => {
+          const results = await searchSymbols(word.searchTerm);
+          return [word.id, results[0] ?? null] as const;
+        }));
+        if (!cancelled && entries.length > 0) {
+          setBoardResults(prev => ({
+            ...prev,
+            ...Object.fromEntries(entries),
+          }));
+        }
+      } finally {
+        if (!cancelled) setBoardLoading(false);
+      }
+    }
+    resolveBoard();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentBoardWords, boardResults]);
+
+  const appendResult = useCallback((result: SearchResult, source: 'board' | 'suggestion') => {
+    hapticSelection();
+    dispatch({
+      type: 'APPEND_WORD',
+      payload: {
+        id: `${source}-${result.symbol.id}-${Date.now()}`,
+        label: result.symbol.display_name,
+        wordType: 'core',
+        conceptId: result.concept.concept_id,
+        symbolId: result.symbol.id,
+        source,
+      },
+    });
+    setTypedInput('');
+    speak(result.symbol.display_name, { rate: 0.9 });
+    announce(`Added ${result.symbol.display_name}`);
+  }, [dispatch, speak]);
+
+  const appendBoardWord = useCallback((item: StableBoardWord) => {
+    const result = boardResults[item.id];
+    hapticSelection();
+    dispatch({
+      type: 'APPEND_WORD',
+      payload: {
+        id: `board-${item.id}-${Date.now()}`,
+        label: item.label,
+        wordType: 'core',
+        conceptId: result?.concept.concept_id,
+        symbolId: result?.symbol.id,
+        source: 'board',
+      },
+    });
+    speak(item.label, { rate: 0.9 });
+    announce(`Added ${item.label}`);
+  }, [announce, boardResults, dispatch, speak]);
 
   const handleSpeak = useCallback(() => {
     if (!wordsText.trim()) { announce('No message to speak'); return; }
@@ -126,16 +235,24 @@ export default function TalkScreen() {
   }, [wordsText, speak]);
 
   const handleBackspace = useCallback(() => {
-    if (!hasWords) return;
+    if (!canBackspace) return;
     hapticSelection();
-    dispatch({ type: 'REMOVE_LAST_WORD' });
-  }, [hasWords, dispatch]);
+    if (hasWords) {
+      dispatch({ type: 'REMOVE_LAST_WORD' });
+      return;
+    }
+    setTypedInput(prev => prev.slice(0, -1));
+  }, [canBackspace, hasWords, dispatch]);
 
   const handleClear = useCallback(() => {
-    if (!hasWords) return;
+    if (!hasWords && !hasTypedInput) return;
     hapticSelection();
-    dispatch({ type: 'CLEAR_WORDS' });
-  }, [hasWords, dispatch]);
+    if (hasWords) {
+      dispatch({ type: 'CLEAR_WORDS' });
+      return;
+    }
+    setTypedInput('');
+  }, [hasWords, hasTypedInput, dispatch]);
 
   const handleSavePhrase = useCallback(() => {
     if (!hasWords) return;
@@ -169,20 +286,36 @@ export default function TalkScreen() {
       {/* ── Message bar row (card + side panel) ────────────────────── */}
       <View style={styles.messageRow}>
         {/* Message card — "Tap to speak" */}
-        <Pressable
-          accessibilityRole="button"
+        <View
           accessibilityLabel={
             hasWords ? `Speak: ${wordsText}` : 'Tap symbols to start a sentence'
           }
-          onPress={handleSpeak}
           style={styles.messageCard}
         >
-          <Text
-            style={[styles.messageText, !hasWords && styles.messagePlaceholder]}
-            numberOfLines={2}
-          >
-            {hasWords ? wordsText : 'Tap to speak....'}
-          </Text>
+          {hasWords ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Speak: ${wordsText}`}
+              onPress={handleSpeak}
+              style={styles.messageTextWrap}
+            >
+              <Text style={styles.messageText} numberOfLines={2}>
+                {wordsText}
+              </Text>
+            </Pressable>
+          ) : (
+            <TextInput
+              accessibilityLabel="Type to search local Mulberry symbols"
+              value={typedInput}
+              onChangeText={setTypedInput}
+              placeholder="Tap to speak...."
+              placeholderTextColor={colors.textTertiary}
+              autoCapitalize="none"
+              autoCorrect
+              returnKeyType="search"
+              style={[styles.messageText, styles.messageInput]}
+            />
+          )}
 
           <Pressable
             accessibilityRole="button"
@@ -190,13 +323,13 @@ export default function TalkScreen() {
             accessibilityHint="Long press to clear all words"
             onPress={handleBackspace}
             onLongPress={handleClear}
-            disabled={!hasWords}
+            disabled={!canBackspace}
             hitSlop={8}
-            style={[styles.backspaceBtn, !hasWords && styles.dim]}
+            style={[styles.backspaceBtn, !canBackspace && styles.dim]}
           >
             <BackspaceIcon size={45} />
           </Pressable>
-        </Pressable>
+        </View>
 
         {/* Side panel — red trash + green save */}
         <View style={styles.sidePanel}>
@@ -204,8 +337,8 @@ export default function TalkScreen() {
             accessibilityRole="button"
             accessibilityLabel="Clear all words"
             onPress={handleClear}
-            disabled={!hasWords}
-            style={[styles.sideIconBtn, !hasWords && styles.dim]}
+            disabled={!hasWords && !hasTypedInput}
+            style={[styles.sideIconBtn, !hasWords && !hasTypedInput && styles.dim]}
           >
             <TrashButtonIcon size={39} />
           </Pressable>
@@ -226,8 +359,13 @@ export default function TalkScreen() {
         </View>
       </View>
 
+      <SymbolSuggestionRow
+        query={suggestionQuery}
+        onSelect={(result) => appendResult(result, 'suggestion')}
+      />
+
       {/* ── Category strip (Figma node 86:275) ──────────────────────── */}
-      <View style={styles.categoryStrip}>
+      <View style={[styles.categoryStrip, suggestionQuery ? styles.categoryStripWithSuggestions : null]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -259,23 +397,17 @@ export default function TalkScreen() {
         contentContainerStyle={styles.symbolGrid}
         showsVerticalScrollIndicator={false}
       >
-        {DEMO_SYMBOLS.map(sym => {
-          const SymbolGlyph =
-            sym.mulberry && hasMulberrySymbol(sym.mulberry)
-              ? ({ size }: { size?: number }) => (
-                  <MulberrySymbol name={sym.mulberry!} size={size} />
-                )
-              : undefined;
-          return (
-            <SymbolTile
-              key={sym.label}
-              label={sym.label}
-              color={sym.color}
-              Symbol={SymbolGlyph}
-              size={CELL_SIZE}
-            />
-          );
-        })}
+        {currentBoardWords.map(word => (
+          <StableBoardTile
+            key={word.id}
+            item={word}
+            result={boardResults[word.id]}
+            onPress={() => appendBoardWord(word)}
+          />
+        ))}
+        {boardLoading ? (
+          <Text style={styles.boardLoadingText}>Loading local symbols...</Text>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -334,6 +466,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 22,
   },
+  messageTextWrap: {
+    flex: 1,
+  },
+  messageInput: {
+    minHeight: 80,
+    padding: 0,
+  },
   messagePlaceholder: {
     color: colors.textTertiary,
     fontWeight: '400',
@@ -378,6 +517,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     justifyContent: 'center',
   },
+  categoryStripWithSuggestions: {
+    marginTop: 8,
+  },
   pillRow: {
     paddingHorizontal: 15,
     gap: 15,
@@ -404,5 +546,11 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 8,
     gap: GRID_GAP,
+  },
+  boardLoadingText: {
+    width: '100%',
+    padding: spacing.md,
+    color: colors.textMuted,
+    fontSize: typography.caption,
   },
 });

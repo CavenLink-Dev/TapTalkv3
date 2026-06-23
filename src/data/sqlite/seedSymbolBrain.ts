@@ -9,6 +9,7 @@ type SeedConcept = SeedBundle['concepts'][number] & {
 };
 
 const SEED_SOURCE_RELEASE = seedBundle.source_release;
+let seedPromise: Promise<void> | null = null;
 
 async function alreadySeeded(): Promise<boolean> {
   const db = await openSymbolBrainDatabase();
@@ -20,6 +21,14 @@ async function alreadySeeded(): Promise<boolean> {
 }
 
 export async function seedSymbolBrainDatabase(force = false) {
+  if (!force && seedPromise) return seedPromise;
+  seedPromise = seedSymbolBrainDatabaseInternal(force).finally(() => {
+    seedPromise = null;
+  });
+  return seedPromise;
+}
+
+async function seedSymbolBrainDatabaseInternal(force = false) {
   const db = await openSymbolBrainDatabase();
   if (!force && await alreadySeeded()) return;
 

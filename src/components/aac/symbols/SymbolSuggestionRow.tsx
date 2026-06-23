@@ -20,6 +20,7 @@ export function SymbolSuggestionRow({
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,12 +28,19 @@ export function SymbolSuggestionRow({
       const trimmed = query.trim();
       if (!trimmed) {
         setResults([]);
+        setError(null);
         return;
       }
       setLoading(true);
       try {
+        setError(null);
         const next = await searchSymbols(trimmed, userId, context);
         if (!cancelled) setResults(next.slice(0, 6));
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setResults([]);
+          setError(e instanceof Error ? e.message : 'Symbol search unavailable');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -64,7 +72,10 @@ export function SymbolSuggestionRow({
             onPress={onSelect}
           />
         ))}
-        {!loading && results.length === 0 ? (
+        {error ? (
+          <Text style={styles.error}>Symbol search unavailable</Text>
+        ) : null}
+        {!loading && !error && results.length === 0 ? (
           <Text style={styles.empty}>No local symbol found</Text>
         ) : null}
       </ScrollView>
@@ -99,6 +110,12 @@ const styles = StyleSheet.create({
   empty: {
     color: colors.textTertiary,
     fontSize: 13,
+    paddingVertical: spacing.md,
+  },
+  error: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: '700',
     paddingVertical: spacing.md,
   },
 });

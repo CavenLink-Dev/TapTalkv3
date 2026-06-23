@@ -47,6 +47,9 @@ export interface AACWord {
   label: string;
   wordType: 'pronoun' | 'verb' | 'preposition' | 'qualifier' | 'core' | 'folder';
   emoji?: string; // placeholder until Mulberry symbols loaded
+  conceptId?: string;
+  symbolId?: string;
+  source?: 'board' | 'suggestion' | 'typed';
 }
 
 export interface TaskTag {

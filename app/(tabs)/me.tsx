@@ -18,6 +18,7 @@ const documents = [
   'Caregiver Controls',
 ];
 const splashRoute = '/onboarding/splash' as Href;
+const attributionRoute = '/symbol-attribution' as Href;
 
 export default function MeScreen() {
   const router = useRouter();
@@ -122,6 +123,15 @@ export default function MeScreen() {
             <Text style={styles.docText}>{doc}</Text>
           </View>
         ))}
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Open symbol licences"
+          onPress={() => router.push(attributionRoute)}
+          style={styles.docRow}
+        >
+          <Text style={styles.docIcon}>i</Text>
+          <Text style={styles.docText}>Symbol Licences & Attribution</Text>
+        </Pressable>
       </Card>
 
       <Card style={listStyles.section}>
