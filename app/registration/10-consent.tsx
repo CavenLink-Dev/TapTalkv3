@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
+import { RegistrationScaffold } from '../../src/components/registration/RegistrationScaffold';
+import { SelectableCard } from '../../src/components/registration/SelectableCard';
+import { useRegistration, toUserPayload } from '../../src/context/RegistrationContext';
 import { useAppContext } from '../../src/hooks/useAppContext';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { spacing } from '../../src/theme/tokens';
 
 const tourRoute = '/onboarding/tour' as Href;
 
@@ -16,67 +18,54 @@ const CONSENTS = [
 
 export default function RegStep10Consent() {
   const router = useRouter();
+  const { data, update } = useRegistration();
   const { dispatch } = useAppContext();
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
 
-  const allChecked = CONSENTS.every(c => checked[c.id]);
+  const allChecked = CONSENTS.every((c) => data.consents[c.id]);
 
-  const toggle = (id: string) => setChecked((prev: Record<string, boolean>) => ({ ...prev, [id]: !prev[id] }));
+  const toggle = (id: string) =>
+    update({ consents: { ...data.consents, [id]: !data.consents[id] } });
 
   const createAccount = () => {
     if (!allChecked) return;
+    dispatch({ type: 'SET_USER', payload: toUserPayload(data) });
     dispatch({ type: 'COMPLETE_ONBOARDING' });
-    dispatch({ type: 'SIGN_IN', payload: { email: 'new-user@taptalk.local', displayName: 'TapTalk User' } });
+    dispatch({
+      type: 'SIGN_IN',
+      payload: { email: data.email.trim(), displayName: toUserPayload(data).displayName },
+    });
     router.replace(tourRoute);
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.step}>Step 10 of 10</Text>
-        <Text style={styles.title}>Legal & Consent</Text>
-        <Text style={styles.hint}>All three must be ticked to create your account.</Text>
-
-        <View style={styles.checkboxes}>
-          {CONSENTS.map(c => (
-            <Pressable key={c.id} onPress={() => toggle(c.id)} style={styles.row} accessibilityRole="checkbox" accessibilityState={{ checked: !!checked[c.id] }}>
-              <View style={[styles.box, checked[c.id] && styles.boxChecked]}>
-                {checked[c.id] && <Text style={styles.tick}>✓</Text>}
-              </View>
-              <Text style={styles.label}>{c.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.footer}>
+    <RegistrationScaffold
+      step={10}
+      title="Review & consent"
+      subtitle="Confirm the agreements below to finish creating your account."
+      scroll
+      footer={
         <PrimaryButton
-          accessibilityLabel="Create Account"
-          label="Create Account"
+          accessibilityLabel="Create account"
+          label="Create account"
           disabled={!allChecked}
           onPress={createAccount}
         />
+      }
+    >
+      <View style={styles.list}>
+        {CONSENTS.map((c) => (
+          <SelectableCard
+            key={c.id}
+            label={c.label}
+            selected={!!data.consents[c.id]}
+            onPress={() => toggle(c.id)}
+          />
+        ))}
       </View>
-    </SafeAreaView>
+    </RegistrationScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xxl },
-  step: { fontSize: typography.caption, color: colors.textTertiary, marginBottom: spacing.sm },
-  title: { fontSize: typography.heading, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
-  hint: { fontSize: typography.callout, color: colors.textMuted, marginBottom: spacing.xl },
-  checkboxes: { gap: spacing.lg },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  box: {
-    width: 26, height: 26, borderRadius: radii.button / 2,
-    borderWidth: 2, borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  boxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
-  tick: { color: colors.textOnDark, fontSize: 14, fontWeight: '700' },
-  label: { flex: 1, fontSize: typography.callout, color: colors.text },
-  footer: { padding: spacing.xl },
+  list: { gap: spacing.md },
 });

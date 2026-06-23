@@ -1,55 +1,67 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card } from '../../src/components/native/Card';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { TextField } from '../../src/components/native/TextField';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { RegistrationScaffold } from '../../src/components/registration/RegistrationScaffold';
+import { useRegistration } from '../../src/context/RegistrationContext';
 import { authFormStyles } from '../../src/styles/authFormStyles';
+import { colors, spacing, typography } from '../../src/theme/tokens';
 
 const nextRoute = '/registration/04-dob' as Href;
 
 export default function RegStep3Username() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const { data, update } = useRegistration();
+  const username = data.username;
 
-  const isValid = username.length === 0 || (username.length >= 8 && username.length <= 12 && /^[a-zA-Z0-9]+$/.test(username));
+  const isValid =
+    username.length === 0 ||
+    (username.length >= 8 && username.length <= 12 && /^[a-zA-Z0-9]+$/.test(username));
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.step}>Step 3 of 10</Text>
-        <Text style={styles.title}>What should we call you?</Text>
-        <Text style={styles.hint}>Optional — 8–12 characters, letters and numbers only.</Text>
-
-        <Card>
-          <TextField
-            accessibilityLabel="Username"
-            placeholder="Username (optional)"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={12}
+    <RegistrationScaffold
+      step={3}
+      title="Choose a username"
+      subtitle="Optional. 8–12 characters, letters and numbers only."
+      scroll
+      footer={
+        <>
+          <PrimaryButton
+            accessibilityLabel="Continue"
+            label="Continue"
+            disabled={username.length > 0 && !isValid}
+            onPress={() => router.push(nextRoute)}
           />
-        </Card>
+          <PrimaryButton
+            accessibilityLabel="Skip this step"
+            label="Skip for now"
+            variant="secondary"
+            onPress={() => router.push(nextRoute)}
+          />
+        </>
+      }
+    >
+      <View>
+        <Text style={authFormStyles.label}>Username</Text>
+        <TextField
+          accessibilityLabel="Username"
+          placeholder="e.g. alexmorgan"
+          value={username}
+          onChangeText={(t) => update({ username: t })}
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={12}
+          style={authFormStyles.field}
+        />
+        {username.length > 0 && !isValid ? (
+          <Text style={styles.error}>Use 8–12 letters and numbers, with no spaces or symbols.</Text>
+        ) : null}
       </View>
-
-      <View style={styles.footer}>
-        <PrimaryButton accessibilityLabel="Skip this step" label="Skip" variant="secondary" onPress={() => router.push(nextRoute)} style={styles.skip} />
-        <PrimaryButton accessibilityLabel="Continue" label="Continue" disabled={username.length > 0 && !isValid} onPress={() => router.push(nextRoute)} />
-      </View>
-    </SafeAreaView>
+    </RegistrationScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xxl },
-  step: { fontSize: typography.caption, color: colors.textTertiary, marginBottom: spacing.sm },
-  title: { fontSize: typography.heading, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
-  hint: { fontSize: typography.callout, color: colors.textMuted, marginBottom: spacing.xl },
-  footer: { padding: spacing.xl, gap: spacing.sm },
-  skip: { width: '100%' },
+  error: { fontSize: typography.caption, color: colors.danger, marginTop: spacing.xs },
 });

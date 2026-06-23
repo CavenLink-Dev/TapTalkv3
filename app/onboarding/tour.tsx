@@ -1,6 +1,5 @@
 import React, { useRef, useState } from 'react';
 import {
-  Animated,
   Dimensions,
   Pressable,
   ScrollView,
@@ -10,65 +9,58 @@ import {
 } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { MascotImage } from '../../src/components/MascotImage';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
-import { SpeechBubble } from '../../src/components/native/SpeechBubble';
-import { colors, radii, shadows, spacing, typography } from '../../src/theme/tokens';
+import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
 const talkRoute = '/(tabs)/talk' as Href;
 const { width: SCREEN_W } = Dimensions.get('window');
 
 interface TourSlide {
   id: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   iconColor: string;
   iconBg: string;
   title: string;
   description: string;
-  mascotLine: string;
 }
 
 const SLIDES: TourSlide[] = [
   {
     id: 'talk',
-    icon: 'chatbubble-ellipses-outline',
+    icon: 'account-voice',
     iconColor: colors.primary,
     iconBg: '#E6F4FD',
-    title: 'TALK',
+    title: 'Talk',
     description:
-      'Your AAC communication board. Tap symbols to build a sentence, then tap to speak it aloud — free forever.',
-    mascotLine: 'This is where your voice lives. Tap any symbol to say a word!',
+      'Your communication board. Build a message from symbols or text, then speak it aloud with one tap.',
   },
   {
     id: 'activity',
-    icon: 'bulb-outline',
+    icon: 'lightbulb-on',
     iconColor: '#FF9500',
     iconBg: '#FFF4E0',
-    title: 'ACTIVITY',
+    title: 'Activity',
     description:
-      'Cognitive and therapy-style activities — memory games, picture matching, and more. Premium feature.',
-    mascotLine: 'Fun challenges to keep your mind sharp. Premium unlocks more!',
+      'Practice and therapy-style exercises to build and maintain language skills at your own pace.',
   },
   {
     id: 'settings',
-    icon: 'settings-outline',
-    iconColor: '#5CD65C',
-    iconBg: '#E8FAE8',
-    title: 'SETTINGS',
+    icon: 'cog',
+    iconColor: '#34A853',
+    iconBg: '#E8FAEE',
+    title: 'Settings',
     description:
-      'First-Then boards, daily planners, visual timers, and app preferences — all in one place.',
-    mascotLine: 'Customise how TapTalk works for you right here.',
+      'Shape TapTalk around you — boards, planners, timers and access controls, all in one place.',
   },
   {
     id: 'profile',
-    icon: 'person-circle-outline',
-    iconColor: '#BD73FF',
-    iconBg: '#F3EAFF',
-    title: 'PROFILE',
+    icon: 'account',
+    iconColor: '#7C5CFF',
+    iconBg: '#F0EAFF',
+    title: 'Profile',
     description:
-      'Your account, voice settings, caregiver controls, and subscription status. Always free to access.',
-    mascotLine: "That's your space. Edit your name, voice, and settings anytime.",
+      'Manage your account, voice, support settings and subscription whenever you need to.',
   },
 ];
 
@@ -76,17 +68,10 @@ export default function TourScreen() {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const dotScale = useRef(SLIDES.map(() => new Animated.Value(1))).current;
 
   const goTo = (index: number) => {
     scrollRef.current?.scrollTo({ x: index * SCREEN_W, animated: true });
     setActiveIndex(index);
-    const dot = dotScale[index];
-    if (!dot) return;
-    Animated.sequence([
-      Animated.timing(dot, { toValue: 1.4, duration: 150, useNativeDriver: true }),
-      Animated.timing(dot, { toValue: 1.0, duration: 150, useNativeDriver: true }),
-    ]).start();
   };
 
   const handleScroll = (e: { nativeEvent: { contentOffset: { x: number } } }) => {
@@ -95,21 +80,21 @@ export default function TourScreen() {
   };
 
   const isLast = activeIndex === SLIDES.length - 1;
-  const slide = SLIDES[activeIndex] ?? SLIDES[0]!;
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Skip always visible */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Skip tour"
-        onPress={() => router.replace(talkRoute)}
-        style={styles.skipBtn}
-      >
-        <Text style={styles.skipText}>SKIP</Text>
-      </Pressable>
+      <View style={styles.topBar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Skip the tour"
+          onPress={() => router.replace(talkRoute)}
+          hitSlop={10}
+          style={styles.skipBtn}
+        >
+          <Text style={styles.skipText}>Skip</Text>
+        </Pressable>
+      </View>
 
-      {/* Slide pager */}
       <ScrollView
         ref={scrollRef}
         horizontal
@@ -120,55 +105,30 @@ export default function TourScreen() {
       >
         {SLIDES.map((s) => (
           <View key={s.id} style={styles.slide}>
-            {/* Icon pill */}
             <View style={[styles.iconCircle, { backgroundColor: s.iconBg }]}>
-              <Ionicons name={s.icon} size={52} color={s.iconColor} />
+              <MaterialCommunityIcons name={s.icon} size={56} color={s.iconColor} />
             </View>
-
             <Text style={styles.slideTitle}>{s.title}</Text>
             <Text style={styles.slideDesc}>{s.description}</Text>
           </View>
         ))}
       </ScrollView>
 
-      {/* Bottom card */}
-      <View style={styles.card}>
-        {/* Speech bubble */}
-        <SpeechBubble tail="bottom" style={styles.bubble}>
-          <Text style={styles.bubbleText}>{slide.mascotLine}</Text>
-        </SpeechBubble>
-
-        {/* Mascot */}
-        <MascotImage mascot="happy_smile" size={80} style={styles.mascot} />
-
-        {/* Dots */}
+      <View style={styles.footer}>
         <View style={styles.dots}>
-          {SLIDES.map((s, i) => {
-            const dot = dotScale[i];
-            return (
-              <Pressable key={s.id} onPress={() => goTo(i)} accessibilityRole="button" accessibilityLabel={`Slide ${i + 1}`}>
-                <Animated.View
-                  style={[
-                    styles.dot,
-                    i === activeIndex && styles.dotActive,
-                    dot ? { transform: [{ scale: dot }] } : undefined,
-                  ]}
-                />
-              </Pressable>
-            );
-          })}
+          {SLIDES.map((s, i) => (
+            <View key={s.id} style={[styles.dot, i === activeIndex && styles.dotActive]} />
+          ))}
         </View>
 
-        {/* Navigation row */}
         <View style={styles.navRow}>
           {activeIndex > 0 ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Previous slide"
+              accessibilityLabel="Previous"
               onPress={() => goTo(activeIndex - 1)}
               style={styles.prevBtn}
             >
-              <Ionicons name="chevron-back" size={20} color={colors.primary} />
               <Text style={styles.prevText}>Back</Text>
             </Pressable>
           ) : (
@@ -176,8 +136,8 @@ export default function TourScreen() {
           )}
 
           <PrimaryButton
-            accessibilityLabel={isLast ? 'Enter the app' : 'Next slide'}
-            label={isLast ? "LET'S GO!" : 'NEXT'}
+            accessibilityLabel={isLast ? 'Enter TapTalk' : 'Next'}
+            label={isLast ? 'Enter TapTalk' : 'Next'}
             onPress={isLast ? () => router.replace(talkRoute) : () => goTo(activeIndex + 1)}
             style={styles.nextBtn}
           />
@@ -192,27 +152,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+  },
   skipBtn: {
-    position: 'absolute',
-    top: 56,
-    right: spacing.xl,
-    zIndex: 10,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    ...shadows.card,
   },
   skipText: {
-    fontSize: typography.caption,
-    fontWeight: '800',
+    fontSize: typography.callout,
+    fontWeight: '700',
     color: colors.textTertiary,
-    letterSpacing: 0.4,
   },
-
   pager: {
     flex: 1,
   },
@@ -222,93 +176,63 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: 60,
     gap: spacing.xl,
   },
-
   iconCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 116,
+    height: 116,
+    borderRadius: 58,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
-
   slideTitle: {
     fontSize: typography.title,
-    fontWeight: '900',
+    fontWeight: '800',
     color: colors.text,
     letterSpacing: -0.5,
     textAlign: 'center',
   },
   slideDesc: {
-    fontSize: typography.callout,
+    fontSize: typography.body,
     color: colors.textMuted,
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 25,
     maxWidth: 320,
   },
-
-  // Bottom card
-  card: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radii.bgCard,
-    borderTopRightRadius: radii.bgCard,
+  footer: {
     paddingHorizontal: spacing.xl,
-    paddingTop: 20,
-    paddingBottom: 28,
-    alignItems: 'center',
-    gap: spacing.lg,
-    ...shadows.cardRaise,
+    paddingBottom: spacing.lg,
+    gap: spacing.xl,
   },
-
-  bubble: {
-    alignSelf: 'stretch',
-  },
-  bubbleText: {
-    fontSize: typography.callout,
-    fontWeight: '600',
-    color: colors.text,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  mascot: {
-    marginTop: -spacing.lg,
-  },
-
   dots: {
     flexDirection: 'row',
     gap: spacing.sm,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.border,
+    backgroundColor: colors.progressTrack,
   },
   dotActive: {
     width: 22,
-    borderRadius: 4,
     backgroundColor: colors.primary,
   },
-
   navRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
     gap: spacing.md,
   },
   prevBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    minWidth: 70,
+    minWidth: 64,
+    paddingVertical: spacing.sm,
   },
   prevText: {
-    fontSize: typography.callout,
+    fontSize: typography.body,
     fontWeight: '700',
     color: colors.primary,
   },

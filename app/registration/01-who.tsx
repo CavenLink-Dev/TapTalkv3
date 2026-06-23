@@ -1,60 +1,50 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
 import { Href, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { RegistrationScaffold } from '../../src/components/registration/RegistrationScaffold';
+import { SelectableCard } from '../../src/components/registration/SelectableCard';
+import { useRegistration } from '../../src/context/RegistrationContext';
+import { spacing } from '../../src/theme/tokens';
 
 const nextRoute = '/registration/02-name' as Href;
 
-type Selection = 'myself' | 'someone_else' | null;
-
 export default function RegStep1Who() {
   const router = useRouter();
-  const [selected, setSelected] = useState<Selection>(null);
+  const { data, update } = useRegistration();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.step}>Step 1 of 10</Text>
-        <Text style={styles.title}>Who is this app for?</Text>
-
-        <View style={styles.choices}>
-          <PrimaryButton
-            accessibilityLabel="This app is for myself"
-            label="Myself"
-            variant={selected === 'myself' ? 'primary' : 'secondary'}
-            onPress={() => setSelected('myself')}
-            style={styles.choice}
-          />
-          <PrimaryButton
-            accessibilityLabel="This app is for someone else"
-            label="Someone Else"
-            variant={selected === 'someone_else' ? 'primary' : 'secondary'}
-            onPress={() => setSelected('someone_else')}
-            style={styles.choice}
-          />
-        </View>
-      </View>
-
-      <View style={styles.footer}>
+    <RegistrationScaffold
+      step={1}
+      title="Who are you setting up?"
+      subtitle="This tailors the account and the verification we ask for."
+      footer={
         <PrimaryButton
           accessibilityLabel="Continue to next step"
           label="Continue"
-          disabled={selected === null}
+          disabled={data.role === null}
           onPress={() => router.push(nextRoute)}
         />
+      }
+    >
+      <View style={styles.choices}>
+        <SelectableCard
+          label="Myself"
+          description="I'll be using TapTalk to communicate."
+          selected={data.role === 'myself'}
+          onPress={() => update({ role: 'myself' })}
+        />
+        <SelectableCard
+          label="Someone else"
+          description="I'm setting this up for a person I support."
+          selected={data.role === 'someone_else'}
+          onPress={() => update({ role: 'someone_else' })}
+        />
       </View>
-    </SafeAreaView>
+    </RegistrationScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xxl },
-  step: { fontSize: typography.caption, color: colors.textTertiary, marginBottom: spacing.sm },
-  title: { fontSize: typography.heading, fontWeight: '700', color: colors.text, marginBottom: spacing.xl },
   choices: { gap: spacing.md },
-  choice: { width: '100%' },
-  footer: { padding: spacing.xl },
 });

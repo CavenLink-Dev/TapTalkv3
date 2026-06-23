@@ -1,79 +1,75 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MascotImage } from '../../src/components/MascotImage';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
-import { SpeechBubble } from '../../src/components/native/SpeechBubble';
-import { animation, colors, radii, shadows, spacing, typography } from '../../src/theme/tokens';
+import { colors, spacing, typography } from '../../src/theme/tokens';
 
 const registerRoute = '/registration/01-who' as Href;
 const loginRoute = '/auth/login' as Href;
 
+const HIGHLIGHTS = [
+  { icon: 'chatbubbles-outline' as const, text: 'Symbol and text communication that speaks for you' },
+  { icon: 'lock-closed-outline' as const, text: 'Private and secure — your words stay yours' },
+  { icon: 'heart-outline' as const, text: 'Core communication is free, forever' },
+];
+
 export default function GetStarted() {
   const router = useRouter();
-  const floatAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: -8,
-          duration: animation.durFloat,
-          useNativeDriver: true,
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0,
-          duration: animation.durFloat,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  }, [floatAnim]);
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* ── Upper area: speech bubble + floating mascot ─────────────── */}
-      <View style={styles.upper}>
-        <SpeechBubble tail="bottom" style={styles.bubble}>
-          <Text style={styles.bubbleText}>
-            Welcome to TapTalk! I'm <Text style={styles.bold}>Clo</Text>.{'\n'}
-            <Text style={styles.bold}>Everyone deserves a voice.</Text>
-          </Text>
-        </SpeechBubble>
-
-        <Animated.View style={{ transform: [{ translateY: floatAnim }] }}>
-          <MascotImage mascot="excited_wave" size={190} />
+      <View style={styles.hero}>
+        <Animated.View entering={FadeInDown.duration(400)} style={styles.logoWrap}>
+          <Image
+            source={require('../../asset/taptalk_logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="TapTalk"
+          />
         </Animated.View>
+
+        <Animated.Text entering={FadeInDown.duration(400).delay(80)} style={styles.headline}>
+          Everyone deserves a voice
+        </Animated.Text>
+        <Animated.Text entering={FadeInDown.duration(400).delay(140)} style={styles.subhead}>
+          A clear, dependable communication tool built for adults who use AAC.
+        </Animated.Text>
+
+        <View style={styles.highlights}>
+          {HIGHLIGHTS.map((h, i) => (
+            <Animated.View
+              key={h.text}
+              entering={FadeInDown.duration(400).delay(220 + i * 70)}
+              style={styles.highlightRow}
+            >
+              <View style={styles.highlightIcon}>
+                <Ionicons name={h.icon} size={20} color={colors.primary} />
+              </View>
+              <Text style={styles.highlightText}>{h.text}</Text>
+            </Animated.View>
+          ))}
+        </View>
       </View>
 
-      {/* ── Bottom white card ────────────────────────────────────────── */}
-      <View style={styles.card}>
-        <Text style={styles.title}>WELCOME TO TAPTALK</Text>
-        <Text style={styles.tagline}>
-          Core communication is{' '}
-          <Text style={styles.bold}>free forever</Text>
-          {' '}— because everyone deserves to be heard.
-        </Text>
-
+      <View style={styles.footer}>
         <PrimaryButton
-          accessibilityLabel="Get Started"
-          label="GET STARTED"
+          accessibilityLabel="Get started and create an account"
+          label="Get started"
           onPress={() => router.push(registerRoute)}
-          style={styles.primaryBtn}
         />
-
         <PrimaryButton
           accessibilityLabel="I already have an account"
-          label="I ALREADY HAVE AN ACCOUNT"
+          label="I already have an account"
           variant="secondary"
           onPress={() => router.push(loginRoute)}
         />
-
         <Text style={styles.privacy}>
-          Check out this{' '}
-          <Text style={styles.privacyLink}>LINK</Text>
-          {' '}to see how we store your data
+          By continuing you agree to our{' '}
+          <Text style={styles.privacyLink}>Terms</Text> and{' '}
+          <Text style={styles.privacyLink}>Privacy Policy</Text>.
         </Text>
       </View>
     </SafeAreaView>
@@ -85,59 +81,65 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-
-  // ── Upper (mascot + speech bubble)
-  upper: {
+  hero: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
-    gap: spacing.lg,
   },
-  bubble: {
-    alignSelf: 'stretch',
+  logoWrap: {
+    alignItems: 'flex-start',
+    marginBottom: spacing.xl,
   },
-  bubbleText: {
-    fontSize: typography.body,
-    fontWeight: '600',
+  logo: {
+    width: 200,
+    height: 72,
+  },
+  headline: {
+    fontSize: 34,
+    fontWeight: '800',
     color: colors.text,
+    letterSpacing: -0.6,
+    lineHeight: 40,
+  },
+  subhead: {
+    marginTop: spacing.md,
+    fontSize: typography.body,
+    color: colors.textMuted,
     lineHeight: 24,
   },
-  bold: {
-    fontWeight: '800',
-  },
-
-  // ── Bottom card (white, 40px top radius)
-  card: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radii.bgCard,
-    borderTopRightRadius: radii.bgCard,
-    paddingHorizontal: spacing.xl,
-    paddingTop: 28,
-    paddingBottom: 30,
+  highlights: {
+    marginTop: spacing.xxl,
     gap: spacing.lg,
-    ...shadows.cardRaise,
   },
-  title: {
-    fontSize: typography.heading,
-    fontWeight: '800',
-    color: colors.text,
-    textAlign: 'center',
-    letterSpacing: -0.4,
+  highlightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
   },
-  tagline: {
+  highlightIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#EAF5FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  highlightText: {
+    flex: 1,
     fontSize: typography.callout,
-    color: colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 22,
+    color: colors.text,
+    lineHeight: 21,
   },
-  primaryBtn: {
-    marginTop: spacing.xs,
+  footer: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
   },
   privacy: {
     textAlign: 'center',
     fontSize: typography.caption,
     color: colors.textTertiary,
+    lineHeight: 18,
   },
   privacyLink: {
     color: colors.primary,

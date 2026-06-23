@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card } from '../../src/components/native/Card';
+import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { TextField } from '../../src/components/native/TextField';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { RegistrationScaffold } from '../../src/components/registration/RegistrationScaffold';
+import { useRegistration } from '../../src/context/RegistrationContext';
 import { authFormStyles } from '../../src/styles/authFormStyles';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
+import { colors, spacing, typography } from '../../src/theme/tokens';
 
-// Only shown when "Someone Else" + under 18. Skipped otherwise via DOB logic.
 const nextRoute = '/registration/06-email' as Href;
 
 export default function RegStep5Guardian() {
   const router = useRouter();
-  const [guardianEmail, setGuardianEmail] = useState('');
+  const { data, update } = useRegistration();
   const [sent, setSent] = useState(false);
 
-  const canSend = EMAIL_PATTERN.test(guardianEmail.trim());
+  const canSend = EMAIL_PATTERN.test(data.guardianEmail.trim());
 
   const handleSend = () => {
     if (!canSend) return;
@@ -26,48 +26,53 @@ export default function RegStep5Guardian() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.step}>Step 5 of 10</Text>
-        <Text style={styles.title}>Guardian Verification</Text>
-        <Text style={styles.hint}>
-          As this person is a minor, a guardian must verify this account. Enter the guardian's email — they must click the link before registration can continue.
-        </Text>
-
-        <Card>
-          <Text style={authFormStyles.label}>Guardian's Email Address</Text>
-          <TextField
-            accessibilityLabel="Guardian email"
-            placeholder="guardian@example.com"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={guardianEmail}
-            onChangeText={setGuardianEmail}
-            style={authFormStyles.field}
+    <RegistrationScaffold
+      step={5}
+      title="Guardian verification"
+      subtitle="A nominated guardian must confirm this account by email before it can be finalised."
+      scroll
+      footer={
+        !sent ? (
+          <PrimaryButton
+            accessibilityLabel="Send verification link"
+            label="Send verification link"
+            disabled={!canSend}
+            onPress={handleSend}
           />
-          {sent && (
-            <Text style={styles.sent}>✓ Verification link sent. Ask the guardian to check their inbox.</Text>
-          )}
-        </Card>
-      </View>
-
-      <View style={styles.footer}>
-        {!sent ? (
-          <PrimaryButton accessibilityLabel="Send verification link" label="Send Verification Link" disabled={!canSend} onPress={handleSend} />
         ) : (
-          <PrimaryButton accessibilityLabel="Continue" label="Continue" onPress={() => router.push(nextRoute)} />
-        )}
+          <PrimaryButton
+            accessibilityLabel="Continue"
+            label="Continue"
+            onPress={() => router.push(nextRoute)}
+          />
+        )
+      }
+    >
+      <View>
+        <Text style={authFormStyles.label}>Guardian's email address</Text>
+        <TextField
+          accessibilityLabel="Guardian email"
+          placeholder="guardian@example.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={data.guardianEmail}
+          onChangeText={(t) => update({ guardianEmail: t })}
+          style={authFormStyles.field}
+        />
+        {sent ? (
+          <View style={styles.sentRow}>
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+            <Text style={styles.sentText}>
+              Verification link sent. Ask the guardian to confirm from their inbox.
+            </Text>
+          </View>
+        ) : null}
       </View>
-    </SafeAreaView>
+    </RegistrationScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xxl },
-  step: { fontSize: typography.caption, color: colors.textTertiary, marginBottom: spacing.sm },
-  title: { fontSize: typography.heading, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
-  hint: { fontSize: typography.callout, color: colors.textMuted, marginBottom: spacing.xl, lineHeight: 22 },
-  sent: { fontSize: typography.callout, color: colors.primary, marginTop: spacing.sm },
-  footer: { padding: spacing.xl },
+  sentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  sentText: { flex: 1, fontSize: typography.callout, color: colors.textMuted, lineHeight: 20 },
 });
