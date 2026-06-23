@@ -23,11 +23,15 @@ export default function Index() {
     );
   }
 
+  // Routing decisions:
+  //   • Fresh install / signed out via user → splash → get-started.
+  //   • Account already created + "Remember me" was on → straight into Talk.
+  //   • Account already created + "Remember me" was off → login screen.
   const route = !state.onboardingComplete
     ? routes.splash
-    : !state.signedIn
-      ? routes.login
-      : routes.talk;
+    : state.signedIn && state.rememberLogin
+      ? routes.talk
+      : routes.login;
 
   return <Redirect href={route} />;
 }

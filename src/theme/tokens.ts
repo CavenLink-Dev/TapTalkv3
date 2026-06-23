@@ -4,7 +4,7 @@
  * Variable names are preserved as comments so you can cross-reference the Figma file.
  */
 
-import { Platform } from 'react-native';
+import { fonts } from './fonts';
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
 
@@ -143,8 +143,10 @@ export const spacing = {
 // Display/Title/Heading/Subhead use SF Compact Rounded; Body/Callout use SF Compact.
 
 export const typography = {
-  fontFamily:  Platform.select({ ios: 'SF Compact', default: 'System' }) ?? 'System',
-  fontFamilyDisplay: Platform.select({ ios: 'SF Compact Rounded', default: 'System' }) ?? 'System',
+  /** SF Compact Text — body / UI copy. */
+  fontFamily:        fonts.body,
+  /** SF Compact Rounded Heavy — default for titles/headings/buttons. */
+  fontFamilyDisplay: fonts.displayHeavy,
 
   // sizes ──
   /** hero / splash mark — 34/800 */

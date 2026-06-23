@@ -9,6 +9,17 @@ export const initialState: AppState = {
   onboardingComplete: false,
   subscriptionComplete: false,
   signedIn: false,
+  rememberLogin: true,
+  profilePhotoUri: null,
+  secureMethod: null,
+  biometricsEnabled: false,
+  accessibility: {
+    textSize: 'default',
+    buttonSize: 'standard',
+    theme: 'system',
+    highContrast: false,
+    colorScheme: 'fitzgerald',
+  },
   user: {
     legalName: '',
     displayName: '',
@@ -48,6 +59,10 @@ function mergeStoredState(storedState: Partial<AppState>): AppState {
     parent: {
       ...initialState.parent,
       ...storedState.parent,
+    },
+    accessibility: {
+      ...initialState.accessibility,
+      ...storedState.accessibility,
     },
     firstThen: {
       ...initialState.firstThen,
@@ -99,6 +114,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         signedIn: true,
+        rememberLogin: action.payload.rememberLogin ?? state.rememberLogin,
         user: {
           ...state.user,
           email: action.payload.email,
@@ -107,10 +123,27 @@ export function appReducer(state: AppState, action: Action): AppState {
         },
       };
     case 'SIGN_OUT':
+      // Keep onboarding/accessibility prefs so the user isn't punished for
+      // signing out — they're not signing up again.
       return {
         ...initialState,
-        onboardingComplete: false,
+        onboardingComplete: state.onboardingComplete,
+        accessibility: state.accessibility,
+        secureMethod: state.secureMethod,
+        rememberLogin: false,
       };
+    case 'SET_REMEMBER_LOGIN':
+      return { ...state, rememberLogin: action.payload };
+    case 'SET_SECURE_METHOD':
+      return {
+        ...state,
+        secureMethod: action.payload.method,
+        biometricsEnabled: action.payload.biometricsEnabled,
+      };
+    case 'SET_PROFILE_PHOTO':
+      return { ...state, profilePhotoUri: action.payload };
+    case 'SET_ACCESSIBILITY':
+      return { ...state, accessibility: { ...state.accessibility, ...action.payload } };
     case 'APPEND_WORD':
       return { ...state, messageWords: [...state.messageWords, action.payload] };
     case 'CLEAR_WORDS':

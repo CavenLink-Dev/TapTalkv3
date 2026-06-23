@@ -2,6 +2,29 @@ export interface AppState {
   onboardingComplete: boolean;
   subscriptionComplete: boolean;
   signedIn: boolean;
+  /**
+   * "Keep me signed in" preference set on the login screen.
+   * When true, the app skips the login screen on subsequent launches.
+   * When false, the user is asked to sign in every cold start (even though
+   * their account record stays on disk).
+   */
+  rememberLogin: boolean;
+  /** Photo (file:// URI) the user picked in registration Step 9. Optional. */
+  profilePhotoUri: string | null;
+  /**
+   * Which secure-access method the user chose. Drives the login UX — passkey
+   * means future logins use biometrics; password means show the password
+   * field as today.
+   */
+  secureMethod: 'passkey' | 'password' | null;
+  biometricsEnabled: boolean;
+  accessibility: {
+    textSize: 'default' | 'large' | 'xlarge' | 'maximum';
+    buttonSize: 'standard' | 'large';
+    theme: 'light' | 'dark' | 'system';
+    highContrast: boolean;
+    colorScheme: 'fitzgerald' | 'cvd_safe';
+  };
   user: {
     legalName: string;
     displayName: string;
@@ -121,8 +144,12 @@ export type Action =
   | { type: 'SET_PARENT'; payload: Partial<AppState['parent']> }
   | { type: 'COMPLETE_ONBOARDING' }
   | { type: 'COMPLETE_SUBSCRIPTION' }
-  | { type: 'SIGN_IN'; payload: { email: string; displayName?: string } }
+  | { type: 'SIGN_IN'; payload: { email: string; displayName?: string; rememberLogin?: boolean } }
   | { type: 'SIGN_OUT' }
+  | { type: 'SET_REMEMBER_LOGIN'; payload: boolean }
+  | { type: 'SET_SECURE_METHOD'; payload: { method: 'passkey' | 'password'; biometricsEnabled: boolean } }
+  | { type: 'SET_PROFILE_PHOTO'; payload: string | null }
+  | { type: 'SET_ACCESSIBILITY'; payload: Partial<AppState['accessibility']> }
   | { type: 'APPEND_WORD'; payload: AACWord }
   | { type: 'CLEAR_WORDS' }
   | { type: 'REMOVE_LAST_WORD' }

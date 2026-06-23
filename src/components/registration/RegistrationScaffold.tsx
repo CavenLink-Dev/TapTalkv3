@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SegmentedProgressBar } from '../native/SegmentedProgressBar';
 import { REGISTRATION_TOTAL_STEPS } from '../../context/RegistrationContext';
 import { colors, spacing, typography } from '../../theme/tokens';
+import { fonts } from '../../theme/fonts';
 import { hapticSelection } from '../../utils/haptics';
 
 interface RegistrationScaffoldProps {
@@ -27,6 +28,8 @@ interface RegistrationScaffoldProps {
   children: React.ReactNode;
   /** Wrap content in a ScrollView (use for field-heavy steps). Defaults to false. */
   scroll?: boolean;
+  /** Hide the progress bar entirely (used by the final "Verified" screen). */
+  hideProgress?: boolean;
 }
 
 /**
@@ -44,6 +47,7 @@ export function RegistrationScaffold({
   footer,
   children,
   scroll = false,
+  hideProgress = false,
 }: RegistrationScaffoldProps) {
   const router = useRouter();
   const canGoBack = step > 1;
@@ -81,7 +85,9 @@ export function RegistrationScaffold({
               <Ionicons name="chevron-back" size={24} color={colors.text} />
             </Pressable>
           ) : null}
-          <SegmentedProgressBar currentStep={step} totalSteps={REGISTRATION_TOTAL_STEPS} />
+          {hideProgress ? <View style={styles.progressSpacer} /> : (
+            <SegmentedProgressBar currentStep={step} totalSteps={REGISTRATION_TOTAL_STEPS} />
+          )}
         </View>
 
         {scroll ? (
@@ -132,6 +138,9 @@ const styles = StyleSheet.create({
   backBtnPressed: {
     backgroundColor: colors.inputBg,
   },
+  progressSpacer: {
+    flex: 1,
+  },
   body: {
     flex: 1,
     paddingHorizontal: spacing.xl,
@@ -141,14 +150,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontFamily: fonts.displayHeavy,
+    fontSize: typography.title,
     color: colors.text,
-    letterSpacing: -0.5,
+    letterSpacing: typography.trackTitle,
     lineHeight: 34,
   },
   subtitle: {
     marginTop: spacing.sm,
+    fontFamily: fonts.body,
     fontSize: typography.body,
     color: colors.textMuted,
     lineHeight: 23,

@@ -23,7 +23,7 @@ import { springPop, timingFocus } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { hapticError } from '../../utils/haptics';
 
-interface TextFieldProps extends TextInputProps {
+export interface TextFieldProps extends TextInputProps {
   accessibilityLabel: string;
   /** Error string toggles a shake + red border + helper text. */
   error?: string | null;
@@ -45,16 +45,19 @@ interface TextFieldProps extends TextInputProps {
  *
  * Reduce Motion: no shake, no scale; states still cross-fade colors over 200ms.
  */
-export function TextField({
-  accessibilityLabel,
-  error,
-  success,
-  helper,
-  onFocus,
-  onBlur,
-  style,
-  ...rest
-}: TextFieldProps) {
+export const TextField = React.forwardRef<TextInput, TextFieldProps>(function TextField(
+  {
+    accessibilityLabel,
+    error,
+    success,
+    helper,
+    onFocus,
+    onBlur,
+    style,
+    ...rest
+  },
+  ref,
+) {
   const reduceMotion = useReduceMotion();
   const [focused, setFocused] = useState(false);
 
@@ -135,6 +138,7 @@ export function TextField({
     <View style={styles.wrap}>
       <Animated.View style={[styles.container, containerStyle]}>
         <TextInput
+          ref={ref}
           accessibilityLabel={accessibilityLabel}
           placeholderTextColor={colors.textTertiary}
           onFocus={handleFocus}
@@ -157,7 +161,7 @@ export function TextField({
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: {

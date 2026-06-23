@@ -1,13 +1,16 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { RegistrationScaffold } from '../../src/components/registration/RegistrationScaffold';
 import { SelectableCard } from '../../src/components/registration/SelectableCard';
 import { useRegistration } from '../../src/context/RegistrationContext';
-import { spacing } from '../../src/theme/tokens';
+import { colors, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
+import { Text } from 'react-native';
 
-const nextRoute = '/registration/02-name' as Href;
+const nextRoute = '/registration/02-aac-user' as Href;
 
 export default function RegStep1Who() {
   const router = useRouter();
@@ -16,11 +19,11 @@ export default function RegStep1Who() {
   return (
     <RegistrationScaffold
       step={1}
-      title="Who are you setting up?"
-      subtitle="This tailors the account and the verification we ask for."
+      title="Who is setting up this account?"
+      subtitle="This determines what we ask next and which safeguards apply."
       footer={
         <PrimaryButton
-          accessibilityLabel="Continue to next step"
+          accessibilityLabel="Continue to the next step"
           label="Continue"
           disabled={data.role === null}
           onPress={() => router.push(nextRoute)}
@@ -30,18 +33,28 @@ export default function RegStep1Who() {
       <View style={styles.choices}>
         <SelectableCard
           entranceIndex={0}
-          label="Myself"
-          description="I'll be using TapTalk to communicate."
+          label="For myself"
+          description="I'll be the one using TapTalk to communicate."
           selected={data.role === 'myself'}
           onPress={() => update({ role: 'myself' })}
+          accessibilityLabel="I am setting up TapTalk for myself"
         />
         <SelectableCard
           entranceIndex={1}
-          label="Someone else"
+          label="For someone else"
           description="I'm setting this up for a person I support."
           selected={data.role === 'someone_else'}
           onPress={() => update({ role: 'someone_else' })}
+          accessibilityLabel="I am setting up TapTalk for someone else"
         />
+      </View>
+
+      <View style={styles.note}>
+        <Ionicons name="information-circle-outline" size={18} color={colors.textTertiary} />
+        <Text style={styles.noteText}>
+          A guardian must set up the account for users under 15. You'll be
+          asked for guardian details on the next screens if that applies.
+        </Text>
       </View>
     </RegistrationScaffold>
   );
@@ -49,4 +62,18 @@ export default function RegStep1Who() {
 
 const styles = StyleSheet.create({
   choices: { gap: spacing.md },
+  note: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.xs,
+  },
+  noteText: {
+    flex: 1,
+    fontFamily: fonts.body,
+    fontSize: typography.caption,
+    lineHeight: 18,
+    color: colors.textTertiary,
+  },
 });
