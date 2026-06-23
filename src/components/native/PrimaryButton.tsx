@@ -1,84 +1,215 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
-import { colors, radii, typography } from '../../theme/tokens';
-import { hapticSelection } from '../../utils/haptics';
+import React, { useEffect } from 'react';
+import { Pressable, StyleSheet, View, ViewStyle } from 'react-native';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
+import { LoadingDots } from '../LoadingDots';
+import { animation, colors, radii, typography } from '../../theme/tokens';
+import { springPop, timingFast, timingReduced } from '../../theme/motion';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { hapticSelection, hapticSuccess } from '../../utils/haptics';
+
+type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
 interface PrimaryButtonProps {
   label: string;
   onPress: () => void;
   accessibilityLabel: string;
   disabled?: boolean;
-  variant?: 'primary' | 'secondary' | 'danger';
+  /** Inline loading dots; taps are locked while true. */
+  loading?: boolean;
+  /** One-shot success flash — fill crossfades to success, check springs in. */
+  success?: boolean;
+  variant?: Variant;
   style?: ViewStyle;
 }
 
+type Palette = {
+  base: string;
+  pressed: string;
+  label: string;
+  border: string | null;
+};
+
+const PALETTES: Record<Variant, Palette> = {
+  primary:   { base: colors.primary,  pressed: colors.primaryPressed, label: colors.surface,     border: null          },
+  secondary: { base: colors.softBlue, pressed: '#C2D5E2',             label: colors.primaryDark, border: null          },
+  danger:    { base: colors.danger,   pressed: '#FF6A66',             label: colors.surface,     border: null          },
+  ghost:     { base: 'rgba(0,0,0,0)', pressed: 'rgba(0,0,0,0.04)',    label: colors.text,        border: colors.border },
+};
+
+/**
+ * The single dominant action per screen. Bottom-docked, full-width by default.
+ *
+ * Motion (from the design handoff):
+ *   • Press in  · scale 1 → 0.97 over 120ms easeStandard, fill crossfades to
+ *                 the variant's pressed tone, brand-tinted "pop" shadow rises in.
+ *   • Release   · scale 0.97 → 1 via springPop (the same spring used by checks
+ *                 and pulses, so everything in the UI shares a feel) — fill and
+ *                 shadow ease back.
+ *   • Loading   · inline LoadingDots (onPrimary), taps locked.
+ *   • Success   · fill cross-fades to `success`, check icon springs in with a
+ *                 short Success haptic, then settles back to default fill.
+ *
+ * Reduce Motion: no scale, no shadow change — opacity dip 1 → 0.85 → 1 instead.
+ */
 export function PrimaryButton({
   label,
   onPress,
   accessibilityLabel,
   disabled = false,
+  loading = false,
+  success = false,
   variant = 'primary',
   style,
 }: PrimaryButtonProps) {
-  const isSecondary = variant === 'secondary';
-  const isDanger = variant === 'danger';
+  const reduceMotion = useReduceMotion();
+  const palette = PALETTES[variant];
+
+  const pressed  = useSharedValue(0);   // 0 → 1 while finger is down
+  const successV = useSharedValue(0);   // 0 → 1 during success flash
+  const opacity  = useSharedValue(1);   // reduce-motion press feedback
+
+  const isLocked = disabled || loading;
+  const baseFill = disabled ? colors.disabled : palette.base;
+
+  useEffect(() => {
+    if (!success) return;
+    hapticSuccess();
+    if (reduceMotion) {
+      successV.value = withSequence(
+        withTiming(1, timingReduced()),
+        withTiming(0, { ...timingReduced(), duration: 600 }),
+      );
+      return;
+    }
+    successV.value = withSequence(
+      withTiming(1, { duration: 220 }),
+      withTiming(1, { duration: 460 }),
+      withTiming(0, { duration: 320 }),
+    );
+  }, [success, reduceMotion, successV]);
+
+  const containerStyle = useAnimatedStyle(() => {
+    const pressedFill = interpolateColor(pressed.value, [0, 1], [baseFill, palette.pressed]);
+    const finalFill   = interpolateColor(successV.value, [0, 1], [pressedFill, colors.success]);
+    const scale       = reduceMotion ? 1 : 1 - pressed.value * (1 - animation.scalePressLg);
+    const shadowOpacity = reduceMotion ? 0 : 0.22 * pressed.value;
+    return {
+      backgroundColor: finalFill,
+      transform: [{ scale }],
+      opacity: opacity.value,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity,
+      shadowRadius: 16,
+    };
+  });
+
+  const checkStyle = useAnimatedStyle(() => ({
+    opacity: successV.value,
+    transform: [{ scale: successV.value }],
+  }));
+
+  const labelStyle = useAnimatedStyle(() => ({
+    opacity: 1 - successV.value * 0.6,
+  }));
+
+  const handlePressIn = () => {
+    if (isLocked) return;
+    if (reduceMotion) {
+      opacity.value = withTiming(0.85, timingFast());
+      return;
+    }
+    pressed.value = withTiming(1, timingFast());
+  };
+
+  const handlePressOut = () => {
+    if (reduceMotion) {
+      opacity.value = withTiming(1, { ...timingFast(), duration: animation.durRelease });
+      return;
+    }
+    pressed.value = withSpring(0, springPop);
+  };
 
   const handlePress = () => {
+    if (isLocked) return;
     hapticSelection();
     onPress();
   };
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      disabled={disabled}
-      onPress={handlePress}
-      style={({ pressed }) => [
-        styles.button,
-        isSecondary && styles.secondary,
-        isDanger && styles.danger,
-        disabled && styles.disabled,
-        pressed && !disabled && styles.pressed,
-        style,
-      ]}
-    >
-      <Text style={[styles.label, isSecondary && styles.secondaryLabel]}>
-        {label}
-      </Text>
-    </Pressable>
+    <Animated.View style={[styles.container, containerStyle, style]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={{ disabled: isLocked, busy: loading }}
+        disabled={isLocked}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={handlePress}
+        style={[
+          styles.button,
+          palette.border ? { borderWidth: 1.5, borderColor: palette.border } : null,
+        ]}
+      >
+        {loading ? (
+          <LoadingDots variant="onPrimary" color={palette.label} />
+        ) : (
+          <View style={styles.inner}>
+            <Animated.View style={[styles.check, checkStyle]} pointerEvents="none">
+              <Ionicons name="checkmark" size={22} color={colors.surface} />
+            </Animated.View>
+            <Animated.Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+              style={[
+                styles.label,
+                { color: disabled ? colors.textTertiary : palette.label },
+                labelStyle,
+              ]}
+            >
+              {label}
+            </Animated.Text>
+          </View>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    borderRadius: radii.button,
+  },
   button: {
-    minHeight: 50,
+    minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.button,
-    backgroundColor: colors.primary,
     paddingHorizontal: 18,
   },
-  danger: {
-    backgroundColor: colors.danger,
-  },
-  disabled: {
-    backgroundColor: colors.disabled,
+  inner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   label: {
-    color: colors.surface,
+    fontFamily: typography.fontFamilyDisplay,
     fontSize: typography.body,
-    fontWeight: '700',
-    letterSpacing: -0.3,
+    fontWeight: typography.weightButton,
+    letterSpacing: typography.trackButton,
   },
-  pressed: {
-    backgroundColor: colors.mascot,
-    transform: [{ scale: 0.985 }],
-  },
-  secondary: {
-    backgroundColor: colors.softBlue,
-  },
-  secondaryLabel: {
-    color: colors.primaryDark,
+  check: {
+    position: 'absolute',
+    left: -28,
   },
 });

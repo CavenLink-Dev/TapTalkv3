@@ -1,13 +1,18 @@
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
+  FadeInDown,
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radii, shadows, spacing, typography } from '../../theme/tokens';
-import { hapticSelection } from '../../utils/haptics';
+import { animation, colors, radii, spacing, typography } from '../../theme/tokens';
+import { springPop, timingBase, timingFast, timingFocus } from '../../theme/motion';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { hapticLight } from '../../utils/haptics';
 
 interface SelectableCardProps {
   label: string;
@@ -15,12 +20,21 @@ interface SelectableCardProps {
   selected: boolean;
   onPress: () => void;
   accessibilityLabel?: string;
+  /** Entrance stagger index (0-based). Renders translateY 12 → 0 + fade. */
+  entranceIndex?: number;
 }
 
 /**
- * Clean, adult selectable option card — white surface that adopts a blue
- * border, subtle tint and a check mark when selected. Used for single- and
- * multi-select choices across registration (role, guardian, consent).
+ * Radio / picker card. Used for app mode, theme, text size, role.
+ *
+ * Motion (from the design handoff):
+ *   • Press in   · scale 1 → 0.98 in 120ms easeStandard, haptic `light`.
+ *   • Release    · scale back via springPop.
+ *   • Selection  · border-width 1.5 → 2 + border + background cross-fade
+ *                  200ms easeStandard; check ring scales 0 → 1 with springPop;
+ *                  brand-tinted shadow fades in over 260ms. Deselect mirrors.
+ *   • Entrance   · translateY 12 → 0 + opacity 0 → 1 over 260ms, staggered
+ *                  60ms per card (80ms when Reduce Motion is on, no translate).
  */
 export function SelectableCard({
   label,
@@ -28,75 +42,142 @@ export function SelectableCard({
   selected,
   onPress,
   accessibilityLabel,
+  entranceIndex = 0,
 }: SelectableCardProps) {
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const reduceMotion = useReduceMotion();
+  const pressed   = useSharedValue(0);
+  const selectedV = useSharedValue(selected ? 1 : 0);
 
   useEffect(() => {
-    scale.value = withTiming(1, { duration: 120 });
-  }, [selected, scale]);
+    if (reduceMotion) {
+      selectedV.value = withTiming(selected ? 1 : 0, { duration: animation.durReduced });
+    } else if (selected) {
+      selectedV.value = withSpring(1, springPop);
+    } else {
+      selectedV.value = withTiming(0, timingFocus());
+    }
+  }, [selected, selectedV, reduceMotion]);
+
+  const cardStyle = useAnimatedStyle(() => {
+    const borderWidth = 1.5 + selectedV.value * 0.5;
+    const borderColor = interpolateColor(
+      selectedV.value,
+      [0, 1],
+      [colors.border, colors.primary],
+    );
+    const background = interpolateColor(
+      selectedV.value,
+      [0, 1],
+      [colors.surface, '#EAF5FE'],
+    );
+    const scale = reduceMotion ? 1 : 1 - pressed.value * (1 - 0.98);
+    const shadowOpacity = reduceMotion ? 0 : 0.18 * selectedV.value;
+    return {
+      borderWidth,
+      borderColor,
+      backgroundColor: background,
+      transform: [{ scale }],
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity,
+      shadowRadius: 16,
+    };
+  });
+
+  const ringStyle = useAnimatedStyle(() => {
+    const background = interpolateColor(
+      selectedV.value,
+      [0, 1],
+      ['rgba(25,154,238,0)', colors.primary],
+    );
+    const border = interpolateColor(
+      selectedV.value,
+      [0, 1],
+      [colors.border, colors.primary],
+    );
+    return { backgroundColor: background, borderColor: border };
+  });
+
+  const checkStyle = useAnimatedStyle(() => ({
+    opacity: selectedV.value,
+    transform: [{ scale: selectedV.value }],
+  }));
+
+  const labelStyle = useAnimatedStyle(() => {
+    const color = interpolateColor(selectedV.value, [0, 1], [colors.text, colors.primaryDark]);
+    return { color };
+  });
+
+  const handlePressIn = () => {
+    if (reduceMotion) return;
+    pressed.value = withTiming(1, timingFast());
+  };
+
+  const handlePressOut = () => {
+    if (reduceMotion) return;
+    pressed.value = withSpring(0, springPop);
+  };
 
   const handlePress = () => {
-    hapticSelection();
+    hapticLight();
     onPress();
   };
 
+  // Entrance: small translateY + opacity, staggered. Reduce Motion → fade only.
+  const stagger = (reduceMotion ? animation.stagRowRM : animation.stagRow) * entranceIndex;
+  const entering = reduceMotion
+    ? FadeInDown.duration(animation.durBase).delay(stagger).withInitialValues({ transform: [{ translateY: 0 }] })
+    : FadeInDown.duration(animation.durBase).delay(stagger);
+
   return (
-    <Animated.View style={animatedStyle}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ selected }}
-        accessibilityLabel={accessibilityLabel ?? label}
-        onPressIn={() => {
-          scale.value = withTiming(0.985, { duration: 90 });
-        }}
-        onPressOut={() => {
-          scale.value = withTiming(1, { duration: 90 });
-        }}
-        onPress={handlePress}
-        style={[styles.card, selected && styles.cardSelected]}
-      >
-        <View style={styles.textBlock}>
-          <Text style={[styles.label, selected && styles.labelSelected]}>{label}</Text>
-          {description ? <Text style={styles.description}>{description}</Text> : null}
-        </View>
-        <View style={[styles.checkRing, selected && styles.checkRingSelected]}>
-          {selected ? <Ionicons name="checkmark" size={16} color={colors.surface} /> : null}
-        </View>
-      </Pressable>
+    <Animated.View entering={entering} style={styles.wrap}>
+      <Animated.View style={[styles.card, cardStyle]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ selected }}
+          accessibilityLabel={accessibilityLabel ?? label}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          onPress={handlePress}
+          style={styles.row}
+        >
+          <View style={styles.textBlock}>
+            <Animated.Text style={[styles.label, labelStyle]}>{label}</Animated.Text>
+            {description ? <Text style={styles.description}>{description}</Text> : null}
+          </View>
+          <Animated.View style={[styles.checkRing, ringStyle]}>
+            <Animated.View style={checkStyle}>
+              <Ionicons name="checkmark" size={16} color={colors.surface} />
+            </Animated.View>
+          </Animated.View>
+        </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrap: {
+    width: '100%',
+  },
   card: {
+    borderRadius: radii.card,
+    minHeight: 60,
+  },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.md,
-    minHeight: 60,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  cardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: '#EAF5FE',
-    ...shadows.card,
   },
   textBlock: {
     flex: 1,
   },
   label: {
     fontSize: typography.body,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  labelSelected: {
-    color: colors.primaryDark,
+    fontWeight: typography.weightCaption,
   },
   description: {
     marginTop: 2,
@@ -109,12 +190,7 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  checkRingSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
   },
 });

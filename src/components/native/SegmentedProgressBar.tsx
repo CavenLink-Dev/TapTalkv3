@@ -1,12 +1,16 @@
 import React, { useEffect } from 'react';
-import { AccessibilityInfo, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, {
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { colors, radii } from '../../theme/tokens';
+import { animation, colors, radii } from '../../theme/tokens';
+import { timingFill } from '../../theme/motion';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 
 interface SegmentedProgressBarProps {
   /** 1-based index of the step the user is currently on. */
@@ -19,10 +23,12 @@ interface SegmentProps {
   index: number;
   filled: boolean;
   reduceMotion: boolean;
+  complete: boolean;
 }
 
-function Segment({ index, filled, reduceMotion }: SegmentProps) {
+function Segment({ index, filled, reduceMotion, complete }: SegmentProps) {
   const progress = useSharedValue(filled ? 1 : 0);
+  const done = useSharedValue(complete ? 1 : 0);
 
   useEffect(() => {
     const target = filled ? 1 : 0;
@@ -30,11 +36,17 @@ function Segment({ index, filled, reduceMotion }: SegmentProps) {
       progress.value = target;
       return;
     }
-    // Stagger the fill so completed segments "catch up" with a gentle wave.
-    progress.value = withDelay(filled ? index * 45 : 0, withTiming(target, { duration: 360 }));
+    progress.value = withDelay(filled ? index * animation.stagSeg : 0, withTiming(target, timingFill()));
   }, [filled, index, progress, reduceMotion]);
 
-  const fillStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
+  useEffect(() => {
+    done.value = withTiming(complete ? 1 : 0, { duration: 220 });
+  }, [complete, done]);
+
+  const fillStyle = useAnimatedStyle(() => {
+    const fill = interpolateColor(done.value, [0, 1], [colors.progressFill, colors.success]);
+    return { width: `${progress.value * 100}%`, backgroundColor: fill };
+  });
 
   return (
     <View style={styles.segment}>
@@ -44,36 +56,54 @@ function Segment({ index, filled, reduceMotion }: SegmentProps) {
 }
 
 /**
- * Segmented pill progress bar — one rounded segment per step. Each segment
- * fills left-to-right in sequence as the user advances, so the bar visibly
- * grows toward full. Honors Reduce Motion.
+ * Segmented pill progress bar.
+ *
+ * Motion (from the design handoff):
+ *   • Advance   · each segment fills left → right over 360ms easeStandard,
+ *                 with a 45ms catch-up stagger when multiple segments are
+ *                 filled at once.
+ *   • Complete  · all-segments cross-fade primary → success over 220ms, then
+ *                 a single celebration pulse scale 1 → 1.03 → 1 over 260ms.
+ *
+ * Reduce Motion: instant fill + color cross-fade, no pulse.
  */
 export function SegmentedProgressBar({ currentStep, totalSteps }: SegmentedProgressBarProps) {
-  const [reduceMotion, setReduceMotion] = React.useState(false);
+  const reduceMotion = useReduceMotion();
+  const complete = currentStep >= totalSteps;
+  const pulse = useSharedValue(1);
 
   useEffect(() => {
-    let mounted = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((enabled) => mounted && setReduceMotion(enabled))
-      .catch(() => undefined);
-    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
-    return () => {
-      mounted = false;
-      sub.remove();
-    };
-  }, []);
+    if (!complete) return;
+    if (reduceMotion) return;
+    pulse.value = withDelay(
+      220,
+      withSequence(
+        withTiming(animation.scalePulse, { duration: 130 }),
+        withTiming(1, { duration: 130 }),
+      ),
+    );
+  }, [complete, pulse, reduceMotion]);
+
+  const rowStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
 
   return (
-    <View
-      style={styles.row}
+    <Animated.View
+      style={[styles.row, rowStyle]}
       accessibilityRole="progressbar"
       accessibilityLabel={`Step ${currentStep} of ${totalSteps}`}
       accessibilityValue={{ min: 0, max: totalSteps, now: currentStep }}
+      accessibilityLiveRegion="polite"
     >
       {Array.from({ length: totalSteps }).map((_, i) => (
-        <Segment key={i} index={i} filled={i < currentStep} reduceMotion={reduceMotion} />
+        <Segment
+          key={i}
+          index={i}
+          filled={i < currentStep}
+          reduceMotion={reduceMotion}
+          complete={complete}
+        />
       ))}
-    </View>
+    </Animated.View>
   );
 }
 

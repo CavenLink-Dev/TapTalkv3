@@ -29,12 +29,14 @@ export default function RegStep1Who() {
     >
       <View style={styles.choices}>
         <SelectableCard
+          entranceIndex={0}
           label="Myself"
           description="I'll be using TapTalk to communicate."
           selected={data.role === 'myself'}
           onPress={() => update({ role: 'myself' })}
         />
         <SelectableCard
+          entranceIndex={1}
           label="Someone else"
           description="I'm setting this up for a person I support."
           selected={data.role === 'someone_else'}

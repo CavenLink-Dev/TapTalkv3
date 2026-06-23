@@ -139,17 +139,50 @@ export const spacing = {
 } as const;
 
 // ─── Typography ───────────────────────────────────────────────────────────────
+// Source: TapTalk Component Library - Design Handoff (Sept 2026)
+// Display/Title/Heading/Subhead use SF Compact Rounded; Body/Callout use SF Compact.
 
 export const typography = {
   fontFamily:  Platform.select({ ios: 'SF Compact', default: 'System' }) ?? 'System',
   fontFamilyDisplay: Platform.select({ ios: 'SF Compact Rounded', default: 'System' }) ?? 'System',
-  title:       30,
-  heading:     24,
+
+  // sizes ──
+  /** hero / splash mark — 34/800 */
+  display:     34,
+  /** screen titles — 28/800 */
+  title:       28,
+  /** section headings — 22/800 */
+  heading:     22,
+  /** subheads — 20/700 */
   subheading:  20,
+  /** primary body copy — 17/400 */
   body:        17,
+  /** secondary callout — 15/400 */
   callout:     15,
-  caption:     12,
+  /** captions, meta — 13/600 */
+  caption:     13,
+  /** eyebrow ALL-CAPS labels — 11/700 */
+  eyebrow:     11,
+  /** tab bar labels — 10 */
   tab:         10,
+
+  // weights ──
+  weightDisplay:  '800' as const,
+  weightTitle:    '800' as const,
+  weightHeading:  '800' as const,
+  weightSubhead:  '700' as const,
+  weightBody:     '400' as const,
+  weightCaption:  '600' as const,
+  weightEyebrow:  '700' as const,
+  weightButton:   '700' as const,
+
+  // letter-spacing ──
+  trackDisplay:  -1.2,
+  trackTitle:    -0.8,
+  trackHeading:  -0.4,
+  trackSubhead:  -0.2,
+  trackButton:   -0.3,
+  trackEyebrow:   1.5,
 } as const;
 
 // ─── Shadows ──────────────────────────────────────────────────────────────────
@@ -179,19 +212,86 @@ export const shadows = {
 } as const;
 
 // ─── Animation ────────────────────────────────────────────────────────────────
-// Source: TapTalk Design System 2 / tokens/animations.css
+// Source: TapTalk Component Library Design Handoff · "Shadows & motion"
+//
+// Three voices:
+//   • Standard ease   — fades, crossfades, page transitions.
+//   • Spring ease     — pops, scales, anything physical (buttons, checks).
+//   • Linear          — shimmers, breathing idle loops.
+//
+// All semantic motion below references these. Components MUST read durations
+// from this file (not hardcode them) so Reduce Motion can override globally.
 
 export const animation = {
+  // ── Easings (cubic-bezier control points) ────────────────────────────────
   /** standard ease — page/fade transitions */
   easeStandard: [0.4, 0, 0.2, 1] as const,
   /** spring ease — pops and scales */
   easeSpring:   [0.34, 1.3, 0.64, 1] as const,
-  /** press feedback */
-  durFast:   120,
-  /** fades / cross-fades */
-  durBase:   260,
-  /** page slides */
-  durSlide:  300,
-  /** mascot idle float (one half-cycle) */
-  durFloat:  1400,
+  /** linear — shimmer / float */
+  easeLinear:   [0, 0, 1, 1] as const,
+
+  // ── Durations (ms) ──────────────────────────────────────────────────────
+  /** press feedback in / chip selection in */
+  durFast:    120,
+  /** focus border, fill cross-fade */
+  durFocus:   200,
+  /** release spring back, button color settle */
+  durRelease: 180,
+  /** fades, cross-fades, entrance translateY */
+  durBase:    260,
+  /** segmented progress fill, page slides */
+  durSlide:   300,
+  /** segment width fill, single-bar progress */
+  durFill:    360,
+  /** shake / error oscillation (3 cycles) */
+  durShake:   400,
+  /** logo arc draw-on, hero reveal */
+  durDraw:    520,
+  /** mascot idle float (one half-cycle), splash breathe */
+  durFloat:   1400,
+  /** skeleton shimmer slide */
+  durShimmer: 1600,
+  /** very short crossfade used as Reduce-Motion fallback */
+  durReduced: 200,
+
+  // ── Stagger steps (ms) ──────────────────────────────────────────────────
+  /** segmented progress catch-up between adjacent segments */
+  stagSeg:    45,
+  /** card list entrance per-row */
+  stagRow:    60,
+  /** card list entrance per-row when Reduce Motion is on (no translate) */
+  stagRowRM:  80,
+  /** logo dot pop delay after arc starts drawing */
+  stagDot:    180,
+  /** LoadingDots dot-to-dot offset */
+  stagDot1:   0,
+  stagDot2:   220,
+  stagDot3:   440,
+
+  // ── Reanimated spring physics ───────────────────────────────────────────
+  /** pop spring — buttons, check rings, success pulses */
+  springPop:    { damping: 12, stiffness: 320, mass: 1 } as const,
+  /** gentle spring — cards, sheet entrances */
+  springGentle: { damping: 18, stiffness: 220, mass: 1 } as const,
+  /** stiff spring — minimal-motion fallback */
+  springStiff:  { damping: 24, stiffness: 600, mass: 1 } as const,
+
+  // ── Scale anchors ───────────────────────────────────────────────────────
+  /** primary button press in */
+  scalePressLg:  0.97,
+  /** secondary card / pill press in */
+  scalePressMd:  0.96,
+  /** subtle card pressable */
+  scalePressSm:  0.985,
+  /** completion celebration pulse high-water mark */
+  scalePulse:    1.03,
+
+  // ── One-off offsets ─────────────────────────────────────────────────────
+  /** error shake horizontal amplitude */
+  shakeAmp:    6,
+  /** mascot float vertical amplitude */
+  floatAmp:    2,
 } as const;
+
+export type Animation = typeof animation;
