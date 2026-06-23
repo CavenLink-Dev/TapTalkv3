@@ -1,176 +1,347 @@
-import React, { useEffect } from 'react';
-import { Dimensions, Image, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Dimensions, Image, StyleSheet, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
+  Easing,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
   withRepeat,
   withSequence,
-  withSpring,
   withTiming,
-  Easing,
-  runOnJS,
 } from 'react-native-reanimated';
 import { DevSkip } from '../../src/components/DevSkip';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
+import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 
-const onboardingRoute = '/onboarding/get-started' as Href;
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-// Diameter big enough to cover both portrait and landscape from a centered seed.
+// Disc large enough to cover the screen from a centered seed in any orientation.
 const REVEAL_SIZE = Math.hypot(SCREEN_W, SCREEN_H) * 2.2;
 
+// ── Timeline (ms) ────────────────────────────────────────────────────────────
+// Tuned for ~5.8s end-to-end, breath-paced. Reduce Motion takes a much shorter
+// path (~4.5s) but still respects the "always play" requirement.
+const T = {
+  // open
+  logoIn:        { start:    0, duration: 1100 },
+  mottoIn:       { start:  650, duration:  720 },
+  loaderIn:      { start: 1000, duration:  520 },
+  // breathe
+  breathStart:   1500,
+  breathDuration: 2900,
+  // swallow
+  swallowStart:  4200,
+  fadeOut:       { start: 4200, duration: 700 },   // logo + motto + loader gently fade out
+  discGrow:      { start: 4400, duration: 1000 },  // primary disc inflates from center
+  wordmarkIn:    { start: 4900, duration: 480 },   // brand wordmark resolves on the disc
+  // blink
+  navAt:         5750,
+  // reduce-motion path (no scale, no translate)
+  rm: {
+    fadeIn:   500,
+    hold:     3300,
+    fadeOut:  500,
+    navAt:    4500,
+  },
+} as const;
+
+const TARGET_ROUTES = {
+  getStarted: '/onboarding/get-started' as Href,
+  login:      '/auth/login' as Href,
+  talk:       '/(tabs)/talk' as Href,
+};
+
 /**
- * Splash sequence (target: ~2.6s end-to-end on iPhone 16):
- *   0   – 700ms : logo image fades + slides up · tagline trails 140ms behind
- *   700 – 2050ms: three primary dots bounce up-and-down in a staggered wave
- *   2050        : a primary-color disc seeded under the logo expands to
- *                 "eat" the screen while the TapTalk wordmark scales up on
- *                 top — this is the brand reveal that hands off to the
- *                 get-started screen.
- *   2650        : router.replace → get-started
+ * TapTalk splash — premium, breath-paced.
  *
- * Reduce Motion: skip the dots and the disc reveal — the logo cross-fades in,
- * holds for 800ms, then we navigate. No translateY, no scale, no repeats.
+ * Plays on every cold start (the user spec calls this out). The animation is
+ * decoupled from navigation: while the animation runs, AsyncStorage hydration
+ * happens behind the scenes; at ~5.75s we look at the resolved app state and
+ * route to either Talk, Login, or Get Started.
+ *
+ * Layout — fixed positions, not flex-centered, so the rhythm is the same on
+ * every device size:
+ *   • Logo at the top-middle (~22% from top).
+ *   • Motto "Everyone deserves a voice." pinned near the lower third.
+ *   • Loading dots at the very bottom of the safe area.
+ *
+ * Motion — three phases:
+ *   • OPEN     (0–1.5s)  · logo fades + lifts, motto eases up, loader resolves.
+ *   • BREATHE  (1.5–4.2s)· logo "breath" scale 1 → 1.015 → 1; loader runs.
+ *   • SWALLOW  (4.2–5.4s)· all foreground fades; brand disc inflates from the
+ *                          logo seed to fill the screen; wordmark resolves on
+ *                          top. The disc is the "pull-in".
+ *   • BLINK    (5.4–5.8s)· wordmark holds briefly, then we hand off to the
+ *                          next route — feels like a soft eye-blink.
+ *
+ * Reduce Motion: replaces every scale/translate with a single opacity sweep,
+ * shortens the timeline to ~4.5s, holds the brand fill before navigating.
+ * Loader is rendered as a single low-opacity pulse on one dot.
  */
 export default function Splash() {
   const router = useRouter();
   const reduceMotion = useReduceMotion();
+  const { state, hydrated } = useAppContext();
+  const [navReady, setNavReady] = useState(false);
 
-  // Phase 1
+  // ── Shared values ──
+  // Open
   const logoOpacity = useSharedValue(0);
-  const logoY       = useSharedValue(16);
-  const taglineOpacity = useSharedValue(0);
+  const logoY       = useSharedValue(reduceMotion ? 0 : -10);
+  const logoScale   = useSharedValue(reduceMotion ? 1 : 0.96);
 
-  // Phase 2 — dot bounce
-  const dot1Y = useSharedValue(0);
-  const dot2Y = useSharedValue(0);
-  const dot3Y = useSharedValue(0);
-  const dotsOpacity = useSharedValue(0);
+  const mottoOpacity = useSharedValue(0);
+  const mottoY       = useSharedValue(reduceMotion ? 0 : 8);
 
-  // Phase 3 — reveal
-  const revealScale = useSharedValue(0);
+  const loaderOpacity = useSharedValue(0);
+
+  // Loader dot wave (one shared value per dot's translateY + glow)
+  const d1Y = useSharedValue(0); const d1G = useSharedValue(0.45);
+  const d2Y = useSharedValue(0); const d2G = useSharedValue(0.45);
+  const d3Y = useSharedValue(0); const d3G = useSharedValue(0.45);
+
+  // Swallow
+  const foregroundFade = useSharedValue(1);          // multiplied into logo/motto/loader
+  const revealScale    = useSharedValue(0);          // disc 0 → 1
   const wordmarkOpacity = useSharedValue(0);
-  const wordmarkScale   = useSharedValue(0.92);
-  const logoFade        = useSharedValue(1); // fade the logo out once the wordmark takes over
+  const wordmarkScale   = useSharedValue(reduceMotion ? 1 : 0.94);
 
+  // ── Choose destination route ──
+  const decideRoute = useCallback((): Href => {
+    if (state.signedIn && state.rememberLogin) return TARGET_ROUTES.talk;
+    if (state.onboardingComplete) return TARGET_ROUTES.login;
+    return TARGET_ROUTES.getStarted;
+  }, [state.signedIn, state.rememberLogin, state.onboardingComplete]);
+
+  // Track the latest decision in a ref so animation callbacks always pick up
+  // the freshest state without re-running the animation.
+  const routeRef = useRef<Href>(decideRoute());
   useEffect(() => {
+    routeRef.current = decideRoute();
+  }, [decideRoute]);
+
+  // ── Animation orchestration (runs once on mount) ──
+  useEffect(() => {
+    const easeOut = Easing.out(Easing.cubic);
+    const easeInOut = Easing.bezier(0.65, 0, 0.35, 1);
+    const easeSine  = Easing.inOut(Easing.sin);
+
     if (reduceMotion) {
-      logoOpacity.value = withTiming(1, { duration: 200 });
-      taglineOpacity.value = withDelay(120, withTiming(1, { duration: 200 }));
-      const t = setTimeout(() => router.replace(onboardingRoute), 1300);
+      // ── Reduce-motion timeline (opacity only) ──
+      logoOpacity.value   = withTiming(1, { duration: T.rm.fadeIn });
+      mottoOpacity.value  = withDelay(150, withTiming(1, { duration: T.rm.fadeIn }));
+      loaderOpacity.value = withDelay(280, withTiming(1, { duration: T.rm.fadeIn }));
+
+      // Single calm pulse on the middle dot.
+      d2G.value = withDelay(
+        T.rm.fadeIn,
+        withRepeat(
+          withSequence(
+            withTiming(1,    { duration: 800, easing: Easing.inOut(Easing.quad) }),
+            withTiming(0.45, { duration: 800, easing: Easing.inOut(Easing.quad) }),
+          ),
+          -1,
+          true,
+        ),
+      );
+
+      // Swallow as a soft cross-fade only.
+      const swallowAt = T.rm.fadeIn + T.rm.hold;
+      foregroundFade.value = withDelay(swallowAt, withTiming(0, { duration: T.rm.fadeOut }));
+      revealScale.value    = withDelay(swallowAt, withTiming(1, { duration: T.rm.fadeOut + 60 }));
+      wordmarkOpacity.value = withDelay(swallowAt + 100, withTiming(1, { duration: 320 }));
+
+      const t = setTimeout(() => setNavReady(true), T.rm.navAt);
       return () => clearTimeout(t);
     }
 
-    // ── Phase 1 ──
-    logoOpacity.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) });
-    logoY.value       = withSpring(0, { damping: 14, stiffness: 120 });
-    taglineOpacity.value = withDelay(280, withTiming(1, { duration: 420 }));
+    // ────────────────────────────────────────────────────────────────────────
+    // FULL TIMELINE
+    // ────────────────────────────────────────────────────────────────────────
 
-    // ── Phase 2 ── dots fade in then bounce (looped) until the reveal kicks in
-    dotsOpacity.value = withDelay(700, withTiming(1, { duration: 220 }));
-    const bounce = (anim: typeof dot1Y, delay: number) => {
-      anim.value = withDelay(
-        700 + delay,
+    // OPEN — logo
+    logoOpacity.value = withDelay(
+      T.logoIn.start,
+      withTiming(1, { duration: T.logoIn.duration, easing: easeOut }),
+    );
+    logoY.value = withDelay(
+      T.logoIn.start,
+      withTiming(0, { duration: T.logoIn.duration, easing: easeOut }),
+    );
+    logoScale.value = withDelay(
+      T.logoIn.start,
+      withTiming(1, { duration: T.logoIn.duration, easing: easeOut }),
+    );
+
+    // OPEN — motto
+    mottoOpacity.value = withDelay(
+      T.mottoIn.start,
+      withTiming(1, { duration: T.mottoIn.duration, easing: easeOut }),
+    );
+    mottoY.value = withDelay(
+      T.mottoIn.start,
+      withTiming(0, { duration: T.mottoIn.duration, easing: easeOut }),
+    );
+
+    // OPEN — loader
+    loaderOpacity.value = withDelay(
+      T.loaderIn.start,
+      withTiming(1, { duration: T.loaderIn.duration, easing: easeOut }),
+    );
+
+    // Loader dot wave — calm sine motion + glow. Stops naturally when
+    // foregroundFade hits 0 in the swallow phase (they share the multiplier).
+    const startWave = (yVal: ReturnType<typeof useSharedValue<number>>, gVal: ReturnType<typeof useSharedValue<number>>, offset: number) => {
+      yVal.value = withDelay(
+        T.loaderIn.start + offset,
         withRepeat(
           withSequence(
-            withTiming(-10, { duration: 280, easing: Easing.out(Easing.quad) }),
-            withTiming(0,   { duration: 320, easing: Easing.in(Easing.quad)  }),
+            withTiming(-6, { duration: 700, easing: easeSine }),
+            withTiming( 0, { duration: 700, easing: easeSine }),
+          ),
+          -1,
+          false,
+        ),
+      );
+      gVal.value = withDelay(
+        T.loaderIn.start + offset,
+        withRepeat(
+          withSequence(
+            withTiming(1,    { duration: 700, easing: easeSine }),
+            withTiming(0.45, { duration: 700, easing: easeSine }),
           ),
           -1,
           false,
         ),
       );
     };
-    bounce(dot1Y, 0);
-    bounce(dot2Y, 120);
-    bounce(dot3Y, 240);
+    startWave(d1Y, d1G,   0);
+    startWave(d2Y, d2G, 220);
+    startWave(d3Y, d3G, 440);
 
-    // ── Phase 3 ── brand reveal
-    wordmarkOpacity.value = withDelay(2050, withTiming(1, { duration: 240 }));
-    wordmarkScale.value   = withDelay(2050, withSpring(1, { damping: 14, stiffness: 180 }));
-    logoFade.value        = withDelay(2050, withTiming(0, { duration: 260 }));
-    revealScale.value     = withDelay(
-      2050,
-      withTiming(1, { duration: 520, easing: Easing.bezier(0.65, 0, 0.35, 1) }, () => {
-        // schedule the route swap from the worklet
-        runOnJS(navigateToGetStarted)();
-      }),
+    // BREATHE — single gentle breath cycle on the logo.
+    logoScale.value = withDelay(
+      T.breathStart,
+      withSequence(
+        withTiming(1.015, { duration: T.breathDuration / 2, easing: easeSine }),
+        withTiming(1,     { duration: T.breathDuration / 2, easing: easeSine }),
+      ),
     );
 
-    function navigateToGetStarted() {
-      router.replace(onboardingRoute);
+    // SWALLOW — soft foreground fade-out (all elements use this multiplier).
+    foregroundFade.value = withDelay(
+      T.fadeOut.start,
+      withTiming(0, { duration: T.fadeOut.duration, easing: easeOut }),
+    );
+
+    // SWALLOW — disc grows. Long, smooth, almost imperceptibly accelerating.
+    revealScale.value = withDelay(
+      T.discGrow.start,
+      withTiming(1, { duration: T.discGrow.duration, easing: easeInOut }),
+    );
+
+    // SWALLOW — wordmark resolves on top of the brand fill.
+    wordmarkOpacity.value = withDelay(
+      T.wordmarkIn.start,
+      withTiming(1, { duration: T.wordmarkIn.duration, easing: easeOut }),
+    );
+    wordmarkScale.value = withDelay(
+      T.wordmarkIn.start,
+      withTiming(1, { duration: T.wordmarkIn.duration, easing: easeOut }),
+    );
+
+    // BLINK — flip the nav switch a beat after the disc has settled. The
+    // actual route swap is gated below on hydration so we never navigate
+    // with stale state.
+    const t = setTimeout(() => setNavReady(true), T.navAt);
+    return () => clearTimeout(t);
+  // We deliberately want this to run exactly once. The route is decided later
+  // from a ref, so omitting it here is correct.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduceMotion]);
+
+  // Navigation — only fires once both: (a) the animation is done, (b) the
+  // app state has hydrated from AsyncStorage. In practice hydration finishes
+  // well before the animation ends, but this guarantees correctness on a
+  // very cold start.
+  useEffect(() => {
+    if (navReady && hydrated) {
+      router.replace(routeRef.current);
     }
-  }, [
-    reduceMotion,
-    router,
-    logoOpacity,
-    logoY,
-    taglineOpacity,
-    dot1Y,
-    dot2Y,
-    dot3Y,
-    dotsOpacity,
-    revealScale,
-    wordmarkOpacity,
-    wordmarkScale,
-    logoFade,
-  ]);
+  }, [navReady, hydrated, router]);
 
   // ── Animated styles ──
   const logoStyle = useAnimatedStyle(() => ({
-    opacity: logoOpacity.value * logoFade.value,
-    transform: [{ translateY: logoY.value }],
+    opacity: logoOpacity.value * foregroundFade.value,
+    transform: [
+      { translateY: logoY.value },
+      { scale: logoScale.value },
+    ],
   }));
-  const taglineStyle = useAnimatedStyle(() => ({
-    opacity: taglineOpacity.value * logoFade.value,
+
+  const mottoStyle = useAnimatedStyle(() => ({
+    opacity: mottoOpacity.value * foregroundFade.value,
+    transform: [{ translateY: mottoY.value }],
   }));
-  const dotsStyle = useAnimatedStyle(() => ({
-    opacity: dotsOpacity.value * logoFade.value,
+
+  const loaderStyle = useAnimatedStyle(() => ({
+    opacity: loaderOpacity.value * foregroundFade.value,
   }));
-  const dotAStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dot1Y.value }] }));
-  const dotBStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dot2Y.value }] }));
-  const dotCStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dot3Y.value }] }));
+
+  const dotA = useAnimatedStyle(() => ({
+    transform: [{ translateY: d1Y.value }],
+    opacity: d1G.value,
+  }));
+  const dotB = useAnimatedStyle(() => ({
+    transform: [{ translateY: d2Y.value }],
+    opacity: d2G.value,
+  }));
+  const dotC = useAnimatedStyle(() => ({
+    transform: [{ translateY: d3Y.value }],
+    opacity: d3G.value,
+  }));
 
   const revealStyle = useAnimatedStyle(() => ({
     transform: [{ scale: revealScale.value }],
     opacity: revealScale.value > 0 ? 1 : 0,
   }));
+
   const wordmarkStyle = useAnimatedStyle(() => ({
     opacity: wordmarkOpacity.value,
     transform: [{ scale: wordmarkScale.value }],
   }));
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Phase 1 + 2 — calm logo + tagline + bouncing dots */}
-      <View style={styles.content}>
-        <Animated.View style={[styles.logoBlock, logoStyle]}>
-          <Image
-            source={require('../../asset/taptalk_logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-            accessibilityLabel="TapTalk"
-          />
-        </Animated.View>
-        <Animated.Text style={[styles.tagline, taglineStyle]}>
-          Everyone deserves a voice
-        </Animated.Text>
-      </View>
-
-      <Animated.View style={[styles.dotsRow, dotsStyle]} pointerEvents="none">
-        <Animated.View style={[styles.dot, dotAStyle]} />
-        <Animated.View style={[styles.dot, styles.dotMiddle, dotBStyle]} />
-        <Animated.View style={[styles.dot, dotCStyle]} />
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/* Logo — top-middle */}
+      <Animated.View style={[styles.logoBlock, logoStyle]}>
+        <Image
+          source={require('../../asset/taptalk_logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="TapTalk"
+        />
       </Animated.View>
 
-      {/* Phase 3 — reveal disc + wordmark "eats" the screen */}
+      {/* Motto — near the bottom */}
+      <Animated.Text style={[styles.motto, mottoStyle]}>
+        Everyone deserves a voice.
+      </Animated.Text>
+
+      {/* Loader — bottom */}
+      <Animated.View style={[styles.loaderRow, loaderStyle]} pointerEvents="none">
+        <Animated.View style={[styles.dot, dotA]} />
+        <Animated.View style={[styles.dot, styles.dotSpacer, dotB]} />
+        <Animated.View style={[styles.dot, dotC]} />
+      </Animated.View>
+
+      {/* SWALLOW disc + brand wordmark — sit above everything else */}
       <Animated.View pointerEvents="none" style={[styles.reveal, revealStyle]} />
       <Animated.View pointerEvents="none" style={[styles.wordmarkWrap, wordmarkStyle]}>
-        <Text style={styles.wordmark}>TapTalk</Text>
+        <Animated.Text style={styles.wordmark}>TapTalk</Animated.Text>
       </Animated.View>
 
       <DevSkip next="/onboarding/get-started" />
@@ -178,36 +349,40 @@ export default function Splash() {
   );
 }
 
-const REVEAL_SEED_Y = SCREEN_H * 0.42;
+// Disc seed sits roughly under the logo so the inflate reads as a "pull from
+// the brand mark" rather than a generic centered radial.
+const REVEAL_SEED_Y = SCREEN_H * 0.28;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   logoBlock: {
+    position: 'absolute',
+    top: '22%',
+    left: 0,
+    right: 0,
     alignItems: 'center',
   },
   logo: {
-    width: 240,
-    height: 88,
+    width: 220,
+    height: 80,
   },
-  tagline: {
+  motto: {
     position: 'absolute',
-    bottom: '38%',
-    fontFamily: fonts.body,
+    bottom: '24%',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontFamily: fonts.bodyMedium,
     fontSize: typography.body,
     color: colors.textMuted,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
-  dotsRow: {
+  loaderRow: {
     position: 'absolute',
-    bottom: 72,
+    bottom: 56,
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -215,15 +390,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: colors.primary,
   },
-  dotMiddle: {
-    marginHorizontal: 10,
+  dotSpacer: {
+    marginHorizontal: 12,
   },
-  // Reveal disc: seeded at the logo position, scales 0 → 1 → covers screen.
+  // Reveal disc — seeded under the logo. Scales 0 → 1 to swallow the screen.
   reveal: {
     position: 'absolute',
     width: REVEAL_SIZE,
@@ -235,14 +410,17 @@ const styles = StyleSheet.create({
   },
   wordmarkWrap: {
     position: 'absolute',
-    top: 0, bottom: 0, left: 0, right: 0,
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
   wordmark: {
     fontFamily: fonts.displayBlack,
-    fontSize: 64,
-    letterSpacing: -2.5,
+    fontSize: 60,
+    letterSpacing: -2.2,
     color: colors.surface,
   },
 });

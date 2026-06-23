@@ -1,46 +1,15 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Href, Redirect } from 'expo-router';
-import { useAppContext } from '../src/hooks/useAppContext';
-import { colors } from '../src/theme/tokens';
 
-const routes = {
-  splash: '/onboarding/splash' as Href,
-  login: '/auth/login' as Href,
-  talk: '/(tabs)/talk' as Href,
-};
-
+/**
+ * Root router.
+ *
+ * Per the splash spec the splash screen MUST play on every cold start, so we
+ * unconditionally hand control to `/onboarding/splash` here. The splash holds
+ * the animation for ~5.8s while AsyncStorage hydration runs in parallel, then
+ * decides where to send the user (Talk, Login, or Get Started) based on the
+ * resolved app state.
+ */
 export default function Index() {
-  const { state, hydrated } = useAppContext();
-
-  // Wait for AsyncStorage hydration before deciding where to send the user.
-  // Without this gate, a user mid-app would briefly flash the splash screen
-  // because the initial reducer state has every flag set to false.
-  if (!hydrated) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
-  }
-
-  // Routing decisions:
-  //   • Fresh install / signed out via user → splash → get-started.
-  //   • Account already created + "Remember me" was on → straight into Talk.
-  //   • Account already created + "Remember me" was off → login screen.
-  const route = !state.onboardingComplete
-    ? routes.splash
-    : state.signedIn && state.rememberLogin
-      ? routes.talk
-      : routes.login;
-
-  return <Redirect href={route} />;
+  const splash = '/onboarding/splash' as Href;
+  return <Redirect href={splash} />;
 }
-
-const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-});
