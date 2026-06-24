@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
@@ -26,6 +26,7 @@ export default function MeScreen() {
   const [displayName, setDisplayName] = useState(state.user.displayName || state.user.nickname);
   const [caregiverLocked, setCaregiverLocked] = useState(state.parent.lockEnabled);
   const [pinPromptVisible, setPinPromptVisible] = useState(false);
+  const switchAnim = useRef(new Animated.Value(caregiverLocked ? 1 : 0)).current;
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
 
@@ -48,8 +49,13 @@ export default function MeScreen() {
     }
     const next = !caregiverLocked;
     setCaregiverLocked(next);
+    Animated.timing(switchAnim, {
+      toValue: next ? 1 : 0,
+      duration: 160,
+      useNativeDriver: false,
+    }).start();
     dispatch({ type: 'SET_PARENT', payload: { lockEnabled: next } });
-  }, [caregiverLocked, state.parent.pin, dispatch]);
+  }, [caregiverLocked, state.parent.pin, dispatch, switchAnim]);
 
   const confirmPinAndDisable = useCallback(async () => {
     if (!pinInput) return;
@@ -147,9 +153,27 @@ export default function MeScreen() {
             <Text style={styles.settingTitle}>Caregiver Lock</Text>
             <Text style={styles.settingSubtitle}>Protect settings with a PIN.</Text>
           </View>
-          <View style={[styles.switchTrack, caregiverLocked && styles.switchTrackOn]}>
-            <View style={[styles.switchThumb, caregiverLocked && styles.switchThumbOn]} />
-          </View>
+          <Animated.View style={[
+              styles.switchTrack,
+              {
+                backgroundColor: switchAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [colors.disabled, colors.success],
+                }),
+              },
+            ]}>
+              <Animated.View style={[
+                styles.switchThumb,
+                {
+                  transform: [{
+                    translateX: switchAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 20],
+                    }),
+                  }],
+                },
+              ]} />
+            </Animated.View>
         </Pressable>
         {pinPromptVisible ? (
           <View style={styles.pinPrompt}>
@@ -306,20 +330,18 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     backgroundColor: colors.surface,
-  },
-  switchThumbOn: {
-    alignSelf: 'flex-end',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    elevation: 2,
   },
   switchTrack: {
     width: 48,
     height: 28,
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: colors.disabled,
     paddingHorizontal: 3,
-  },
-  switchTrackOn: {
-    backgroundColor: colors.success,
   },
   pinPrompt: {
     marginTop: spacing.md,

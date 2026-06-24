@@ -24,10 +24,10 @@ const ICONS: Record<BottomNavIconName, { selected: number; unselected: number }>
 };
 
 const ICON_SIZE: Record<BottomNavIconName, number> = {
-  board: 50,
-  activity: 54,
-  calendar: 50,
-  profile: 50,
+  board: 60,
+  activity: 64,
+  calendar: 60,
+  profile: 60,
 };
 
 export function BottomNavIcon({

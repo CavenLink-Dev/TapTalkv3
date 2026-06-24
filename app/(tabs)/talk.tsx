@@ -352,7 +352,7 @@ function ToggleChevron({ open }: { open: boolean }) {
       <Polyline
         points={open ? '9,10 18,4 27,10' : '9,5 18,11 27,5'}
         fill="none"
-        stroke="#137BD2"
+        stroke={colors.primaryDark}
         strokeWidth={3}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -470,7 +470,7 @@ export default function TalkScreen() {
         source: 'board',
       },
     });
-    speak(label, { rate: 0.9 });
+    speak(label, { rate: state.accessibility.speechRate, pitch: state.accessibility.speechPitch });
     announce(`Added ${label}`);
   }, [announce, dispatch, speak]);
 
@@ -494,7 +494,7 @@ export default function TalkScreen() {
       announce('No message to speak');
       return;
     }
-    speak(messageText, { rate: 0.9 });
+    speak(messageText, { rate: state.accessibility.speechRate, pitch: state.accessibility.speechPitch });
     announce(`Speaking: ${messageText}`);
   }, [announce, messageText, speak]);
 
@@ -692,7 +692,7 @@ export default function TalkScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   screenRoot: {
     flex: 1,
@@ -718,9 +718,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingBottom: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1.4,
-    borderBottomColor: '#8D8D8D',
+    borderBottomColor: colors.border,
   },
   messageButton: {
     flex: 1,
@@ -785,7 +785,7 @@ const styles = StyleSheet.create({
   },
   topNavSlot: {
     position: 'relative',
-    backgroundColor: '#E9EAED',
+    backgroundColor: colors.background,
     zIndex: 2,
   },
   topNavPanel: {
@@ -833,8 +833,8 @@ const styles = StyleSheet.create({
     width: 62,
     height: 18,
     borderWidth: 2,
-    borderColor: '#137BD2',
-    backgroundColor: '#9FE0FF',
+    borderColor: colors.primaryDark,
+    backgroundColor: colors.softBlue,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 4,
@@ -851,7 +851,7 @@ const styles = StyleSheet.create({
   },
   board: {
     flex: 1,
-    backgroundColor: '#E9EAED',
+    backgroundColor: colors.background,
   },
   boardContent: {
     flexDirection: 'row',

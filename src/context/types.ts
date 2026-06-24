@@ -24,6 +24,10 @@ export interface AppState {
     theme: 'light' | 'dark' | 'system';
     highContrast: boolean;
     colorScheme: 'fitzgerald' | 'cvd_safe';
+    /** Expo Speech rate. Range 0.5 to 1.5. Default 0.9. */
+    speechRate: number;
+    /** Expo Speech pitch. Range 0.5 to 2.0. Default 1.0. */
+    speechPitch: number;
   };
   user: {
     legalName: string;

@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { BottomNavIcon, BottomNavIconName } from '../../src/components/icons/BottomNavIcon';
+import { PressableTabButton } from '../../src/components/native/PressableTabButton';
 import { colors } from '../../src/theme/tokens';
 
 function icon(name: BottomNavIconName) {
@@ -20,6 +21,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: '#4B555C',
         tabBarItemStyle: styles.tabBarItem,
+        tabBarButton: (props) => <PressableTabButton {...(props as Parameters<typeof PressableTabButton>[0])} />,
       }}
     >
       <Tabs.Screen
@@ -39,7 +41,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="tools"
         options={{
-          title: 'Calendar',
+          title: 'Settings',
           tabBarIcon: icon('calendar'),
         }}
       />
@@ -56,12 +58,12 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 90,
-    paddingTop: 12,
-    paddingBottom: 8,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 2,
-    borderTopColor: '#8D8D8D',
+    height: 96,
+    paddingTop: 10,
+    paddingBottom: 10,
+    backgroundColor: colors.surface,
+    borderTopWidth: 1.5,
+    borderTopColor: colors.border,
   },
   tabBarItem: {
     justifyContent: 'center',

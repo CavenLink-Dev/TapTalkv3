@@ -1,211 +1,153 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Href, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
-import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { Screen } from '../../src/components/native/Screen';
-import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
-interface Activity {
+interface ActivityCard {
   id: string;
+  route: Href;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  iconColor: string;
+  iconBg: string;
   name: string;
-  task: string;
   description: string;
-  choices: string[];
-  answer: string;
+  tag: string;
 }
 
-const activities: Activity[] = [
+const ACTIVITY_LIST: ActivityCard[] = [
   {
     id: 'memory-match',
+    route: '/activities/memory-match' as Href,
+    icon: 'eye-outline',
+    iconColor: colors.primary,
+    iconBg: '#E6F4FD',
     name: 'Memory Match',
-    task: 'Remember the friendly symbol.',
-    description: 'Build memory and visual scanning with one calm choice.',
-    choices: ['★', '●', '◆'],
-    answer: '★',
+    description: 'A shape appears then hides. Pick the one you saw. Builds visual memory and focus.',
+    tag: 'Visual',
   },
   {
     id: 'picture-match',
+    route: '/activities/picture-match' as Href,
+    icon: 'text-outline',
+    iconColor: '#BD73FF',
+    iconBg: '#F3EAFF',
     name: 'Picture Match',
-    task: 'Match the word to the picture.',
-    description: 'Connect symbols with language.',
-    choices: ['Dog', 'Tree', 'Water'],
-    answer: 'Dog',
+    description: 'A word is shown. Find the matching card. Connects language with recognition.',
+    tag: 'Language',
   },
   {
     id: 'count-along',
+    route: '/activities/count-along' as Href,
+    icon: 'calculator-outline',
+    iconColor: '#FF9500',
+    iconBg: '#FFF4E0',
     name: 'Count Along',
-    task: 'Count the shapes.',
-    description: 'Practise number recognition without pressure.',
-    choices: ['2', '3', '4'],
-    answer: '3',
+    description: 'Count the dots on screen then choose the right number. No pressure, no time limit.',
+    tag: 'Numbers',
   },
 ];
 
 export default function ActivitiesScreen() {
-  const { dispatch } = useAppContext();
-  const [active, setActive] = useState<Activity | null>(null);
-  const [result, setResult] = useState<string>('');
-
-  const choose = (choice: string) => {
-    if (!active) return;
-    const correct = choice === active.answer;
-    setResult(correct ? 'Great work. You got it!' : 'Good try. Take another look.');
-    if (correct) {
-      dispatch({ type: 'INCREMENT_ACTIVITY_STATS', payload: { minutes: 1 } });
-    }
-  };
-
-  if (active) {
-    return (
-      <Screen title={active.name} subtitle="Clear exit, simple choices, no harsh scoring.">
-        <Card style={styles.practiceCard}>
-          <Text style={styles.task}>{active.task}</Text>
-          <Text style={styles.practiceSymbol}>
-            {active.id === 'picture-match' ? '🐕' : active.id === 'count-along' ? '● ● ●' : '★'}
-          </Text>
-          <View style={styles.choiceGrid}>
-            {active.choices.map((choice) => (
-              <Pressable
-                key={choice}
-                accessibilityRole="button"
-                accessibilityLabel={`Choose ${choice}`}
-                onPress={() => choose(choice)}
-                style={styles.choice}
-              >
-                <Text style={styles.choiceText}>{choice}</Text>
-              </Pressable>
-            ))}
-          </View>
-          {result ? <Text style={styles.result}>{result}</Text> : null}
-        </Card>
-        <PrimaryButton
-          accessibilityLabel="Exit activity"
-          label="Back to Activities"
-          onPress={() => {
-            setActive(null);
-            setResult('');
-          }}
-          variant="secondary"
-        />
-      </Screen>
-    );
-  }
+  const router = useRouter();
 
   return (
-    <Screen title="Activity" subtitle="Practice focus, memory, language, and numbers.">
-      {activities.map((activity) => (
-        <Card key={activity.id} style={styles.activityCard}>
-          <View style={styles.activityHeader}>
-            <View style={styles.activityIcon}>
-              <Text style={styles.activityIconText}>✦</Text>
+    <Screen title="Activities" subtitle="Practice focus, memory, language, and numbers.">
+      {ACTIVITY_LIST.map((activity) => (
+        <Pressable
+          key={activity.id}
+          accessibilityRole="button"
+          accessibilityLabel={`Start ${activity.name}`}
+          onPress={() => router.push(activity.route)}
+          style={({ pressed }) => pressed && styles.cardPressed}
+        >
+          <Card style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconBox, { backgroundColor: activity.iconBg }]}>
+                <Ionicons name={activity.icon} size={26} color={activity.iconColor} />
+              </View>
+              <View style={styles.cardCopy}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name}>{activity.name}</Text>
+                  <View style={[styles.tag, { backgroundColor: activity.iconBg }]}>
+                    <Text style={[styles.tagText, { color: activity.iconColor }]}>{activity.tag}</Text>
+                  </View>
+                </View>
+                <Text style={styles.description}>{activity.description}</Text>
+              </View>
             </View>
-            <View style={styles.activityCopy}>
-              <Text style={styles.activityName}>{activity.name}</Text>
-              <Text style={styles.activityTask}>Task: {activity.task}</Text>
+            <View style={styles.cardFooter}>
+              <Text style={styles.startLabel}>Start</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
             </View>
-          </View>
-          <Text style={styles.description}>{activity.description}</Text>
-          <PrimaryButton
-            accessibilityLabel={`Play ${activity.name}`}
-            label="Play"
-            onPress={() => setActive(activity)}
-            style={styles.playButton}
-          />
-        </Card>
+          </Card>
+        </Pressable>
       ))}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  activityCard: {
+  cardPressed: {
+    opacity: 0.92,
+  },
+  card: {
     marginBottom: spacing.md,
+    gap: spacing.md,
   },
-  activityCopy: {
+  cardHeader: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  iconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: radii.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  cardCopy: {
     flex: 1,
+    gap: spacing.xs,
   },
-  activityHeader: {
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
-  activityIcon: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.card,
-    backgroundColor: colors.softBlue,
-  },
-  activityIconText: {
-    color: colors.primary,
-    fontSize: 24,
-    fontWeight: '900',
-  },
-  activityName: {
-    color: colors.text,
+  name: {
     fontSize: typography.body,
     fontWeight: '800',
-  },
-  activityTask: {
-    marginTop: 2,
-    color: colors.textMuted,
-    fontSize: typography.caption,
-  },
-  choice: {
-    minWidth: 82,
-    minHeight: 64,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radii.card,
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-  },
-  choiceGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: spacing.md,
-    marginTop: spacing.xl,
-  },
-  choiceText: {
     color: colors.text,
-    fontSize: typography.body,
+    letterSpacing: -0.2,
+  },
+  tag: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  tagText: {
+    fontSize: typography.eyebrow,
     fontWeight: '800',
+    letterSpacing: 0.4,
   },
   description: {
-    marginTop: spacing.md,
-    color: colors.textMuted,
     fontSize: typography.callout,
-    lineHeight: 21,
+    color: colors.textMuted,
+    lineHeight: 20,
   },
-  playButton: {
-    marginTop: spacing.lg,
-  },
-  practiceCard: {
+  cardFooter: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    justifyContent: 'flex-end',
+    gap: 2,
   },
-  practiceSymbol: {
-    marginTop: spacing.lg,
-    color: colors.primary,
-    fontSize: 58,
-    fontWeight: '900',
-  },
-  result: {
-    marginTop: spacing.lg,
-    color: colors.primary,
-    fontSize: typography.body,
+  startLabel: {
+    fontSize: typography.callout,
     fontWeight: '800',
-    textAlign: 'center',
-  },
-  task: {
-    color: colors.text,
-    fontSize: typography.subheading,
-    fontWeight: '800',
-    textAlign: 'center',
+    color: colors.primary,
   },
 });

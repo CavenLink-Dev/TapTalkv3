@@ -19,6 +19,8 @@ export const initialState: AppState = {
     theme: 'system',
     highContrast: false,
     colorScheme: 'fitzgerald',
+    speechRate: 0.9,
+    speechPitch: 1.0,
   },
   user: {
     legalName: '',

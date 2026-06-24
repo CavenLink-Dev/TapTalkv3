@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Href, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
@@ -20,6 +21,7 @@ interface SettingRow {
   label: string;
   subtitle: string;
   premium?: boolean;
+  route?: Href;
 }
 
 const APP_SETTINGS: SettingRow[] = [
@@ -28,8 +30,9 @@ const APP_SETTINGS: SettingRow[] = [
     icon: 'volume-high-outline',
     iconColor: colors.primary,
     iconBg: '#E6F4FD',
-    label: 'Voice & Speech',
+    label: 'Voice and Speech',
     subtitle: 'Choose voice, speed, and pitch',
+    route: '/settings/voice' as Href,
   },
   {
     id: 'display',
@@ -38,6 +41,7 @@ const APP_SETTINGS: SettingRow[] = [
     iconBg: '#E8FAE8',
     label: 'Display',
     subtitle: 'Text size, contrast, theme',
+    route: '/settings/display' as Href,
   },
   {
     id: 'haptics',
@@ -96,12 +100,13 @@ const PREMIUM_TOOLS: SettingRow[] = [
   },
 ];
 
-function SettingItem({ row }: { row: SettingRow }) {
+function SettingItem({ row, onPress }: { row: SettingRow; onPress?: () => void }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={row.label}
-      style={styles.settingRow}
+      onPress={onPress}
+      style={({ pressed }) => [styles.settingRow, pressed && styles.settingRowPressed]}
     >
       <View style={[styles.settingIcon, { backgroundColor: row.iconBg }]}>
         <Ionicons name={row.icon} size={22} color={row.iconColor} />
@@ -125,6 +130,7 @@ function SettingItem({ row }: { row: SettingRow }) {
 export default function SettingsScreen() {
   const { state } = useAppContext();
   const isPremium = state.subscriptionComplete;
+  const router = useRouter();
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -138,7 +144,10 @@ export default function SettingsScreen() {
         <Card style={styles.section}>
           {APP_SETTINGS.map((row, i) => (
             <View key={row.id}>
-              <SettingItem row={row} />
+              <SettingItem
+                row={row}
+                onPress={row.route ? () => router.push(row.route!) : undefined}
+              />
               {i < APP_SETTINGS.length - 1 && <View style={styles.divider} />}
             </View>
           ))}
@@ -210,6 +219,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
+  },
+  settingRowPressed: {
+    backgroundColor: colors.background,
   },
   settingIcon: {
     width: 40,
