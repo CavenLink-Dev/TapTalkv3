@@ -28,6 +28,8 @@ export interface AppState {
     speechRate: number;
     /** Expo Speech pitch. Range 0.5 to 2.0. Default 1.0. */
     speechPitch: number;
+    /** Whether haptic feedback fires on taps. Default true. */
+    hapticsEnabled: boolean;
   };
   user: {
     legalName: string;

@@ -5,6 +5,8 @@ import {
   Easing as RNEasing,
   Image,
   LayoutRectangle,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,7 +23,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
-import { BackspaceIcon } from '../../src/components/icons/FigmaIcons';
+import { BackspaceIcon, BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
 import { colors, spacing } from '../../src/theme/tokens';
@@ -146,6 +148,22 @@ const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
     { id: 'repeat-settings', label: 'Repeat', kind: 'action', color: '#703232' },
   ],
 };
+
+const BACK_TILE: BoardTile = { id: 'back', label: 'Back', kind: 'action', color: '#6B7580' };
+const HOME_TILE: BoardTile = { id: 'home', label: 'Home', kind: 'action', color: '#6B7580' };
+
+function BoardNavTile({ tile, size }: { tile: BoardTile; size: number }) {
+  return (
+    <View style={[styles.navTileShell, { width: size, height: size }]}>
+      <View style={styles.navTileIconMount}>
+        {tile.id === 'back' ? <BoardBackIcon size={40} /> : <BoardHomeIcon size={40} />}
+      </View>
+      <Text style={styles.navTileLabel} numberOfLines={1} adjustsFontSizeToFit>
+        {tile.label}
+      </Text>
+    </View>
+  );
+}
 
 function BoardFolderTile({ tile, size }: { tile: BoardTile; size: number }) {
   const folderHeight = Math.round(size * FOLDER_HEIGHT_RATIO);
@@ -297,7 +315,8 @@ function BoardTileButton({
     }).start();
   }, [scale]);
 
-  const tileHeight = tile.kind === 'folder' ? Math.round(size * FOLDER_HEIGHT_RATIO) : size;
+  const isNav = tile.id === 'back' || tile.id === 'home';
+  const tileHeight = (!isNav && tile.kind === 'folder') ? Math.round(size * FOLDER_HEIGHT_RATIO) : size;
 
   const handlePress = useCallback(() => {
     onMeasuredPress?.();
@@ -311,13 +330,15 @@ function BoardTileButton({
       <Pressable
         ref={pressableRef}
         accessibilityRole="button"
-        accessibilityLabel={tile.kind === 'folder' ? `Open ${tile.label}` : `Say ${tile.label}`}
+        accessibilityLabel={isNav ? tile.label : tile.kind === 'folder' ? `Open ${tile.label}` : `Say ${tile.label}`}
         onPress={handlePress}
         onPressIn={() => animateTo(0.94)}
         onPressOut={() => animateTo(1)}
         style={({ pressed }) => [styles.tilePressable, pressed && styles.tilePressed]}
       >
-        {tile.kind === 'folder' ? (
+        {tile.id === 'back' || tile.id === 'home' ? (
+          <BoardNavTile tile={tile} size={size} />
+        ) : tile.kind === 'folder' ? (
           <BoardFolderTile tile={tile} size={size} />
         ) : (
           <BoardWordTile tile={tile} size={size} />
@@ -438,8 +459,14 @@ export default function TalkScreen() {
   // Default to open so first-time users can see the top nav is there.
   const [showTopNav, setShowTopNav] = useState(true);
   const [activeMode, setActiveMode] = useState<BoardMode>('home');
+  const [previousMode, setPreviousMode] = useState<BoardMode | null>(null);
   const [activeTab, setActiveTab] = useState<TopTab>('taptalk');
   const [ghosts, setGhosts] = useState<GhostTile[]>([]);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollPositions = useRef<Partial<Record<BoardMode, number>>>({});
+  const hapticIfEnabled = useCallback(() => {
+    if (state.accessibility.hapticsEnabled !== false) hapticSelection();
+  }, [state.accessibility.hapticsEnabled]);
 
   const boardWidth = Math.min(width, FIGMA_WIDTH);
   const tileSize = Math.min(
@@ -447,6 +474,11 @@ export default function TalkScreen() {
     Math.floor((boardWidth - TILE_LEFT_PADDING * 2 - TILE_GAP * (BOARD_COLUMNS - 1)) / BOARD_COLUMNS),
   );
   const tiles = BOARD_TILES[activeMode];
+
+  useEffect(() => {
+    const y = scrollPositions.current[activeMode] ?? 0;
+    scrollRef.current?.scrollTo({ y, animated: false });
+  }, [activeMode]);
   const chipTileLookup = useMemo(() => {
     const lookup = new Map<string, BoardTile>();
     Object.values(BOARD_TILES).flat().forEach(tile => {
@@ -493,8 +525,8 @@ export default function TalkScreen() {
 
     if (!ghost) return;
     appendWord(ghost.tile);
-    hapticSelection();
-  }, [appendWord]);
+    hapticIfEnabled();
+  }, [appendWord, hapticIfEnabled]);
 
   const repeatMessage = useCallback(() => {
     if (!messageText.trim()) {
@@ -552,11 +584,32 @@ export default function TalkScreen() {
     });
   }, [addGhost, appendWord, state.messageWords.length, tileSize]);
 
+  const navigateTo = useCallback((target: BoardMode) => {
+    setPreviousMode(activeMode);
+    setActiveMode(target);
+    dispatch({ type: 'SET_BOARD', payload: target });
+  }, [activeMode, dispatch]);
+
   const handleTilePress = useCallback((tile: BoardTile, rect: WindowRect | null) => {
-    hapticSelection();
+    hapticIfEnabled();
+    if (tile.id === 'back') {
+      const dest = previousMode ?? 'home';
+      setActiveMode(dest);
+      setPreviousMode(null);
+      dispatch({ type: 'SET_BOARD', payload: dest });
+      announce('Back');
+      return;
+    }
+    if (tile.id === 'home') {
+      setActiveMode('home');
+      setPreviousMode(null);
+      setActiveTab('taptalk');
+      dispatch({ type: 'SET_BOARD', payload: 'home' });
+      announce('Home');
+      return;
+    }
     if (tile.kind === 'folder' && tile.target) {
-      setActiveMode(tile.target);
-      dispatch({ type: 'SET_BOARD', payload: tile.target });
+      navigateTo(tile.target);
       announce(`${tile.label} folder`);
       return;
     }
@@ -564,33 +617,48 @@ export default function TalkScreen() {
       if (tile.id.includes('clear')) clearMessage();
       if (tile.id.includes('repeat')) repeatMessage();
       if (tile.id === 'hide-nav') setShowTopNav(false);
+      if (tile.id === 'home-settings') {
+        setActiveMode('home');
+        setPreviousMode(null);
+        setActiveTab('taptalk');
+        dispatch({ type: 'SET_BOARD', payload: 'home' });
+      }
       return;
     }
     startGhostToMessage(tile, rect);
-  }, [announce, clearMessage, dispatch, repeatMessage, startGhostToMessage]);
+  }, [announce, clearMessage, dispatch, hapticIfEnabled, navigateTo, previousMode, repeatMessage, startGhostToMessage]);
 
   const handleTopTab = useCallback((tab: TopTab) => {
-    hapticSelection();
+    hapticIfEnabled();
+    setPreviousMode(null);
     setActiveTab(tab);
     if (tab === 'taptalk') setActiveMode('home');
     if (tab === 'tools') setActiveMode('tools');
     if (tab === 'quick') setActiveMode('quick');
     if (tab === 'setting') setActiveMode('settings');
-  }, []);
+  }, [hapticIfEnabled]);
 
   const handleSpeak = useCallback(() => {
     repeatMessage();
   }, [repeatMessage]);
 
   const handleBackspace = useCallback(() => {
-    hapticSelection();
+    hapticIfEnabled();
     if (hasWords) {
       dispatch({ type: 'REMOVE_LAST_WORD' });
       return;
     }
     setActiveMode('home');
+    setPreviousMode(null);
     setActiveTab('taptalk');
-  }, [dispatch, hasWords]);
+  }, [dispatch, hapticIfEnabled, hasWords]);
+
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scrollPositions.current[activeMode] = e.nativeEvent.contentOffset.y;
+    },
+    [activeMode],
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -660,12 +728,13 @@ export default function TalkScreen() {
           activeTab={activeTab}
           onTabPress={handleTopTab}
           onToggle={() => {
-            hapticSelection();
+            hapticIfEnabled();
             setShowTopNav(value => !value);
           }}
         />
 
         <ScrollView
+          ref={scrollRef}
           style={styles.board}
           contentContainerStyle={[
             styles.boardContent,
@@ -675,6 +744,8 @@ export default function TalkScreen() {
             },
           ]}
           showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={50}
         >
           {tiles.map(tile => (
             <BoardTileButton
@@ -684,6 +755,29 @@ export default function TalkScreen() {
               onPress={rect => handleTilePress(tile, rect)}
             />
           ))}
+          {activeMode !== 'home' ? (
+            <View
+              style={[
+                styles.navRow,
+                {
+                  paddingLeft: 0,
+                  paddingRight: 0,
+                  width: boardWidth - TILE_LEFT_PADDING * 2,
+                },
+              ]}
+            >
+              <BoardTileButton
+                tile={BACK_TILE}
+                size={tileSize}
+                onPress={rect => handleTilePress(BACK_TILE, rect)}
+              />
+              <BoardTileButton
+                tile={HOME_TILE}
+                size={tileSize}
+                onPress={rect => handleTilePress(HOME_TILE, rect)}
+              />
+            </View>
+          ) : null}
         </ScrollView>
 
         <View pointerEvents="none" style={styles.ghostOverlay}>
@@ -904,7 +998,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    top: 29,
+    top: 38,
     bottom: 0,
   },
   wordTile: {
@@ -927,5 +1021,29 @@ const styles = StyleSheet.create({
   },
   ghostTile: {
     position: 'absolute',
+  },
+  navRow: {
+    flexDirection: 'row',
+    gap: TILE_GAP,
+    marginTop: TILE_GAP,
+  },
+  navTileShell: {
+    position: 'relative',
+    backgroundColor: '#E8EBED',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTileIconMount: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTileLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B555C',
+    textAlign: 'center',
+    paddingBottom: 6,
   },
 });

@@ -21,6 +21,7 @@ export const initialState: AppState = {
     colorScheme: 'fitzgerald',
     speechRate: 0.9,
     speechPitch: 1.0,
+    hapticsEnabled: true,
   },
   user: {
     legalName: '',
