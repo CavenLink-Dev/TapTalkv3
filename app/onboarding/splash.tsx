@@ -98,10 +98,9 @@ export default function Splash() {
 
   const loaderOpacity = useSharedValue(0);
 
-  // Loader dot wave (one shared value per dot's translateY + glow)
-  const d1Y = useSharedValue(0); const d1G = useSharedValue(0.45);
-  const d2Y = useSharedValue(0); const d2G = useSharedValue(0.45);
-  const d3Y = useSharedValue(0); const d3G = useSharedValue(0.45);
+  // Loader — snake-style rotating arc with a soft halo background.
+  const spin = useSharedValue(0);
+  const haloPulse = useSharedValue(0.6);
 
   // Swallow
   const foregroundFade = useSharedValue(1);          // multiplied into logo/motto/loader
@@ -135,13 +134,14 @@ export default function Splash() {
       mottoOpacity.value  = withDelay(150, withTiming(1, { duration: T.rm.fadeIn }));
       loaderOpacity.value = withDelay(280, withTiming(1, { duration: T.rm.fadeIn }));
 
-      // Single calm pulse on the middle dot.
-      d2G.value = withDelay(
+      // Reduce-motion: hold the spinner static, just pulse the halo opacity
+      // so there's a calm sign of life without rotation.
+      haloPulse.value = withDelay(
         T.rm.fadeIn,
         withRepeat(
           withSequence(
-            withTiming(1,    { duration: 800, easing: Easing.inOut(Easing.quad) }),
-            withTiming(0.45, { duration: 800, easing: Easing.inOut(Easing.quad) }),
+            withTiming(1,   { duration: 900, easing: Easing.inOut(Easing.quad) }),
+            withTiming(0.5, { duration: 900, easing: Easing.inOut(Easing.quad) }),
           ),
           -1,
           true,
@@ -192,35 +192,27 @@ export default function Splash() {
       withTiming(1, { duration: T.loaderIn.duration, easing: easeOut }),
     );
 
-    // Loader dot wave — calm sine motion + glow. Stops naturally when
+    // Spinner — continuous rotation (snake vibe). Stops naturally when
     // foregroundFade hits 0 in the swallow phase (they share the multiplier).
-    const startWave = (yVal: ReturnType<typeof useSharedValue<number>>, gVal: ReturnType<typeof useSharedValue<number>>, offset: number) => {
-      yVal.value = withDelay(
-        T.loaderIn.start + offset,
-        withRepeat(
-          withSequence(
-            withTiming(-6, { duration: 700, easing: easeSine }),
-            withTiming( 0, { duration: 700, easing: easeSine }),
-          ),
-          -1,
-          false,
+    spin.value = withDelay(
+      T.loaderIn.start,
+      withRepeat(
+        withTiming(360, { duration: 1200, easing: Easing.linear }),
+        -1,
+        false,
+      ),
+    );
+    haloPulse.value = withDelay(
+      T.loaderIn.start,
+      withRepeat(
+        withSequence(
+          withTiming(1,   { duration: 900, easing: easeSine }),
+          withTiming(0.6, { duration: 900, easing: easeSine }),
         ),
-      );
-      gVal.value = withDelay(
-        T.loaderIn.start + offset,
-        withRepeat(
-          withSequence(
-            withTiming(1,    { duration: 700, easing: easeSine }),
-            withTiming(0.45, { duration: 700, easing: easeSine }),
-          ),
-          -1,
-          false,
-        ),
-      );
-    };
-    startWave(d1Y, d1G,   0);
-    startWave(d2Y, d2G, 220);
-    startWave(d3Y, d3G, 440);
+        -1,
+        true,
+      ),
+    );
 
     // BREATHE — single gentle breath cycle on the logo.
     logoScale.value = withDelay(
@@ -291,17 +283,11 @@ export default function Splash() {
     opacity: loaderOpacity.value * foregroundFade.value,
   }));
 
-  const dotA = useAnimatedStyle(() => ({
-    transform: [{ translateY: d1Y.value }],
-    opacity: d1G.value,
+  const spinnerStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${spin.value}deg` }],
   }));
-  const dotB = useAnimatedStyle(() => ({
-    transform: [{ translateY: d2Y.value }],
-    opacity: d2G.value,
-  }));
-  const dotC = useAnimatedStyle(() => ({
-    transform: [{ translateY: d3Y.value }],
-    opacity: d3G.value,
+  const haloStyle = useAnimatedStyle(() => ({
+    opacity: haloPulse.value,
   }));
 
   const revealStyle = useAnimatedStyle(() => ({
@@ -316,7 +302,7 @@ export default function Splash() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Logo — top-middle */}
+      {/* Logo — vertically centered */}
       <Animated.View style={[styles.logoBlock, logoStyle]}>
         <Image
           source={require('../../asset/taptalk_logo.png')}
@@ -326,16 +312,16 @@ export default function Splash() {
         />
       </Animated.View>
 
-      {/* Motto — near the bottom */}
+      {/* Tagline — directly below the centered logo */}
       <Animated.Text style={[styles.motto, mottoStyle]}>
-        Everyone deserves a voice.
+        Tap to Talk!
       </Animated.Text>
 
-      {/* Loader — bottom */}
-      <Animated.View style={[styles.loaderRow, loaderStyle]} pointerEvents="none">
-        <Animated.View style={[styles.dot, dotA]} />
-        <Animated.View style={[styles.dot, styles.dotSpacer, dotB]} />
-        <Animated.View style={[styles.dot, dotC]} />
+      {/* Loader — snake-style rotating arc with a soft halo, sitting between
+          the tagline and the bottom safe area. */}
+      <Animated.View style={[styles.loaderWrap, loaderStyle]} pointerEvents="none">
+        <Animated.View style={[styles.loaderHalo, haloStyle]} />
+        <Animated.View style={[styles.loaderRing, spinnerStyle]} />
       </Animated.View>
 
       {/* SWALLOW disc + brand wordmark — sit above everything else */}
@@ -349,9 +335,9 @@ export default function Splash() {
   );
 }
 
-// Disc seed sits roughly under the logo so the inflate reads as a "pull from
-// the brand mark" rather than a generic centered radial.
-const REVEAL_SEED_Y = SCREEN_H * 0.28;
+// Disc seed sits at the logo's centered position so the inflate reads as a
+// "pull from the brand mark" rather than a generic centered radial.
+const REVEAL_SEED_Y = SCREEN_H * 0.42;
 
 const styles = StyleSheet.create({
   container: {
@@ -360,18 +346,18 @@ const styles = StyleSheet.create({
   },
   logoBlock: {
     position: 'absolute',
-    top: '22%',
+    top: '38%',
     left: 0,
     right: 0,
     alignItems: 'center',
   },
   logo: {
-    width: 220,
-    height: 80,
+    width: 240,
+    height: 88,
   },
   motto: {
     position: 'absolute',
-    bottom: '24%',
+    top: '52%',
     left: 0,
     right: 0,
     textAlign: 'center',
@@ -380,23 +366,29 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     letterSpacing: 0.1,
   },
-  loaderRow: {
+  loaderWrap: {
     position: 'absolute',
-    bottom: 56,
+    bottom: '14%',
     left: 0,
     right: 0,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.primary,
+  loaderHalo: {
+    position: 'absolute',
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    backgroundColor: 'rgba(29, 205, 255, 0.14)',
   },
-  dotSpacer: {
-    marginHorizontal: 12,
+  loaderRing: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 4,
+    borderColor: 'rgba(29, 205, 255, 0.18)',
+    borderTopColor: colors.primary,
+    borderRightColor: colors.primary,
   },
   // Reveal disc — seeded under the logo. Scales 0 → 1 to swallow the screen.
   reveal: {
