@@ -21,10 +21,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Href, useRouter } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
 import { Card } from '../../src/components/native/Card';
 import { colors, radii, shadows, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
+
+const firstThenRoute = '/first-then' as Href;
 
 // ─── Types & sample data ────────────────────────────────────────────────────
 // Local state for now — the data model below is intentionally simple and
@@ -569,6 +572,7 @@ function hexWithAlpha(hex: string, alpha: number): string {
 // ─── Screen ─────────────────────────────────────────────────────────────────
 
 export default function PlannerScreen() {
+  const router = useRouter();
   const [plans, setPlans] = useState<Plan[]>(SAMPLE_PLANS);
   const [weekStart, setWeekStart] = useState<Date>(startOfWeek(new Date()));
   const [selectedKey, setSelectedKey] = useState<string>(todayKey);
@@ -639,6 +643,27 @@ export default function PlannerScreen() {
           }}
           plansByDate={plansByDate}
         />
+
+        {/* First / Then quick entry — own page so users with disabilities
+            aren't trying to learn it inside a busy planner view. */}
+        <Pressable
+          onPress={() => {
+            hapticSelection();
+            router.push(firstThenRoute);
+          }}
+          style={({ pressed }) => [styles.ftEntry, pressed && { opacity: 0.92 }]}
+          accessibilityLabel="Open First and Then sequence"
+          accessibilityRole="button"
+        >
+          <View style={styles.ftEntryIcon}>
+            <Ionicons name="git-compare-outline" size={26} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ftEntryTitle}>First / Then</Text>
+            <Text style={styles.ftEntrySub}>Build a step-by-step visual sequence</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color={colors.textTertiary} />
+        </Pressable>
 
         <DaySection
           heading={`${longWeekday(selectedDate)}, ${monthShort(selectedDate)} ${selectedDate.getDate()}`}
@@ -745,6 +770,36 @@ const styles = StyleSheet.create({
     color: colors.surface,
     fontSize: typography.callout,
     fontWeight: '800',
+  },
+
+  // First/Then entry card
+  ftEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    ...shadows.card,
+  },
+  ftEntryIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#E6F4FD',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ftEntryTitle: {
+    fontSize: typography.subheading,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: typography.trackSubhead,
+  },
+  ftEntrySub: {
+    fontSize: typography.caption,
+    color: colors.textMuted,
+    marginTop: 2,
   },
 
   // Week strip
