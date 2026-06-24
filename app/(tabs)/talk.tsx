@@ -58,7 +58,7 @@ const COLLAPSED_TOGGLE_HEIGHT = 17;
 const BOARD_COLUMNS = 4;
 const TILE_GAP = 3;
 const TILE_LEFT_PADDING = 16;
-const BOARD_TOP_GAP = 16;
+const BOARD_TOP_GAP = 18;
 const TILE_SIZE = 88;
 const FOLDER_HEIGHT_RATIO = 181 / 176;
 const MESSAGE_CHIP_SIZE = 40;
@@ -893,10 +893,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 5,
     right: 5,
-    top: 12,
+    top: 14,
     color: '#202020',
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: 16,
+    lineHeight: 20,
     fontWeight: '800',
     textAlign: 'center',
   },
