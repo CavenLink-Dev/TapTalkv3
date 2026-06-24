@@ -346,13 +346,15 @@ function TopNavIcon({ tab }: { tab: TopTab }) {
   );
 }
 
-function ToggleChevron({ open }: { open: boolean }) {
+function ToggleChevron({ open, active }: { open: boolean; active: boolean }) {
+  // Arrow lights blue only when the nav is open (active) or while pressed.
+  const stroke = active ? colors.primaryDark : '#9A9A9A';
   return (
     <Svg width={36} height={16} viewBox="0 0 36 16">
       <Polyline
         points={open ? '9,10 18,4 27,10' : '9,5 18,11 27,5'}
         fill="none"
-        stroke={colors.primaryDark}
+        stroke={stroke}
         strokeWidth={3}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -414,9 +416,13 @@ function TopNav({
         accessibilityRole="button"
         accessibilityLabel={visible ? 'Hide top navigation' : 'Show top navigation'}
         onPress={onToggle}
-        style={[styles.navToggle, visible ? styles.navToggleOpen : styles.navToggleClosed]}
+        style={({ pressed }) => [
+          styles.navToggle,
+          visible ? styles.navToggleOpen : styles.navToggleClosed,
+          !(visible || pressed) && styles.navToggleIdle,
+        ]}
       >
-        <ToggleChevron open={visible} />
+        {({ pressed }) => <ToggleChevron open={visible} active={visible || pressed} />}
       </Pressable>
     </RNAnimated.View>
   );
@@ -429,7 +435,8 @@ export default function TalkScreen() {
   const ghostsRef = useRef<GhostTile[]>([]);
   const { state, dispatch } = useAppContext();
   const { speak, lastError, clearError } = useSpeech();
-  const [showTopNav, setShowTopNav] = useState(false);
+  // Default to open so first-time users can see the top nav is there.
+  const [showTopNav, setShowTopNav] = useState(true);
   const [activeMode, setActiveMode] = useState<BoardMode>('home');
   const [activeTab, setActiveTab] = useState<TopTab>('taptalk');
   const [ghosts, setGhosts] = useState<GhostTile[]>([]);
@@ -848,6 +855,12 @@ const styles = StyleSheet.create({
     top: -1,
     borderBottomLeftRadius: 3,
     borderBottomRightRadius: 3,
+  },
+  // Neutral idle look when closed and not being pressed — keeps the blue
+  // strictly tied to pressed/active states without changing the open visuals.
+  navToggleIdle: {
+    borderColor: '#9A9A9A',
+    backgroundColor: '#FFFFFF',
   },
   board: {
     flex: 1,
