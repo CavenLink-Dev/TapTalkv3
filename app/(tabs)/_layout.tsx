@@ -1,25 +1,12 @@
-import React from 'react';
 import { Tabs } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React from 'react';
+import { StyleSheet } from 'react-native';
+import { BottomNavIcon, BottomNavIconName } from '../../src/components/icons/BottomNavIcon';
 import { colors } from '../../src/theme/tokens';
 
-type MciName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-
-function TabIcon({
-  name,
-  focused,
-  size = 28,
-}: {
-  name: MciName;
-  focused: boolean;
-  size?: number;
-}) {
-  return (
-    <MaterialCommunityIcons
-      name={name}
-      size={size}
-      color={focused ? colors.primary : colors.textMuted}
-    />
+function icon(name: BottomNavIconName) {
+  return ({ focused }: { focused: boolean }) => (
+    <BottomNavIcon name={name} focused={focused} />
   );
 }
 
@@ -29,58 +16,55 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          height: 76,
-          paddingTop: 10,
-          paddingBottom: 22,
-        },
+        tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarItemStyle: {
-          justifyContent: 'center',
-          alignItems: 'center',
-        },
+        tabBarInactiveTintColor: '#4B555C',
+        tabBarItemStyle: styles.tabBarItem,
       }}
     >
       <Tabs.Screen
         name="talk"
         options={{
-          title: 'Talk',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="account-voice" focused={focused} />
-          ),
+          title: 'Board',
+          tabBarIcon: icon('board'),
         }}
       />
       <Tabs.Screen
         name="activities"
         options={{
-          title: 'Activity',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="lightbulb-on" focused={focused} size={26} />
-          ),
+          title: 'Activities',
+          tabBarIcon: icon('activity'),
         }}
       />
       <Tabs.Screen
         name="tools"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="cog" focused={focused} />
-          ),
+          title: 'Calendar',
+          tabBarIcon: icon('calendar'),
         }}
       />
       <Tabs.Screen
         name="me"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="account" focused={focused} />
-          ),
+          tabBarIcon: icon('profile'),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBar: {
+    height: 102,
+    paddingTop: 12,
+    paddingBottom: 21,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 2,
+    borderTopColor: '#8D8D8D',
+  },
+  tabBarItem: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
