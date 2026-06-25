@@ -58,65 +58,9 @@ Calendar (Step 6 — currently the relocated Planner):
 
 | # | Step | Status | Notes |
 |---|------|--------|-------|
-| 1 | Bottom nav slot Planner → Tools | DONE | `_layout.tsx`, BottomNavIcon with `tools` Ionicons fallback |
-| 2 | Relocate Planner → `app/calendar/` | DONE | Behaviour-preserving move; full rebuild in Step 6 |
-| 3 | New Tools list screen + favourites store | DONE | `app/(tabs)/tools.tsx`, `src/features/tools/favourites-store.ts` |
-| 4 | **Visual Timer** (next) | PENDING | New build in `app/visual-timer/` |
-| 5 | Step by Step (rewrite) | PENDING | Rebuild `app/first-then/` per new spec |
-| 6 | Calendar (monthly + Today's Plan + Plan creator + day timeline) | PENDING | Reshape `app/calendar/` |
-| 7 | Board keyboard + new top nav | PENDING | Biggest pivot; do after everything else is stable |
-| 8 | Quick Talk persistence + edit/delete UI | PENDING | 25-item cap, drag reorder, long-press actions |
 | 9 | Polish pass (animations, haptics audit, Reduce Motion check) | PENDING | Final |
 
-Each step leaves the app working. Do not start Step 5 before Step 4 is in; do not start Step 7 before everything below it is stable.
-
----
-
-## Step 4 — Visual Timer (start here)
-
-Replace `app/visual-timer/index.tsx` (currently a "Coming soon" stub) with the real timer. Route: `/visual-timer`, reached from the Tools list.
-
-### Layout (top to bottom)
-
-1. **Clock face area** — large, centered. Default style **digital**. User can switch to **analog** via the Appearance row.
-2. **Duration card** — three side-by-side wheel pickers labelled "Hour" / "Minute" / "Second". Bounds: H 0–23, M 0–59, S 0–59. Default duration = 0 (user picks).
-   - Use `@react-native-picker/picker` (add dep). iOS renders as native scroll wheel.
-   - Accessibility: numeric keypad fallback — let user type 2 digits per segment with auto-advance H→M→S.
-3. **Start delay** card — same picker model, but minutes (0–60) + seconds (0–59) only. Footer caption: "Wait this long before the timer starts."
-4. **Sound** disclosure row (collapsed by default; expand to reveal):
-   - "Chime every" — free-entry numeric input + unit picker (minutes/seconds/hours).
-   - "Chime sound" — picker (Soft chime / Bell / Beep / Tin / None).
-   - "Sound at start" toggle → when on, reveals a sub-row "Start sound" with the same picker.
-   - "Sound at end" toggle → when on, reveals a sub-row "End sound" with the same picker.
-5. **Lock** toggle row (above the Start button). When on, the in-focus exit becomes "Unlock" with hold-to-confirm. When off, exit is "Unfocus" (single tap).
-6. **Appearance** disclosure row — segmented control: Digital | Analog. (Classic/Grandfather face is later.)
-7. **Accessibility** disclosure row — advanced settings (Reduce Motion respect is automatic; this is for future user-tunable advanced toggles).
-8. **Optional "Preset Duration ›"** disclosure — quick presets (1m, 5m, 10m, 15m). Hidden by default since user said no presets at top level.
-9. **Start** button (primary, full-width pill).
-
-### Run mode
-
-- Tap Start → screen enters **focus mode automatically**: dark gray overlay at ~70% opacity over the surrounding chrome, clock stays bright in the centre.
-- Top-left button:
-  - If Lock was **off** → "Unfocus" (single tap to exit focus and stop the timer).
-  - If Lock was **on** → "Unlock" (press-and-hold for ~1s to exit). No hidden gestures.
-- Tapping outside the clock while in Unfocus mode → iOS `Alert.alert('Are you sure?', 'Exit the timer?')` with Yes/No.
-- Digital face: large monospace robot-style numerals (`00:05:00`).
-- Analog face: SVG round clock with rotating hands, ticks once per second (linear motion — principle 17).
-- At duration end: end sound (if set) + gentle pulse on the clock face. Focus stays until user taps Unfocus/Unlock.
-
-### iOS-native components to use
-
-- `Alert.alert` for confirmations.
-- `@react-native-picker/picker` for wheel pickers (add to deps).
-- `expo-notifications` for any backgrounded chime (out of scope for v1 if user keeps app in foreground).
-- Haptics: `expo-haptics` — light selection on every wheel change, success at end.
-
-### What NOT to do
-
-- Don't add presets at the top of the screen — user explicitly chose "default 0, user picks".
-- Don't add the Classic/Grandfather clock face — analog + digital only for v1.
-- Don't lock focus by default — focus is automatic, lock is opt-in.
+All structural work is in. Only the polish pass remains.
 
 ---
 
@@ -239,4 +183,4 @@ User pushes from their own editor. Make local edits only. Do **not** run `git pu
 
 ---
 
-Last updated: end of session that completed Steps 1–3 (Tools tab restructure, Planner relocated to `/calendar`, favourites store added, Visual Timer stub created).
+Last updated: end of session that completed Steps 1–8 (full structural build — Tools tab, Visual Timer, Step by Step, Calendar with monthly grid + day timeline + plan creator, Board keyboard with clause-tokenised speech, Quick Talk persistence with edit mode). Only Step 9 polish remains.

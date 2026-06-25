@@ -24,6 +24,7 @@ import Reanimated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
+import { Href, useRouter } from 'expo-router';
 import { BackspaceIcon, BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
@@ -32,7 +33,10 @@ import { hapticSelection } from '../../src/utils/haptics';
 
 type TileKind = 'folder' | 'word' | 'action';
 type BoardMode = 'home' | 'foods' | 'animals' | 'tools' | 'quick' | 'settings';
-type TopTab = 'taptalk' | 'tools' | 'quick' | 'setting';
+// New top-nav vocabulary: TAPTALK opens the keyboard page, QUICK opens
+// Quick Talk, EDIT is a stub for now (no behaviour), CLEAR clears the
+// message strip in place. See to_do/NEXT.md "Board top nav" for the lock.
+type TopTab = 'taptalk' | 'quick' | 'edit' | 'clear';
 
 type BoardTile = {
   id: string;
@@ -86,10 +90,10 @@ const TILE_ASSETS = {
 // neutral outlined Ionicons + uppercase text labels — matches the bottom
 // nav vocabulary (one tint, two states: idle grey, active brand blue).
 const TOP_TAB_META: Record<TopTab, { icon: React.ComponentProps<typeof Ionicons>['name']; label: string }> = {
-  taptalk: { icon: 'keypad-outline',    label: 'TAPTALK' },
-  tools:   { icon: 'construct-outline', label: 'TOOLS'   },
-  quick:   { icon: 'flash-outline',     label: 'QUICK'   },
-  setting: { icon: 'settings-outline',  label: 'SETTING' },
+  taptalk: { icon: 'keypad-outline',         label: 'TAPTALK' },
+  quick:   { icon: 'flash-outline',          label: 'QUICK'   },
+  edit:    { icon: 'create-outline',         label: 'EDIT'    },
+  clear:   { icon: 'close-circle-outline',   label: 'CLEAR'   },
 };
 
 // Idle / active colours, kept inline so the tint animation has explicit
@@ -470,7 +474,7 @@ function TopNav({
         pointerEvents={visible ? 'auto' : 'none'}
         style={[styles.topNavPanel, { opacity: panelOpacity }]}
       >
-        {(['taptalk', 'tools', 'quick', 'setting'] as TopTab[]).map(tab => (
+        {(['taptalk', 'quick', 'edit', 'clear'] as TopTab[]).map(tab => (
           <TopNavTab
             key={tab}
             tab={tab}
@@ -502,6 +506,7 @@ export default function TalkScreen() {
   const ghostsRef = useRef<GhostTile[]>([]);
   const { state, dispatch } = useAppContext();
   const { speak, lastError, clearError } = useSpeech();
+  const router = useRouter();
   // Default to closed — board is the hero, top nav stays out of the way
   // until the user explicitly taps the chevron to open it.
   const [showTopNav, setShowTopNav] = useState(false);
@@ -677,13 +682,24 @@ export default function TalkScreen() {
 
   const handleTopTab = useCallback((tab: TopTab) => {
     hapticIfEnabled();
-    setPreviousMode(null);
+    // TAPTALK opens the dedicated keyboard page (new route — see
+    // app/board/keyboard). QUICK opens Quick Talk. EDIT is a stub
+    // for now. CLEAR is an in-place action on the message strip.
+    if (tab === 'taptalk') {
+      router.push('/board/keyboard' as Href);
+      return;
+    }
+    if (tab === 'quick') {
+      router.push('/board/quick-talk' as Href);
+      return;
+    }
+    if (tab === 'clear') {
+      clearMessage();
+      return;
+    }
+    // EDIT — placeholder, intentionally no-op for v1.
     setActiveTab(tab);
-    if (tab === 'taptalk') setActiveMode('home');
-    if (tab === 'tools') setActiveMode('tools');
-    if (tab === 'quick') setActiveMode('quick');
-    if (tab === 'setting') setActiveMode('settings');
-  }, [hapticIfEnabled]);
+  }, [clearMessage, hapticIfEnabled, router]);
 
   const handleSpeak = useCallback(() => {
     repeatMessage();
