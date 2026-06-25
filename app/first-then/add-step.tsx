@@ -60,13 +60,15 @@ export default function AddStepScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [minutes, setMinutes] = useState<number | null>(null);
-  const [symbolIndex, setSymbolIndex] = useState<number>(0);
+  // null until the user actually picks a symbol — keeps the preview honest.
+  const [symbolIndex, setSymbolIndex] = useState<number | null>(null);
 
   const canSave = name.trim().length > 0;
 
   const onSave = () => {
     if (!canSave) return;
-    const sym = SYMBOLS[symbolIndex] ?? SYMBOLS[0]!;
+    // Fall back to the first symbol if the user didn't pick one explicitly.
+    const sym = (symbolIndex != null ? SYMBOLS[symbolIndex] : SYMBOLS[0]) ?? SYMBOLS[0]!;
     addFirstThen({
       id: `ft-${Date.now()}`,
       name: name.trim(),
@@ -78,7 +80,7 @@ export default function AddStepScreen() {
     router.back();
   };
 
-  const selectedSym = SYMBOLS[symbolIndex] ?? SYMBOLS[0]!;
+  const selectedSym = symbolIndex != null ? SYMBOLS[symbolIndex] : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -110,18 +112,24 @@ export default function AddStepScreen() {
           alwaysBounceVertical
           overScrollMode="always"
         >
-          {/* Preview — gives the user instant visual feedback as they fill the form. */}
+          {/* Preview — neutral until the user picks a symbol, then live. */}
           <View style={styles.preview}>
-            <View
-              style={[
-                styles.previewChip,
-                { backgroundColor: hexAlpha(selectedSym.color, 0.18) },
-              ]}
-            >
-              <Ionicons name={selectedSym.name} size={56} color={selectedSym.color} />
-            </View>
+            {selectedSym ? (
+              <View
+                style={[
+                  styles.previewChip,
+                  { backgroundColor: hexAlpha(selectedSym.color, 0.18) },
+                ]}
+              >
+                <Ionicons name={selectedSym.name} size={56} color={selectedSym.color} />
+              </View>
+            ) : (
+              <View style={styles.previewChipEmpty}>
+                <Ionicons name="image-outline" size={40} color={colors.textTertiary} />
+              </View>
+            )}
             <Text style={styles.previewName} numberOfLines={1}>
-              {name.trim() || 'Your step'}
+              {name.trim() || (selectedSym ? 'Your step' : 'Pick a symbol below')}
             </Text>
             {minutes != null && (
               <View style={styles.previewTimer}>
@@ -289,6 +297,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.lg,
+  },
+  // Empty state — dashed outline + neutral icon while no symbol is chosen.
+  previewChipEmpty: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   previewChip: {
     width: 120,

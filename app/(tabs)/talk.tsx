@@ -97,6 +97,17 @@ const TOP_TAB_META: Record<TopTab, { icon: React.ComponentProps<typeof Ionicons>
 const TOP_TAB_IDLE_COLOR   = '#8A8F95';
 const TOP_TAB_ACTIVE_COLOR = colors.primary;
 
+// ─── Symbol palette ──────────────────────────────────────────────────────────
+// Vibrant, matte primaries chosen from the iOS system palette. The tile
+// background renders these flat (no PNG) at 30% opacity so the boards read
+// as clean, soft-coloured chips rather than busy stickers.
+const SYMBOL_RED    = '#FF3B30';
+const SYMBOL_ORANGE = '#FF9F0A';
+const SYMBOL_YELLOW = '#FFD60A';
+const SYMBOL_GREEN  = '#34C759';
+const SYMBOL_BLUE   = '#0A84FF';
+const SYMBOL_PURPLE = '#BF5AF2';
+
 const HOME_TILES: BoardTile[] = [
   { id: 'people', label: 'People', kind: 'folder', target: 'quick', color: '#1DCDFF', background: 'folderExample' },
   { id: 'foods', label: 'Foods', kind: 'folder', target: 'foods', color: '#1DCDFF', background: 'folderExample' },
@@ -107,34 +118,34 @@ const HOME_TILES: BoardTile[] = [
 const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
   home: HOME_TILES,
   foods: [
-    { id: 'cheese', label: 'Cheese', kind: 'word', color: '#1DCDFF', speech: 'cheese' },
-    { id: 'apple', label: 'Apple', kind: 'word', color: '#1DCDFF', speech: 'apple' },
-    { id: 'bread', label: 'Bread', kind: 'word', color: '#706820', speech: 'bread' },
-    { id: 'back-foods', label: 'Home', kind: 'folder', target: 'home', color: '#3C673E' },
+    { id: 'cheese', label: 'Cheese', kind: 'word',   color: SYMBOL_YELLOW, speech: 'cheese' },
+    { id: 'apple',  label: 'Apple',  kind: 'word',   color: SYMBOL_RED,    speech: 'apple'  },
+    { id: 'bread',  label: 'Bread',  kind: 'word',   color: SYMBOL_ORANGE, speech: 'bread'  },
+    { id: 'back-foods', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
   ],
   animals: [
-    { id: 'cat', label: 'Cat', kind: 'word', color: '#1DCDFF', speech: 'cat' },
-    { id: 'dog', label: 'Dog', kind: 'word', color: '#1DCDFF', speech: 'dog' },
-    { id: 'fish', label: 'Fish', kind: 'word', color: '#416670', speech: 'fish' },
-    { id: 'back-animals', label: 'Home', kind: 'folder', target: 'home', color: '#4B5C68' },
+    { id: 'cat',  label: 'Cat',  kind: 'word', color: SYMBOL_ORANGE, speech: 'cat'  },
+    { id: 'dog',  label: 'Dog',  kind: 'word', color: SYMBOL_GREEN,  speech: 'dog'  },
+    { id: 'fish', label: 'Fish', kind: 'word', color: SYMBOL_BLUE,   speech: 'fish' },
+    { id: 'back-animals', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
   ],
   tools: [
-    { id: 'loud-tool', label: 'Loud', kind: 'word', color: '#C7E4EF', speech: 'loud' },
-    { id: 'quiet', label: 'Quiet', kind: 'word', color: '#C7E4EF', speech: 'quiet' },
-    { id: 'repeat', label: 'Repeat', kind: 'action', color: '#703232' },
-    { id: 'clear-tool', label: 'Clear', kind: 'action', color: '#7A3D3D' },
+    { id: 'loud-tool', label: 'Loud',   kind: 'word',   color: SYMBOL_BLUE   , speech: 'loud'  },
+    { id: 'quiet',     label: 'Quiet',  kind: 'word',   color: SYMBOL_PURPLE , speech: 'quiet' },
+    { id: 'repeat',    label: 'Repeat', kind: 'action', color: SYMBOL_GREEN },
+    { id: 'clear-tool',label: 'Clear',  kind: 'action', color: SYMBOL_RED   },
   ],
   quick: [
-    { id: 'yes', label: 'Yes', kind: 'word', color: '#3C673E', speech: 'yes' },
-    { id: 'no', label: 'No', kind: 'word', color: '#703232', speech: 'no' },
-    { id: 'help', label: 'Help', kind: 'word', color: '#3E486B', speech: 'help' },
-    { id: 'stop', label: 'Stop', kind: 'word', color: '#6A2E65', speech: 'stop' },
+    { id: 'yes',  label: 'Yes',  kind: 'word', color: SYMBOL_GREEN, speech: 'yes'  },
+    { id: 'no',   label: 'No',   kind: 'word', color: SYMBOL_RED,   speech: 'no'   },
+    { id: 'help', label: 'Help', kind: 'word', color: SYMBOL_BLUE,  speech: 'help' },
+    { id: 'stop', label: 'Stop', kind: 'word', color: SYMBOL_RED,   speech: 'stop' },
   ],
   settings: [
-    { id: 'hide-nav', label: 'Hide nav', kind: 'action', color: '#4B5C68' },
-    { id: 'clear-settings', label: 'Clear', kind: 'action', color: '#7A3D3D' },
-    { id: 'home-settings', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
-    { id: 'repeat-settings', label: 'Repeat', kind: 'action', color: '#703232' },
+    { id: 'hide-nav',        label: 'Hide nav', kind: 'action', color: SYMBOL_PURPLE },
+    { id: 'clear-settings',  label: 'Clear',    kind: 'action', color: SYMBOL_RED    },
+    { id: 'home-settings',   label: 'Home',     kind: 'folder', target: 'home', color: '#1DCDFF' },
+    { id: 'repeat-settings', label: 'Repeat',   kind: 'action', color: SYMBOL_GREEN  },
   ],
 };
 
@@ -172,23 +183,17 @@ function BoardFolderTile({ tile, size }: { tile: BoardTile; size: number }) {
   );
 }
 
-function wordBackgroundForTile(tile: BoardTile) {
-  if (tile.background) return TILE_ASSETS[tile.background];
-  if (tile.color === '#DCC1F1') return TILE_ASSETS.straw;
-  if (tile.color === '#3C673E') return TILE_ASSETS.green;
-  if (tile.color === '#703232' || tile.color === '#7A3D3D' || tile.color === '#6A2E65') {
-    return TILE_ASSETS.red;
-  }
-  return TILE_ASSETS.loud;
-}
-
 function BoardWordTile({ tile, size }: { tile: BoardTile; size: number }) {
+  // Flat coloured fill at 30% opacity — replaces the previous baked PNG
+  // backgrounds so the tile reads as a clean tinted chip. The label sits
+  // above at full opacity for legibility.
   return (
     <View style={[styles.wordTile, { width: size, height: size }]}>
-      <Image
-        source={wordBackgroundForTile(tile)}
-        resizeMode="stretch"
-        style={[styles.tileBackground, { width: size, height: size }]}
+      <View
+        style={[
+          styles.wordTileFill,
+          { width: size, height: size, backgroundColor: tile.color, opacity: 0.3 },
+        ]}
       />
       <Text style={styles.wordLabel} numberOfLines={1} adjustsFontSizeToFit>
         {tile.label}
@@ -755,7 +760,9 @@ export default function TalkScreen() {
             onPress={handleBackspace}
             style={styles.backspace}
           >
-            <BackspaceIcon size={50} />
+            {/* Slightly heavier — bigger glyph reads stronger against
+                the white message strip without changing the tap target. */}
+            <BackspaceIcon size={56} />
           </Pressable>
         </View>
 
@@ -1050,15 +1057,25 @@ const styles = StyleSheet.create({
   wordTile: {
     position: 'relative',
   },
+  // Flat coloured fill behind the symbol/label. Rounded corners match the
+  // optical weight of the folder PNGs so word and folder tiles share a
+  // visual rhythm.
+  wordTileFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    borderRadius: 14,
+  },
+  // Typography mirrors `folderLabel` so words and folders read as one family.
   wordLabel: {
     position: 'absolute',
     left: 5,
     right: 5,
-    top: 10,
+    top: 16,
     color: '#202020',
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '800',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '400',
     textAlign: 'center',
   },
   ghostOverlay: {

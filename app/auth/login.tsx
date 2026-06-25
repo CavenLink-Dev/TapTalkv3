@@ -96,6 +96,18 @@ export default function LoginScreen() {
           </Text>
           <Text style={styles.subtitle}>Sign in to continue communicating.</Text>
 
+          {/* Apple Sign-In leads the form so users with limited typing
+              speed don't have to scroll past email / password to find it. */}
+          <View style={styles.appleLead}>
+            <SignInWithAppleButton onPress={signInWithApple} loading={submitting} />
+          </View>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>Or use email</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           <View style={styles.form}>
             <View>
               <Text style={authFormStyles.label}>Email</Text>
@@ -154,14 +166,6 @@ export default function LoginScreen() {
             loading={submitting}
             onPress={login}
           />
-
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <SignInWithAppleButton onPress={signInWithApple} loading={submitting} />
 
           <Pressable
             accessibilityRole="link"
@@ -236,11 +240,14 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
     gap: spacing.md,
   },
+  appleLead: {
+    marginTop: spacing.lg,
+  },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginVertical: spacing.xs,
+    marginVertical: spacing.lg,
   },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border, opacity: 0.5 },
   dividerText: {

@@ -58,9 +58,11 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 96,
-    paddingTop: 0,
-    paddingBottom: 20,
+    // Tighter rhythm with the 48pt icons — was 96, felt empty above/below.
+    // Bottom padding accommodates the home-indicator safe area.
+    height: 78,
+    paddingTop: 4,
+    paddingBottom: 18,
     backgroundColor: colors.surface,
     borderTopWidth: 1.5,
     borderTopColor: colors.border,

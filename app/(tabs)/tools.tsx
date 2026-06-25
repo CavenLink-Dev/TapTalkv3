@@ -314,7 +314,9 @@ function VisualTimer({
       </Svg>
       <View style={styles.timerCenter} pointerEvents="none">
         <Text style={styles.timerTime}>{fmtMMSS(remaining)}</Text>
-        <Text style={styles.timerLabel}>{running ? 'STEP TIME' : 'PAUSED'}</Text>
+        <Text style={[styles.timerLabel, !running && styles.timerLabelPaused]}>
+          {running ? 'STEP TIME' : 'Paused'}
+        </Text>
       </View>
     </View>
   );
@@ -637,10 +639,10 @@ export default function PlannerScreen() {
               setShowNewPlanStub(true);
             }}
             style={({ pressed }) => [styles.newPlanBtn, pressed && { opacity: 0.85 }]}
-            accessibilityLabel="Add a new plan"
+            accessibilityLabel="Open plan builder demo"
           >
-            <Ionicons name="add" size={18} color={colors.surface} />
-            <Text style={styles.newPlanText}>New Plan</Text>
+            <Ionicons name="eye-outline" size={18} color={colors.surface} />
+            <Text style={styles.newPlanText}>Demo</Text>
           </Pressable>
         </View>
 
@@ -678,6 +680,7 @@ export default function PlannerScreen() {
         </Pressable>
 
         <DaySection
+          isFirst
           heading={`${longWeekday(selectedDate)}, ${monthShort(selectedDate)} ${selectedDate.getDate()}`}
           plans={plansForSelected}
           onOpen={p => setRunnerPlan(p)}
@@ -725,14 +728,17 @@ function DaySection({
   plans,
   onOpen,
   onAdd,
+  isFirst = false,
 }: {
   heading: string;
   plans: Plan[];
   onOpen: (p: Plan) => void;
   onAdd: () => void;
+  /** First section flush to the strip above; later sections get extra top space. */
+  isFirst?: boolean;
 }) {
   return (
-    <View style={styles.daySection}>
+    <View style={[styles.daySection, !isFirst && styles.daySectionSpaced]}>
       <Text style={styles.dayHeading}>{heading}</Text>
       {plans.length === 0 ? (
         <Card style={styles.emptyCard}>
@@ -878,6 +884,11 @@ const styles = StyleSheet.create({
   // Day section
   daySection: {
     gap: spacing.md,
+  },
+  // Extra top margin for any day section after the first, so consecutive
+  // days don't read as one continuous list.
+  daySectionSpaced: {
+    marginTop: spacing.lg,
   },
   dayHeading: {
     fontSize: typography.heading,
@@ -1029,6 +1040,13 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     letterSpacing: 1.2,
     marginTop: 2,
+  },
+  // Paused state — sentence-case, slightly larger, no caps tracking. Calmer.
+  timerLabelPaused: {
+    textTransform: 'none',
+    letterSpacing: 0,
+    fontSize: typography.callout,
+    fontWeight: '600',
   },
   timerControls: {
     flexDirection: 'row',

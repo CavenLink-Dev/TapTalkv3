@@ -135,9 +135,7 @@ export default function FirstThenScreen() {
 
                   {i < items.length - 1 && (
                     <View style={styles.connector} accessibilityElementsHidden>
-                      <View style={styles.connectorLine} />
                       <Ionicons name="arrow-down" size={22} color={colors.primary} />
-                      <View style={styles.connectorLine} />
                     </View>
                   )}
                 </View>
@@ -319,20 +317,12 @@ const styles = StyleSheet.create({
   },
 
   // Connector between steps
+  // Just the arrow, centered — no flanking lines. Reads more iOS-native.
   connector: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
     paddingLeft: 72 + spacing.md,
     paddingVertical: spacing.sm,
-  },
-  connectorLine: {
-    height: 2,
-    width: 18,
-    backgroundColor: colors.primary,
-    opacity: 0.35,
-    borderRadius: 1,
   },
 
   // Buttons

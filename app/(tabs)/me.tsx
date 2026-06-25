@@ -250,13 +250,12 @@ const styles = StyleSheet.create({
     width: 24,
     textAlign: 'center',
   },
+  // Rhythm comes from vertical padding alone — no decorative dividers.
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   docText: {
     flex: 1,

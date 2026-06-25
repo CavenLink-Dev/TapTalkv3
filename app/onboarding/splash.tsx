@@ -313,7 +313,7 @@ export default function Splash() {
           glow: flat rotating arc only. */}
       <View style={styles.bottomStack}>
         <Animated.Text style={[styles.motto, mottoStyle]}>
-          Tap to Talk!
+          Tap To Talk
         </Animated.Text>
         <Animated.View style={[styles.loaderWrap, loaderStyle]} pointerEvents="none">
           <Animated.View style={[styles.loaderRing, spinnerStyle]} />
