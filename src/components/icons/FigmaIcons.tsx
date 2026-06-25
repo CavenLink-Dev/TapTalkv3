@@ -103,8 +103,11 @@ export function BoardBackIcon({ size = 36 }: { size?: number }) {
 // ─── Board Home button (simple house outline, greyed) ─────────────────────────
 
 export function BoardHomeIcon({ size = 36 }: { size?: number }) {
+  // Viewbox tightened to the actual artwork bounds (3,3 → 21,21) so the
+  // glyph fills the rendered box edge-to-edge — matches BoardBackIcon's
+  // optical weight at the same `size` prop.
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Svg width={size} height={size} viewBox="2 2 20 20" fill="none">
       <Path
         fill="#BDC4CA"
         d="M12 3L3 10.5V21h6v-6h6v6h6V10.5L12 3Z"
@@ -113,7 +116,7 @@ export function BoardHomeIcon({ size = 36 }: { size?: number }) {
         stroke="#5A6370"
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeWidth={1.5}
+        strokeWidth={1.3}
         d="M3 10.5L12 3l9 7.5V21h-6v-6H9v6H3V10.5Z"
       />
     </Svg>

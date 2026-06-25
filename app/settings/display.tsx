@@ -67,7 +67,13 @@ export default function DisplaySettingsScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        bounces
+        alwaysBounceVertical
+        overScrollMode="always"
+      >
 
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>TEXT SIZE</Text>

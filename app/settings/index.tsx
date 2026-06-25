@@ -136,7 +136,13 @@ export default function SettingsIndexScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        bounces
+        alwaysBounceVertical
+        overScrollMode="always"
+      >
         <Text style={styles.title}>SETTINGS</Text>
 
         <Text style={styles.sectionHeading}>APP</Text>

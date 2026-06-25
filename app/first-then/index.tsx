@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, Stack, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
-import { colors, radii, shadows, spacing, typography } from '../../src/theme/tokens';
+import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
 import {
   clearFirstThen,
@@ -58,6 +58,9 @@ export default function FirstThenScreen() {
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
+        bounces
+        alwaysBounceVertical
+        overScrollMode="always"
       >
         <Text style={styles.subtitle}>
           Build a step-by-step sequence. Tap the plus button to add what comes next.
@@ -83,15 +86,7 @@ export default function FirstThenScreen() {
                     <View style={styles.wordPill}>
                       <Text style={styles.wordPillText}>{word}</Text>
                     </View>
-                    <View
-                      style={[
-                        styles.stepCard,
-                        {
-                          borderColor: item.symbolColor,
-                          shadowColor: item.symbolColor,
-                        },
-                      ]}
-                    >
+                    <View style={styles.stepCard}>
                       <View
                         style={[
                           styles.symbolChip,
@@ -283,8 +278,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    borderWidth: 2,
-    ...shadows.card,
   },
   symbolChip: {
     width: 64,

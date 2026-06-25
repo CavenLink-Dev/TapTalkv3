@@ -188,28 +188,32 @@ export const typography = {
 } as const;
 
 // ─── Shadows ──────────────────────────────────────────────────────────────────
+// Design system rule: flat surfaces. Shadows and glows looked cheap on small
+// phones and competed with the brand color. We keep the object shape so
+// consumers using `...shadows.card` don't need rewrites — they just spread a
+// no-op now. Depth comes from background contrast and color, not blur.
 
 export const shadows = {
   card: {
     shadowColor:   '#000000',
-    shadowOffset:  { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius:  8,
-    elevation:     2,
+    shadowOffset:  { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius:  0,
+    elevation:     0,
   },
   pop: {
-    shadowColor:   '#199AEE',
-    shadowOffset:  { width: 0, height: 4 },
-    shadowOpacity: 0.22,
-    shadowRadius:  16,
-    elevation:     6,
+    shadowColor:   '#000000',
+    shadowOffset:  { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius:  0,
+    elevation:     0,
   },
   cardRaise: {
     shadowColor:   '#000000',
-    shadowOffset:  { width: 0, height: -4 },
-    shadowOpacity: 0.06,
-    shadowRadius:  24,
-    elevation:     8,
+    shadowOffset:  { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius:  0,
+    elevation:     0,
   },
 } as const;
 

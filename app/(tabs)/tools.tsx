@@ -389,7 +389,13 @@ function RoutineRunner({
           <View style={{ width: 26 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.runnerScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.runnerScroll}
+          showsVerticalScrollIndicator={false}
+          bounces
+          alwaysBounceVertical
+          overScrollMode="always"
+        >
           {allDone ? (
             <RoutineComplete plan={plan} onClose={onClose} onRestart={() => {
               plan.steps.forEach(s => onMarkStep(plan.id, s.id, false));
@@ -616,7 +622,13 @@ export default function PlannerScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        bounces
+        alwaysBounceVertical
+        overScrollMode="always"
+      >
         <View style={styles.headerRow}>
           <Text style={styles.title}>Planner</Text>
           <Pressable

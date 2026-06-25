@@ -286,9 +286,6 @@ export default function Splash() {
   const spinnerStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${spin.value}deg` }],
   }));
-  const haloStyle = useAnimatedStyle(() => ({
-    opacity: haloPulse.value,
-  }));
 
   const revealStyle = useAnimatedStyle(() => ({
     transform: [{ scale: revealScale.value }],
@@ -302,7 +299,7 @@ export default function Splash() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Logo — vertically centered */}
+      {/* Logo — vertically centered so the brand mark anchors the page */}
       <Animated.View style={[styles.logoBlock, logoStyle]}>
         <Image
           source={require('../../asset/taptalk_logo.png')}
@@ -312,17 +309,16 @@ export default function Splash() {
         />
       </Animated.View>
 
-      {/* Tagline — directly below the centered logo */}
-      <Animated.Text style={[styles.motto, mottoStyle]}>
-        Tap to Talk!
-      </Animated.Text>
-
-      {/* Loader — snake-style rotating arc with a soft halo, sitting between
-          the tagline and the bottom safe area. */}
-      <Animated.View style={[styles.loaderWrap, loaderStyle]} pointerEvents="none">
-        <Animated.View style={[styles.loaderHalo, haloStyle]} />
-        <Animated.View style={[styles.loaderRing, spinnerStyle]} />
-      </Animated.View>
+      {/* Bottom stack — motto sits low, loader directly beneath. No halo
+          glow: flat rotating arc only. */}
+      <View style={styles.bottomStack}>
+        <Animated.Text style={[styles.motto, mottoStyle]}>
+          Tap to Talk!
+        </Animated.Text>
+        <Animated.View style={[styles.loaderWrap, loaderStyle]} pointerEvents="none">
+          <Animated.View style={[styles.loaderRing, spinnerStyle]} />
+        </Animated.View>
+      </View>
 
       {/* SWALLOW disc + brand wordmark — sit above everything else */}
       <Animated.View pointerEvents="none" style={[styles.reveal, revealStyle]} />
@@ -344,22 +340,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  // Logo centered both axes — the brand mark is the anchor of the screen.
   logoBlock: {
     position: 'absolute',
-    top: '38%',
+    top: 0,
+    bottom: 0,
     left: 0,
     right: 0,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   logo: {
     width: 240,
     height: 88,
   },
-  motto: {
+  // Bottom stack — motto + loader live together as one block, pinned to the
+  // lower portion of the page so the centered logo has room to breathe.
+  bottomStack: {
     position: 'absolute',
-    top: '52%',
+    bottom: '12%',
     left: 0,
     right: 0,
+    alignItems: 'center',
+    gap: 20,
+  },
+  motto: {
     textAlign: 'center',
     fontFamily: fonts.bodyMedium,
     fontSize: typography.body,
@@ -367,28 +372,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   loaderWrap: {
-    position: 'absolute',
-    bottom: '14%',
-    left: 0,
-    right: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loaderHalo: {
-    position: 'absolute',
-    width: 86,
-    height: 86,
-    borderRadius: 43,
-    backgroundColor: 'rgba(29, 205, 255, 0.14)',
-  },
   loaderRing: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 4,
-    borderColor: 'rgba(29, 205, 255, 0.18)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 3,
+    borderColor: 'rgba(25, 154, 238, 0.2)',
     borderTopColor: colors.primary,
-    borderRightColor: colors.primary,
   },
   // Reveal disc — seeded under the logo. Scales 0 → 1 to swallow the screen.
   reveal: {

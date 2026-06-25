@@ -23,6 +23,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
 import { BackspaceIcon, BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
@@ -81,32 +82,20 @@ const TILE_ASSETS = {
   purple: require('../../assets/aac/board_tiles/symbol-purple.png'),
 };
 
-const TOP_TAB_ASSETS = {
-  taptalk: {
-    icon: require('../../assets/top_bar/taptalk-icon.png'),
-    label: require('../../assets/top_bar/taptalk-label.png'),
-    iconSize: { width: 49, height: 35 },
-    labelSize: { width: 52, height: 9 },
-  },
-  tools: {
-    icon: require('../../assets/top_bar/tools-icon.png'),
-    label: require('../../assets/top_bar/tools-label.png'),
-    iconSize: { width: 33, height: 33 },
-    labelSize: { width: 39, height: 9 },
-  },
-  quick: {
-    icon: require('../../assets/top_bar/quick-icon.png'),
-    label: require('../../assets/top_bar/quick-label.png'),
-    iconSize: { width: 34, height: 34 },
-    labelSize: { width: 37, height: 10 },
-  },
-  setting: {
-    icon: require('../../assets/top_bar/setting-icon.png'),
-    label: require('../../assets/top_bar/setting-label.png'),
-    iconSize: { width: 31, height: 30 },
-    labelSize: { width: 50, height: 9 },
-  },
-} as const;
+// Top-nav tab metadata. Replaces the brightly-coloured cartoon PNGs with
+// neutral outlined Ionicons + uppercase text labels — matches the bottom
+// nav vocabulary (one tint, two states: idle grey, active brand blue).
+const TOP_TAB_META: Record<TopTab, { icon: React.ComponentProps<typeof Ionicons>['name']; label: string }> = {
+  taptalk: { icon: 'keypad-outline',    label: 'TAPTALK' },
+  tools:   { icon: 'construct-outline', label: 'TOOLS'   },
+  quick:   { icon: 'flash-outline',     label: 'QUICK'   },
+  setting: { icon: 'settings-outline',  label: 'SETTING' },
+};
+
+// Idle / active colours, kept inline so the tint animation has explicit
+// endpoints to interpolate between.
+const TOP_TAB_IDLE_COLOR   = '#8A8F95';
+const TOP_TAB_ACTIVE_COLOR = colors.primary;
 
 const HOME_TILES: BoardTile[] = [
   { id: 'people', label: 'People', kind: 'folder', target: 'quick', color: '#1DCDFF', background: 'folderExample' },
@@ -348,22 +337,72 @@ function BoardTileButton({
   );
 }
 
-function TopNavIcon({ tab }: { tab: TopTab }) {
-  const assets = TOP_TAB_ASSETS[tab];
+function TopNavTab({
+  tab,
+  active,
+  onPress,
+}: {
+  tab: TopTab;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const meta = TOP_TAB_META[tab];
+
+  // Single shared value drives both colour and scale so the active tab
+  // brightens and lifts together. JS-driver because of the colour
+  // interpolation; only 1–4 tabs animate at a time so this is fine.
+  const activeAnim = useRef(new RNAnimated.Value(active ? 1 : 0)).current;
+
+  useEffect(() => {
+    RNAnimated.timing(activeAnim, {
+      toValue: active ? 1 : 0,
+      duration: 180,
+      easing: RNEasing.out(RNEasing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [active, activeAnim]);
+
+  const tintColor = activeAnim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [TOP_TAB_IDLE_COLOR, TOP_TAB_ACTIVE_COLOR],
+  });
+  const scale = activeAnim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [1, 1.05],
+  });
 
   return (
-    <View style={styles.topTabContent}>
-      <Image
-        source={assets.icon}
-        resizeMode="contain"
-        style={[styles.topTabIconImage, assets.iconSize]}
-      />
-      <Image
-        source={assets.label}
-        resizeMode="contain"
-        style={[styles.topTabLabelImage, assets.labelSize]}
-      />
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${meta.label} top tab`}
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.topTab,
+        // Subtle press-in dip — uses Pressable's own state so it doesn't
+        // need its own Animated value.
+        pressed && styles.topTabPressed,
+      ]}
+    >
+      <RNAnimated.View style={[styles.topTabContent, { transform: [{ scale }] }]}>
+        <Ionicons
+          name={meta.icon}
+          size={28}
+          // Animated.Color can't pass directly into Ionicons' color prop, so
+          // we let the parent View tint via animated text-style trick.
+          color={TOP_TAB_IDLE_COLOR}
+          // Replace the static icon with an absolute-positioned overlay that
+          // fades in the active tint on top.
+        />
+        {/* Active-coloured overlay icon — opacity tracks activeAnim. */}
+        <RNAnimated.View style={[styles.topTabIconOverlay, { opacity: activeAnim }]}>
+          <Ionicons name={meta.icon} size={28} color={TOP_TAB_ACTIVE_COLOR} />
+        </RNAnimated.View>
+        <RNAnimated.Text style={[styles.topTabLabel, { color: tintColor }]}>
+          {meta.label}
+        </RNAnimated.Text>
+      </RNAnimated.View>
+    </Pressable>
   );
 }
 
@@ -422,15 +461,12 @@ function TopNav({
         style={[styles.topNavPanel, { opacity: panelOpacity }]}
       >
         {(['taptalk', 'tools', 'quick', 'setting'] as TopTab[]).map(tab => (
-          <Pressable
+          <TopNavTab
             key={tab}
-            accessibilityRole="button"
-            accessibilityLabel={`${tab} top tab`}
+            tab={tab}
+            active={activeTab === tab}
             onPress={() => onTabPress(tab)}
-            style={[styles.topTab, activeTab === tab && styles.topTabActive]}
-          >
-            <TopNavIcon tab={tab} />
-          </Pressable>
+          />
         ))}
       </RNAnimated.View>
       <Pressable
@@ -912,20 +948,30 @@ const styles = StyleSheet.create({
     height: 57,
     alignItems: 'center',
     justifyContent: 'center',
-    opacity: 1,
   },
-  topTabActive: {
-    opacity: 1,
+  // Slight opacity dip on touch — Pressable feedback while the scale/colour
+  // animation handles the active state.
+  topTabPressed: {
+    opacity: 0.85,
   },
   topTabContent: {
     alignItems: 'center',
     justifyContent: 'center',
+    height: '100%',
   },
-  topTabIconImage: {
-    marginBottom: 2,
+  // Coloured icon overlay sits exactly on top of the idle icon so the
+  // active tint can fade in without re-rendering layout.
+  topTabIconOverlay: {
+    position: 'absolute',
+    top: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  topTabLabelImage: {
-    marginTop: 0,
+  topTabLabel: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
   },
   navToggle: {
     position: 'absolute',

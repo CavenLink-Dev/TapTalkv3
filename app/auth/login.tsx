@@ -114,7 +114,7 @@ export default function LoginScreen() {
               <Text style={authFormStyles.label}>Password</Text>
               <TextField
                 accessibilityLabel="Password"
-                placeholder="Your password"
+                placeholder="At least 6 characters"
                 secureTextEntry
                 autoComplete="password"
                 value={password}

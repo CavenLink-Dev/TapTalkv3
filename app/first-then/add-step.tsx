@@ -106,6 +106,9 @@ export default function AddStepScreen() {
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          bounces
+          alwaysBounceVertical
+          overScrollMode="always"
         >
           {/* Preview — gives the user instant visual feedback as they fill the form. */}
           <View style={styles.preview}>
@@ -346,12 +349,11 @@ const styles = StyleSheet.create({
     letterSpacing: typography.trackSubhead,
   },
 
-  // Name input
+  // Name input — filled, no idle border. Focus state could add a border in
+  // future, but the filled background already reads as input clearly.
   input: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: 16,
     fontSize: typography.body,
@@ -370,8 +372,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.border,
     minHeight: 48,
     justifyContent: 'center',
   },
@@ -399,8 +399,6 @@ const styles = StyleSheet.create({
     aspectRatio: 0.95,
     padding: 6,
     borderRadius: radii.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
