@@ -16,11 +16,9 @@
  *   - Back button navigates via the supplied `onBack` callback.
  */
 
-import { Asset } from 'expo-asset';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
-import { SvgUri } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { spacing } from '../../theme/tokens';
 
 interface ActivityProgressBarProps {
@@ -37,14 +35,12 @@ interface ActivityProgressBarProps {
 }
 
 const TRACK_HEIGHT = 25;
+const TRACK_COLOR = '#D5E1E8';
+const FILL_COLOR = '#199AEE';
 const MIN_DOT_RADIUS = 3.5;
 const MAX_DOT_RADIUS = 10;
 const MIN_DOT_SPACING = 8;
 const BACK_BUTTON_SIZE = 40;
-
-const BACK_BUTTON_ASSET = require('../../../assets/progress_bar/back_button.svg');
-const TRACK_ASSET = require('../../../assets/progress_bar/progress_bar_background.svg');
-const FILL_COLOR = '#199AEE';
 
 export function ActivityProgressBar({
   current,
@@ -53,26 +49,6 @@ export function ActivityProgressBar({
   backAccessibleLabel = 'Back',
   progressAccessibleLabel,
 }: ActivityProgressBarProps) {
-  const [backUri, setBackUri] = useState<string | null>(null);
-  const [trackUri, setTrackUri] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function resolve() {
-      const back = Asset.fromModule(BACK_BUTTON_ASSET);
-      const track = Asset.fromModule(TRACK_ASSET);
-      await Promise.all([back.downloadAsync(), track.downloadAsync()]);
-      if (!cancelled) {
-        setBackUri(back.localUri ?? back.uri);
-        setTrackUri(track.localUri ?? track.uri);
-      }
-    }
-    resolve();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Clamp values so the bar always renders something sensible.
   const safeTotal = Math.max(1, total);
   const safeCurrent = Math.max(1, Math.min(current, safeTotal));
@@ -86,11 +62,14 @@ export function ActivityProgressBar({
         accessibilityLabel={backAccessibleLabel}
       >
         <View style={styles.backButtonCircle}>
-          {backUri ? (
-            <SvgUri width={BACK_BUTTON_SIZE} height={BACK_BUTTON_SIZE} uri={backUri} />
-          ) : (
-            <View style={styles.backButtonPlaceholder} />
-          )}
+          <Svg width={BACK_BUTTON_SIZE} height={BACK_BUTTON_SIZE} viewBox="0 0 40 40">
+            <Path
+              fillRule="evenodd"
+              clipRule="evenodd"
+              d="M21.0996 7.09993C21.6803 7.67849 21.6803 8.61651 21.0996 9.19506L11.7426 18.5179H31.8458C32.667 18.5179 33.3327 19.1811 33.3327 19.9993C33.3327 20.8175 32.667 21.4808 31.8458 21.4808H11.7426L21.0996 30.8036C21.6803 31.3822 21.6803 32.3202 21.0996 32.8988C20.5189 33.4773 19.5775 33.4773 18.9968 32.8988L7.10152 21.0469C6.52085 20.4684 6.52085 19.5303 7.10152 18.9518L18.9968 7.09993C19.5775 6.52138 20.5189 6.52138 21.0996 7.09993Z"
+              fill="#252222"
+            />
+          </Svg>
         </View>
       </Pressable>
 
@@ -105,21 +84,13 @@ export function ActivityProgressBar({
           text: `Level ${safeCurrent} of ${safeTotal}`,
         }}
       >
-        <Bar current={safeCurrent} total={safeTotal} trackUri={trackUri} />
+        <Bar current={safeCurrent} total={safeTotal} />
       </View>
     </View>
   );
 }
 
-function Bar({
-  current,
-  total,
-  trackUri,
-}: {
-  current: number;
-  total: number;
-  trackUri: string | null;
-}) {
+function Bar({ current, total }: { current: number; total: number }) {
   const [width, setWidth] = React.useState(0);
 
   const padding = 8;
@@ -136,24 +107,17 @@ function Bar({
 
   return (
     <View style={styles.barInner} onLayout={e => setWidth(e.nativeEvent.layout.width)}>
-      {/* Track background */}
-      {trackUri ? (
-        <View style={StyleSheet.absoluteFill}>
-          <SvgUri width={barWidth} height={TRACK_HEIGHT} uri={trackUri} />
-        </View>
-      ) : (
-        <View style={[styles.trackPlaceholder, { width: barWidth, height: TRACK_HEIGHT }]} />
-      )}
-
-      {/* Fill dots */}
-      <Svg width={barWidth} height={TRACK_HEIGHT} style={StyleSheet.absoluteFill}>
+      <Svg width={barWidth} height={TRACK_HEIGHT}>
+        {/* Track background */}
+        <Rect x={0} y={0} width={barWidth} height={TRACK_HEIGHT} rx={TRACK_HEIGHT / 2} fill={TRACK_COLOR} />
+        {/* Fill dots */}
         {dots.map(d => (
           <Circle
             key={d.key}
             cx={d.cx}
             cy={TRACK_HEIGHT / 2}
             r={dotRadius}
-            fill={d.filled ? FILL_COLOR : 'transparent'}
+            fill={d.filled ? FILL_COLOR : TRACK_COLOR}
           />
         ))}
       </Svg>
@@ -181,12 +145,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backButtonPlaceholder: {
-    width: BACK_BUTTON_SIZE,
-    height: BACK_BUTTON_SIZE,
-    borderRadius: BACK_BUTTON_SIZE / 2,
-    backgroundColor: '#FFFFFF',
-  },
   barContainer: {
     flex: 1,
     height: TRACK_HEIGHT,
@@ -194,9 +152,5 @@ const styles = StyleSheet.create({
   barInner: {
     width: '100%',
     height: TRACK_HEIGHT,
-  },
-  trackPlaceholder: {
-    borderRadius: TRACK_HEIGHT / 2,
-    backgroundColor: '#D5E1E8',
   },
 });

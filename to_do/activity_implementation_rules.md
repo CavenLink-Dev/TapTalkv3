@@ -84,6 +84,15 @@ Visual weight: Back = light primary tint (`#E6F4FD`, blue text). Reset = neutral
 ### 2.5 Safe area
 Always pull `useSafeAreaInsets()` and pad the body bottom with `insets.bottom + spacing.md`. The footer must clear the iPhone home indicator. **Always check this on a real device-sized layout** — a screenshot where the footer clips is the most common bug.
 
+### 2.6 Instruction text must be readable
+The instruction line sits directly below the level pill/pill. It must be:
+- **Large enough to read at arm's length** — minimum `typography.body` (≈17 pt) and preferably `typography.callout` or larger. Never use `caption` or `footnote` for instructions.
+- **Centred and high-contrast** — use `colors.text` on `#FFFFFF`.
+- **One short line** — one sentence only. If the instruction needs more than one line, split it into a visual example instead of more words.
+- **Visually separated** — add at least `spacing.md` (16 pt) between the level pill and the instruction text, and again before the game body.
+
+❌ Do not make instructions tiny or faded. A user with low vision, motor delay, or cognitive load must be able to read it without squinting.
+
 ---
 
 ## 3. Voice and sound

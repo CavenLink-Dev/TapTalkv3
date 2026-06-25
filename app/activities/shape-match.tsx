@@ -1099,10 +1099,11 @@ const styles = StyleSheet.create({
   },
 
   instruction: {
-    fontSize: typography.callout,
-    color: colors.textMuted,
+    fontSize: typography.body,
+    color: colors.text,
     textAlign: 'center',
-    lineHeight: 21,
+    lineHeight: 24,
+    fontWeight: '600',
   },
 
   // Areas centered vertically so the layout reads as two grouped banks
