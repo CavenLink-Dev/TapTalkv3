@@ -1,11 +1,21 @@
 /**
- * Add Step — separate page so the flow is one decision at a time. The page
- * walks the user through three labelled sections: name, optional timer,
- * symbol. Sizing and contrast are tuned for accessibility — labels are
- * eyebrow-style, inputs and tappable chips are large.
+ * Add / Edit Step.
+ *
+ * One linear flow walking the user through three labelled sections:
+ *   1. What is the step?      (name input)
+ *   2. How long?              (full iOS h/m/s wheel pickers)
+ *   3. Pick a symbol          (12-icon grid)
+ *
+ * If the route is opened with a `?id=…` param, the form pre-fills with
+ * that step's values and the Save button updates instead of adding.
+ *
+ * Design rules: principle 1 (simple first) — three numbered steps, no
+ * disclosures here since each section is essential. Principle 9 — pickers
+ * for controlled choices. Principle 13 — Save / Cancel each have one clear
+ * action; haptic + screen change confirms.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -18,10 +28,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { WheelPicker } from '../../src/components/native/WheelPicker';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
-import { addFirstThen } from '../../src/features/first-then/store';
+import {
+  FirstThenItem,
+  addFirstThen,
+  updateFirstThen,
+  useFirstThenItems,
+} from '../../src/features/first-then/store';
 
 type SymbolOption = {
   name: React.ComponentProps<typeof Ionicons>['name'];
@@ -29,8 +45,6 @@ type SymbolOption = {
   label: string;
 };
 
-// Twelve curated symbols cover the common daily-routine concepts and match
-// the visual cue style used elsewhere in the planner.
 const SYMBOLS: SymbolOption[] = [
   { name: 'water-outline',         color: '#3DC1F2', label: 'Shower'   },
   { name: 'restaurant-outline',    color: '#FF8A3C', label: 'Eat'      },
@@ -46,7 +60,11 @@ const SYMBOLS: SymbolOption[] = [
   { name: 'sparkles-outline',      color: '#FFD700', label: 'Reward'   },
 ];
 
-const TIMER_PRESETS: Array<number | null> = [null, 1, 2, 5, 10, 15, 20, 30];
+const HOURS    = Array.from({ length: 24 }, (_, i) => i);
+const MINUTES  = Array.from({ length: 60 }, (_, i) => i);
+const SECONDS  = Array.from({ length: 60 }, (_, i) => i);
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
 
 function hexAlpha(hex: string, a: number): string {
   const h = hex.replace('#', '');
@@ -56,31 +74,59 @@ function hexAlpha(hex: string, a: number): string {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
+function findSymbolIndex(item: FirstThenItem | undefined): number | null {
+  if (!item) return null;
+  const idx = SYMBOLS.findIndex(s => s.name === item.symbol);
+  return idx >= 0 ? idx : null;
+}
+
 export default function AddStepScreen() {
   const router = useRouter();
-  const [name, setName] = useState('');
-  const [minutes, setMinutes] = useState<number | null>(null);
-  // null until the user actually picks a symbol — keeps the preview honest.
-  const [symbolIndex, setSymbolIndex] = useState<number | null>(null);
+  const params = useLocalSearchParams<{ id?: string }>();
+  const items = useFirstThenItems();
+  const editing = useMemo(
+    () => (params.id ? items.find(i => i.id === params.id) : undefined),
+    [params.id, items],
+  );
+  const isEdit = !!editing;
+
+  const [name, setName] = useState<string>(editing?.name ?? '');
+  const [hours, setHours] = useState<number>(editing?.hours ?? 0);
+  const [minutes, setMinutes] = useState<number>(editing?.minutes ?? 0);
+  const [seconds, setSeconds] = useState<number>(editing?.seconds ?? 0);
+  const [symbolIndex, setSymbolIndex] = useState<number | null>(findSymbolIndex(editing));
 
   const canSave = name.trim().length > 0;
 
   const onSave = () => {
     if (!canSave) return;
-    // Fall back to the first symbol if the user didn't pick one explicitly.
     const sym = (symbolIndex != null ? SYMBOLS[symbolIndex] : SYMBOLS[0]) ?? SYMBOLS[0]!;
-    addFirstThen({
-      id: `ft-${Date.now()}`,
-      name: name.trim(),
-      minutes: minutes ?? undefined,
-      symbol: sym.name,
-      symbolColor: sym.color,
-    });
+    if (isEdit && editing) {
+      updateFirstThen(editing.id, {
+        name: name.trim(),
+        hours,
+        minutes,
+        seconds,
+        symbol: sym.name,
+        symbolColor: sym.color,
+      });
+    } else {
+      addFirstThen({
+        id: `ft-${Date.now()}`,
+        name: name.trim(),
+        hours,
+        minutes,
+        seconds,
+        symbol: sym.name,
+        symbolColor: sym.color,
+      });
+    }
     hapticSelection();
     router.back();
   };
 
   const selectedSym = symbolIndex != null ? SYMBOLS[symbolIndex] : null;
+  const totalDuration = hours * 3600 + minutes * 60 + seconds;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -96,7 +142,9 @@ export default function AddStepScreen() {
         >
           <Ionicons name="chevron-back" size={28} color={colors.primary} />
         </Pressable>
-        <Text style={styles.headerTitle} accessibilityRole="header">Add Step</Text>
+        <Text style={styles.headerTitle} accessibilityRole="header">
+          {isEdit ? 'Edit Step' : 'Add Step'}
+        </Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -131,12 +179,14 @@ export default function AddStepScreen() {
             <Text style={styles.previewName} numberOfLines={1}>
               {name.trim() || (selectedSym ? 'Your step' : 'Pick a symbol below')}
             </Text>
-            {minutes != null && (
+            {totalDuration > 0 ? (
               <View style={styles.previewTimer}>
-                <Ionicons name="timer-outline" size={16} color={colors.primary} />
-                <Text style={styles.previewTimerText}>{minutes} min</Text>
+                <Ionicons name="time-outline" size={16} color={colors.primary} />
+                <Text style={styles.previewTimerText}>
+                  {hours > 0 ? `${hours}h ` : ''}{minutes > 0 ? `${minutes}m ` : ''}{seconds > 0 ? `${seconds}s` : ''}
+                </Text>
               </View>
-            )}
+            ) : null}
           </View>
 
           {/* Section 1 — name */}
@@ -148,7 +198,7 @@ export default function AddStepScreen() {
             <TextInput
               value={name}
               onChangeText={setName}
-              placeholder="e.g. Eat breakfast"
+              placeholder="e.g. Brush teeth"
               placeholderTextColor={colors.textTertiary}
               style={styles.input}
               autoCorrect={false}
@@ -158,39 +208,43 @@ export default function AddStepScreen() {
             />
           </View>
 
-          {/* Section 2 — timer */}
+          {/* Section 2 — h/m/s pickers */}
           <View style={styles.section}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionNum}><Text style={styles.sectionNumText}>2</Text></View>
               <Text style={styles.sectionTitle}>How long? (optional)</Text>
             </View>
-            <View style={styles.chipRow}>
-              {TIMER_PRESETS.map(m => {
-                const active = minutes === m;
-                const label = m == null ? 'No timer' : `${m} min`;
-                return (
-                  <Pressable
-                    key={String(m)}
-                    onPress={() => {
-                      hapticSelection();
-                      setMinutes(m);
-                    }}
-                    style={({ pressed }) => [
-                      styles.timerChip,
-                      active && styles.timerChipActive,
-                      pressed && { opacity: 0.85 },
-                    ]}
-                    accessibilityLabel={label}
-                    accessibilityState={{ selected: active }}
-                    accessibilityRole="button"
-                  >
-                    <Text style={[styles.timerChipText, active && styles.timerChipTextActive]}>
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <View style={styles.wheelRow}>
+              <WheelPicker
+                values={HOURS}
+                selectedValue={hours}
+                onChange={setHours}
+                label="Hour"
+                format={(v) => pad2(v)}
+                accessibilityLabel="Hours"
+              />
+              <Text style={styles.wheelSeparator}>:</Text>
+              <WheelPicker
+                values={MINUTES}
+                selectedValue={minutes}
+                onChange={setMinutes}
+                label="Min"
+                format={(v) => pad2(v)}
+                accessibilityLabel="Minutes"
+              />
+              <Text style={styles.wheelSeparator}>:</Text>
+              <WheelPicker
+                values={SECONDS}
+                selectedValue={seconds}
+                onChange={setSeconds}
+                label="Sec"
+                format={(v) => pad2(v)}
+                accessibilityLabel="Seconds"
+              />
             </View>
+            <Text style={styles.wheelHint}>
+              Leave at 00:00:00 for a step that needs no timer.
+            </Text>
           </View>
 
           {/* Section 3 — symbol */}
@@ -241,7 +295,7 @@ export default function AddStepScreen() {
               !canSave && styles.saveBtnDisabled,
               canSave && pressed && { opacity: 0.85 },
             ]}
-            accessibilityLabel="Save step"
+            accessibilityLabel={isEdit ? 'Save changes' : 'Save step'}
             accessibilityRole="button"
             accessibilityState={{ disabled: !canSave }}
           >
@@ -251,7 +305,7 @@ export default function AddStepScreen() {
               color={canSave ? colors.surface : colors.textTertiary}
             />
             <Text style={[styles.saveBtnText, !canSave && { color: colors.textTertiary }]}>
-              Save Step
+              {isEdit ? 'Save Changes' : 'Save Step'}
             </Text>
           </Pressable>
         </ScrollView>
@@ -263,19 +317,13 @@ export default function AddStepScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
 
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
-  headerIconBtn: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  headerIconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: {
     flex: 1,
     textAlign: 'center',
@@ -292,13 +340,11 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
   },
 
-  // Preview
   preview: {
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.lg,
   },
-  // Empty state — dashed outline + neutral icon while no symbol is chosen.
   previewChipEmpty: {
     width: 120,
     height: 120,
@@ -339,10 +385,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
 
-  // Section
-  section: {
-    gap: spacing.md,
-  },
+  section: { gap: spacing.md },
   sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -368,8 +411,6 @@ const styles = StyleSheet.create({
     letterSpacing: typography.trackSubhead,
   },
 
-  // Name input — filled, no idle border. Focus state could add a border in
-  // future, but the filled background already reads as input clearly.
   input: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
@@ -380,34 +421,27 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
 
-  // Timer chips
-  chipRow: {
+  wheelRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    paddingVertical: spacing.md,
     gap: spacing.sm,
   },
-  timerChip: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 12,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    minHeight: 48,
-    justifyContent: 'center',
-  },
-  timerChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  timerChipText: {
-    fontSize: typography.callout,
+  wheelSeparator: {
+    fontSize: 22,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.textTertiary,
+    paddingBottom: 50,
   },
-  timerChipTextActive: {
-    color: colors.surface,
+  wheelHint: {
+    fontSize: typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
 
-  // Symbol grid
   symbolGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -436,7 +470,6 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
-  // Save
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
