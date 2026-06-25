@@ -95,7 +95,11 @@ const TOP_TAB_META: Record<TopTab, { icon: React.ComponentProps<typeof Ionicons>
 // Idle / active colours, kept inline so the tint animation has explicit
 // endpoints to interpolate between.
 const TOP_TAB_IDLE_COLOR   = '#8A8F95';
-const TOP_TAB_ACTIVE_COLOR = colors.primary;
+// Active state mirrors the bottom-nav outline weight — a deep neutral
+// rather than brand blue, so the press feedback reads as "selected" without
+// shouting. Was `colors.primary` (#199AEE); the blue felt disconnected from
+// the rest of the chrome.
+const TOP_TAB_ACTIVE_COLOR = colors.symbolOutline;
 
 // ─── Symbol palette ──────────────────────────────────────────────────────────
 // Vibrant, matte primaries chosen from the iOS system palette. The tile
@@ -412,8 +416,9 @@ function TopNavTab({
 }
 
 function ToggleChevron({ open, active }: { open: boolean; active: boolean }) {
-  // Arrow lights blue only when the nav is open (active) or while pressed.
-  const stroke = active ? colors.primaryDark : '#9A9A9A';
+  // Arrow darkens (rather than lights blue) when the nav is open or pressed,
+  // so the chevron lives in the same neutral family as the top-tab icons.
+  const stroke = active ? colors.symbolOutline : '#9A9A9A';
   return (
     <Svg width={36} height={16} viewBox="0 0 36 16">
       <Polyline
@@ -497,8 +502,9 @@ export default function TalkScreen() {
   const ghostsRef = useRef<GhostTile[]>([]);
   const { state, dispatch } = useAppContext();
   const { speak, lastError, clearError } = useSpeech();
-  // Default to open so first-time users can see the top nav is there.
-  const [showTopNav, setShowTopNav] = useState(true);
+  // Default to closed — board is the hero, top nav stays out of the way
+  // until the user explicitly taps the chevron to open it.
+  const [showTopNav, setShowTopNav] = useState(false);
   const [activeMode, setActiveMode] = useState<BoardMode>('home');
   const [previousMode, setPreviousMode] = useState<BoardMode | null>(null);
   const [activeTab, setActiveTab] = useState<TopTab>('taptalk');

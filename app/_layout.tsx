@@ -1,6 +1,7 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 import { Text, TextInput, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
@@ -28,13 +29,15 @@ export default function RootLayout() {
   }
 
   return (
-    <ErrorBoundary>
-      <SafeAreaProvider>
-        <AppProvider>
-          <Stack screenOptions={{ headerShown: false }} />
-          <StatusBar style="dark" />
-        </AppProvider>
-      </SafeAreaProvider>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <SafeAreaProvider>
+          <AppProvider>
+            <Stack screenOptions={{ headerShown: false }} />
+            <StatusBar style="dark" />
+          </AppProvider>
+        </SafeAreaProvider>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }

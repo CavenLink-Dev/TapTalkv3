@@ -41,8 +41,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="tools"
         options={{
-          title: 'Planner',
-          tabBarIcon: icon('calendar'),
+          title: 'Tools',
+          tabBarIcon: icon('tools'),
         }}
       />
       <Tabs.Screen
