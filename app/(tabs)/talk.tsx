@@ -1044,7 +1044,7 @@ const styles = StyleSheet.create({
     color: '#202020',
     fontSize: 20,
     lineHeight: 24,
-    fontWeight: '400',
+    fontWeight: '600',
     textAlign: 'center',
   },
   symbolMount: {
@@ -1075,7 +1075,7 @@ const styles = StyleSheet.create({
     color: '#202020',
     fontSize: 20,
     lineHeight: 24,
-    fontWeight: '400',
+    fontWeight: '600',
     textAlign: 'center',
   },
   ghostOverlay: {
