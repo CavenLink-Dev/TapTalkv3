@@ -1,6 +1,8 @@
 # TapTalk — Pickup Notes for the Next AI Session
 
 > **Read this first. Then read `RULES.md`. Then run `git status` / `git log -10` to see where things actually are. Do not skip the rules file — the user has reaffirmed it every turn.**
+>
+> **Building a game in `app/activities/`?** Read `activity_implementation_rules.md` in this folder before writing code. Those rules are binding for every Activity game (Shape Match is the reference implementation).
 
 ---
 

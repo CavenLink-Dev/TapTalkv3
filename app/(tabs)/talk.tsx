@@ -695,7 +695,6 @@ export default function TalkScreen() {
     }
     if (tab === 'clear') {
       clearMessage();
-      setActiveTab(tab);
       return;
     }
     // EDIT — placeholder, intentionally no-op for v1.

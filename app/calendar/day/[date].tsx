@@ -6,17 +6,16 @@
  *     to time so the eye reads "how long" at a glance).
  *   • Left rail: hour labels every hour, faint half-hour tick lines.
  *   • Cards float at their start time, height = duration × (96 / 60).
- *   • Tick (or tap the card) marks the step done → card dims to 30 % and
- *     the timeline auto-scrolls to the next not-done step (principle 14
- *     animation, principle 24 helpful empty when no more steps remain).
+ *   • Overlapping steps split side-by-side: 1 = full, 2 = halves, 3 = thirds,
+ *     4+ wraps to rows of 3. Each tile is a solid 5 px rounded rectangle.
+ *   • Tick (or tap the card) marks the step done; the timeline auto-scrolls
+ *     to the next not-done step (principle 14, principle 24 empty states).
  *
  * Header has a Back chevron and the day label (Sunday, Jun 25).
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,7 +25,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { colors, radii, spacing, typography } from '../../../src/theme/tokens';
+import { colors, spacing, typography } from '../../../src/theme/tokens';
 import { hapticSelection } from '../../../src/utils/haptics';
 import {
   PlanStep,
@@ -40,17 +39,12 @@ import {
 const HOUR_HEIGHT = 96;
 const TIMELINE_HEIGHT = HOUR_HEIGHT * 24;
 const TIME_RAIL_WIDTH = 64;
+const TILE_GAP = 6;
+const TILES_PER_ROW = 3;
+const MIN_CARD_HEIGHT = 56;
 
 const DOW_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function hexAlpha(hex: string, a: number): string {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
 
 interface PositionedStep extends PlanStep {
   planId: string;
@@ -58,39 +52,72 @@ interface PositionedStep extends PlanStep {
   planSymbolColor: string;
 }
 
+// Two steps overlap if their time ranges intersect.
+function overlaps(a: PositionedStep, b: PositionedStep): boolean {
+  return !(endMin(a) <= b.startMin || endMin(b) <= a.startMin);
+}
+
+// Group overlapping steps into clusters. Each cluster will be split into
+// side-by-side tiles; non-overlapping clusters stay on independent lanes.
+function clusterSteps(steps: PositionedStep[]): PositionedStep[][] {
+  const sorted = [...steps].sort((a, b) => a.startMin - b.startMin);
+  const clusters: PositionedStep[][] = [];
+  for (const step of sorted) {
+    let placed = false;
+    for (const cluster of clusters) {
+      if (cluster.some(s => overlaps(s, step))) {
+        cluster.push(step);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) clusters.push([step]);
+  }
+  return clusters;
+}
+
+// Assign a column to each step in a cluster and compute its geometry.
+// 1 item = full width; 2 = halves; 3 = thirds; 4+ wraps to rows of 3.
+function layoutStep(
+  step: PositionedStep,
+  column: number,
+  clusterSize: number,
+  bodyWidth: number,
+): { left: number; width: number; top: number } {
+  const row = Math.floor(column / TILES_PER_ROW);
+  const colInRow = column % TILES_PER_ROW;
+  const rowStart = row * TILES_PER_ROW;
+  const rowEnd = Math.min(rowStart + TILES_PER_ROW, clusterSize);
+  const itemsInRow = rowEnd - rowStart;
+  const availableWidth = bodyWidth - spacing.sm;
+  const totalGap = (itemsInRow - 1) * TILE_GAP;
+  const width = (availableWidth - totalGap) / itemsInRow;
+  const left = spacing.sm + colInRow * (width + TILE_GAP);
+  const top = step.startMin * (HOUR_HEIGHT / 60) + row * MIN_CARD_HEIGHT;
+  return { left, width, top };
+}
+
 function StepCard({
   step,
   onToggle,
+  layout,
 }: {
   step: PositionedStep;
   onToggle: () => void;
+  layout: { left: number; width: number; top: number };
 }) {
-  // Dim animation on done-toggle for visual feedback (principle 14).
-  const dim = useRef(new Animated.Value(step.done ? 1 : 0)).current;
-  useEffect(() => {
-    Animated.timing(dim, {
-      toValue: step.done ? 1 : 0,
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [step.done, dim]);
-
-  const opacity = dim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.3] });
-
-  const top = step.startMin * (HOUR_HEIGHT / 60);
-  const height = Math.max(56, step.durationMin * (HOUR_HEIGHT / 60) - 4);
+  const height = Math.max(MIN_CARD_HEIGHT, step.durationMin * (HOUR_HEIGHT / 60) - 4);
 
   return (
-    <Animated.View
+    <View
       style={[
         styles.card,
         {
-          top,
+          top: layout.top,
+          left: layout.left,
+          width: layout.width,
           height,
-          backgroundColor: hexAlpha(step.symbolColor, 0.14),
-          borderLeftColor: step.symbolColor,
-          opacity,
+          backgroundColor: step.symbolColor,
         },
       ]}
       accessibilityRole="button"
@@ -101,7 +128,7 @@ function StepCard({
         style={styles.cardInner}
         accessibilityLabel={step.done ? `Mark ${step.name} not done` : `Mark ${step.name} done`}
       >
-        <View style={[styles.cardChip, { backgroundColor: hexAlpha(step.symbolColor, 0.25) }]}>
+        <View style={styles.cardChip}>
           <Ionicons
             name={step.symbol as React.ComponentProps<typeof Ionicons>['name']}
             size={22}
@@ -117,11 +144,11 @@ function StepCard({
             <Text style={styles.cardDesc} numberOfLines={2}>{step.description}</Text>
           ) : null}
         </View>
-        <View style={[styles.tick, step.done && { backgroundColor: step.symbolColor, borderColor: step.symbolColor }]}>
+        <View style={[styles.tick, step.done && styles.tickDone]}>
           {step.done ? <Ionicons name="checkmark" size={16} color="#FFFFFF" /> : null}
         </View>
       </Pressable>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -132,6 +159,7 @@ export default function DayTimelineScreen() {
   const dayDate = dateKey ? parseDateKey(dateKey) : new Date();
   const plans = usePlansForDate(dateKey);
   const [autoScrolled, setAutoScrolled] = useState(false);
+  const [bodyWidth, setBodyWidth] = useState(0);
 
   const allSteps: PositionedStep[] = plans.flatMap(p =>
     p.steps.map(s => ({
@@ -141,6 +169,18 @@ export default function DayTimelineScreen() {
       planSymbolColor: p.symbolColor,
     })),
   );
+
+  const clusteredSteps = React.useMemo(() => {
+    const clusters = clusterSteps(allSteps);
+    const positioned: { step: PositionedStep; layout: { left: number; width: number; top: number } }[] = [];
+    for (const cluster of clusters) {
+      const width = bodyWidth || 0;
+      cluster.forEach((step, index) => {
+        positioned.push({ step, layout: layoutStep(step, index, cluster.length, width) });
+      });
+    }
+    return positioned;
+  }, [allSteps, bodyWidth]);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -213,7 +253,10 @@ export default function DayTimelineScreen() {
             </View>
 
             {/* Body */}
-            <View style={styles.body}>
+            <View
+              style={styles.body}
+              onLayout={e => setBodyWidth(e.nativeEvent.layout.width)}
+            >
               {/* Hour + half-hour rules */}
               {Array.from({ length: 24 }).map((_, h) => (
                 <React.Fragment key={`rule-${h}`}>
@@ -223,10 +266,11 @@ export default function DayTimelineScreen() {
               ))}
 
               {/* Step cards */}
-              {allSteps.map(step => (
+              {clusteredSteps.map(({ step, layout }) => (
                 <StepCard
                   key={`${step.planId}-${step.id}`}
                   step={step}
+                  layout={layout}
                   onToggle={() => handleToggle(step.planId, step.id)}
                 />
               ))}
@@ -327,42 +371,40 @@ const styles = StyleSheet.create({
 
   card: {
     position: 'absolute',
-    left: spacing.sm,
-    right: 0,
-    borderLeftWidth: 4,
-    borderRadius: radii.card,
+    borderRadius: 5,
     overflow: 'hidden',
   },
   cardInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     flex: 1,
   },
   cardChip: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cardName: {
     fontSize: typography.body,
     fontWeight: '800',
-    color: colors.text,
+    color: '#FFFFFF',
   },
   cardTime: {
     marginTop: 1,
     fontSize: typography.caption,
-    color: colors.textMuted,
+    color: 'rgba(255, 255, 255, 0.85)',
     fontWeight: '600',
   },
   cardDesc: {
     marginTop: 3,
     fontSize: typography.caption,
-    color: colors.textMuted,
+    color: 'rgba(255, 255, 255, 0.85)',
     lineHeight: 16,
   },
   tick: {
@@ -370,8 +412,12 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: colors.textTertiary,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tickDone: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
 });

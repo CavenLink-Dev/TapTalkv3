@@ -48,6 +48,16 @@ const ACTIVITY_LIST: ActivityCard[] = [
     description: 'Count the dots on screen then choose the right number. No pressure, no time limit.',
     tag: 'Numbers',
   },
+  {
+    id: 'shape-match',
+    route: '/activities/shape-match' as Href,
+    icon: 'shapes-outline',
+    iconColor: '#34C759',
+    iconBg: '#E8FAE8',
+    name: 'Shape Match',
+    description: 'Match each shape to its matching outline. Builds visual recognition and tap control.',
+    tag: 'Visual',
+  },
 ];
 
 export default function ActivitiesScreen() {
