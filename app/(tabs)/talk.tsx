@@ -1038,9 +1038,9 @@ const styles = StyleSheet.create({
   },
   folderLabel: {
     position: 'absolute',
-    left: 5,
-    right: 5,
-    top: 8,
+    left: 16,
+    right: 16,
+    top: 16,
     color: '#202020',
     fontSize: 20,
     lineHeight: 24,
@@ -1069,9 +1069,9 @@ const styles = StyleSheet.create({
   // Typography mirrors `folderLabel` so words and folders read as one family.
   wordLabel: {
     position: 'absolute',
-    left: 5,
-    right: 5,
-    top: 8,
+    left: 16,
+    right: 16,
+    top: 16,
     color: '#202020',
     fontSize: 20,
     lineHeight: 24,
