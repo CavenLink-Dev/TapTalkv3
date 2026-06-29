@@ -28,8 +28,6 @@ export interface AppState {
     speechRate: number;
     /** Expo Speech pitch. Range 0.5 to 2.0. Default 1.0. */
     speechPitch: number;
-    /** Whether haptic feedback fires on taps. Default true. */
-    hapticsEnabled: boolean;
   };
   user: {
     legalName: string;
@@ -159,7 +157,6 @@ export type Action =
   | { type: 'APPEND_WORD'; payload: AACWord }
   | { type: 'CLEAR_WORDS' }
   | { type: 'REMOVE_LAST_WORD' }
-  | { type: 'REMOVE_WORD_AT_INDEX'; payload: number }
   | { type: 'SET_BOARD'; payload: string }
   | { type: 'SET_KEYBOARD_TEXT'; payload: string }
   | { type: 'ADD_TASK'; payload: Task }

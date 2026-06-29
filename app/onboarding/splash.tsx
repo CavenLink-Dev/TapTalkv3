@@ -98,15 +98,10 @@ export default function Splash() {
 
   const loaderOpacity = useSharedValue(0);
 
-  // Loader — three dots that bounce in sequence (left → center → right)
-  // then hold briefly before looping. Each dot has its own translateY so we
-  // can stagger the bounces with a single Reanimated cycle per dot.
-  const dot1Y = useSharedValue(0);
-  const dot2Y = useSharedValue(0);
-  const dot3Y = useSharedValue(0);
-  // Reduce-motion path uses opacity instead of translation. Shared base so
-  // all three dots breathe together.
-  const dotsOpacity = useSharedValue(1);
+  // Loader dot wave (one shared value per dot's translateY + glow)
+  const d1Y = useSharedValue(0); const d1G = useSharedValue(0.45);
+  const d2Y = useSharedValue(0); const d2G = useSharedValue(0.45);
+  const d3Y = useSharedValue(0); const d3G = useSharedValue(0.45);
 
   // Swallow
   const foregroundFade = useSharedValue(1);          // multiplied into logo/motto/loader
@@ -140,14 +135,13 @@ export default function Splash() {
       mottoOpacity.value  = withDelay(150, withTiming(1, { duration: T.rm.fadeIn }));
       loaderOpacity.value = withDelay(280, withTiming(1, { duration: T.rm.fadeIn }));
 
-      // Reduce-motion: hold all three dots static, just pulse the opacity
-      // together so there's a calm sign of life without translation.
-      dotsOpacity.value = withDelay(
+      // Single calm pulse on the middle dot.
+      d2G.value = withDelay(
         T.rm.fadeIn,
         withRepeat(
           withSequence(
-            withTiming(1,   { duration: 900, easing: Easing.inOut(Easing.quad) }),
-            withTiming(0.5, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+            withTiming(1,    { duration: 800, easing: Easing.inOut(Easing.quad) }),
+            withTiming(0.45, { duration: 800, easing: Easing.inOut(Easing.quad) }),
           ),
           -1,
           true,
@@ -198,32 +192,35 @@ export default function Splash() {
       withTiming(1, { duration: T.loaderIn.duration, easing: easeOut }),
     );
 
-    // 3-dot bounce loader. Each dot follows the same total 1100ms cycle
-    // but the up-down portion is offset by 100ms per dot, giving a clean
-    // left → center → right wave. After all three settle the loader holds
-    // for the remainder of the cycle so the eye gets a breath before the
-    // next wave starts.
-    const BOUNCE_UP = 300;
-    const BOUNCE_DOWN = 300;
-    const STAGGER = 100;
-    const HOLD = 500;
-    const BOUNCE_HEIGHT = -8;
-    const easeBounceOut = Easing.out(Easing.quad);
-    const easeBounceIn  = Easing.in(Easing.quad);
-    const makeDotCycle = (offsetMs: number) =>
-      withRepeat(
-        withSequence(
-          withTiming(0, { duration: offsetMs }),
-          withTiming(BOUNCE_HEIGHT, { duration: BOUNCE_UP, easing: easeBounceOut }),
-          withTiming(0,             { duration: BOUNCE_DOWN, easing: easeBounceIn }),
-          withTiming(0, { duration: HOLD + (STAGGER * 2 - offsetMs) }),
+    // Loader dot wave — calm sine motion + glow. Stops naturally when
+    // foregroundFade hits 0 in the swallow phase (they share the multiplier).
+    const startWave = (yVal: ReturnType<typeof useSharedValue<number>>, gVal: ReturnType<typeof useSharedValue<number>>, offset: number) => {
+      yVal.value = withDelay(
+        T.loaderIn.start + offset,
+        withRepeat(
+          withSequence(
+            withTiming(-6, { duration: 700, easing: easeSine }),
+            withTiming( 0, { duration: 700, easing: easeSine }),
+          ),
+          -1,
+          false,
         ),
-        -1,
-        false,
       );
-    dot1Y.value = withDelay(T.loaderIn.start, makeDotCycle(0));
-    dot2Y.value = withDelay(T.loaderIn.start, makeDotCycle(STAGGER));
-    dot3Y.value = withDelay(T.loaderIn.start, makeDotCycle(STAGGER * 2));
+      gVal.value = withDelay(
+        T.loaderIn.start + offset,
+        withRepeat(
+          withSequence(
+            withTiming(1,    { duration: 700, easing: easeSine }),
+            withTiming(0.45, { duration: 700, easing: easeSine }),
+          ),
+          -1,
+          false,
+        ),
+      );
+    };
+    startWave(d1Y, d1G,   0);
+    startWave(d2Y, d2G, 220);
+    startWave(d3Y, d3G, 440);
 
     // BREATHE — single gentle breath cycle on the logo.
     logoScale.value = withDelay(
@@ -294,20 +291,17 @@ export default function Splash() {
     opacity: loaderOpacity.value * foregroundFade.value,
   }));
 
-  // Per-dot translateY drives the bounce. Reduce-motion path leaves Y at 0
-  // and modulates opacity through `dotsOpacity` instead so the animation
-  // still feels alive without movement.
-  const dot1Style = useAnimatedStyle(() => ({
-    transform: [{ translateY: dot1Y.value }],
-    opacity: dotsOpacity.value,
+  const dotA = useAnimatedStyle(() => ({
+    transform: [{ translateY: d1Y.value }],
+    opacity: d1G.value,
   }));
-  const dot2Style = useAnimatedStyle(() => ({
-    transform: [{ translateY: dot2Y.value }],
-    opacity: dotsOpacity.value,
+  const dotB = useAnimatedStyle(() => ({
+    transform: [{ translateY: d2Y.value }],
+    opacity: d2G.value,
   }));
-  const dot3Style = useAnimatedStyle(() => ({
-    transform: [{ translateY: dot3Y.value }],
-    opacity: dotsOpacity.value,
+  const dotC = useAnimatedStyle(() => ({
+    transform: [{ translateY: d3Y.value }],
+    opacity: d3G.value,
   }));
 
   const revealStyle = useAnimatedStyle(() => ({
@@ -322,27 +316,26 @@ export default function Splash() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Logo + motto sit together as a centered stack. The motto reads
-          directly beneath the logo so the brand mark anchors the page and
-          the supporting line breathes with it. */}
+      {/* Logo — top-middle */}
       <Animated.View style={[styles.logoBlock, logoStyle]}>
         <Image
-          source={require('../../assets/taptalk_logo.png')}
+          source={require('../../asset/taptalk_logo.png')}
           style={styles.logo}
           resizeMode="contain"
           accessibilityLabel="TapTalk"
         />
-        <Animated.Text style={[styles.motto, mottoStyle]}>
-          Tap To Talk
-        </Animated.Text>
       </Animated.View>
 
-      {/* Loader — three dots bouncing in sequence, pinned to the bottom of
-          the safe area. Stops naturally when foregroundFade hits 0. */}
-      <Animated.View style={[styles.loaderWrap, loaderStyle]} pointerEvents="none">
-        <Animated.View style={[styles.dot, dot1Style]} />
-        <Animated.View style={[styles.dot, dot2Style]} />
-        <Animated.View style={[styles.dot, dot3Style]} />
+      {/* Motto — near the bottom */}
+      <Animated.Text style={[styles.motto, mottoStyle]}>
+        Everyone deserves a voice.
+      </Animated.Text>
+
+      {/* Loader — bottom */}
+      <Animated.View style={[styles.loaderRow, loaderStyle]} pointerEvents="none">
+        <Animated.View style={[styles.dot, dotA]} />
+        <Animated.View style={[styles.dot, styles.dotSpacer, dotB]} />
+        <Animated.View style={[styles.dot, dotC]} />
       </Animated.View>
 
       {/* SWALLOW disc + brand wordmark — sit above everything else */}
@@ -356,60 +349,54 @@ export default function Splash() {
   );
 }
 
-// Disc seed sits at the logo's centered position so the inflate reads as a
-// "pull from the brand mark" rather than a generic centered radial. The
-// logo is vertically centered in `logoBlock` (50% of screen height), so
-// the seed matches its origin exactly.
-const REVEAL_SEED_Y = SCREEN_H * 0.5;
+// Disc seed sits roughly under the logo so the inflate reads as a "pull from
+// the brand mark" rather than a generic centered radial.
+const REVEAL_SEED_Y = SCREEN_H * 0.28;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  // Logo centered both axes — the brand mark is the anchor of the screen.
-  // Motto stacks directly beneath via flex order so it reads as one
-  // composed mark rather than a disconnected line at the bottom.
   logoBlock: {
     position: 'absolute',
-    top: 0,
-    bottom: 0,
+    top: '22%',
     left: 0,
     right: 0,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   logo: {
-    width: 240,
-    height: 88,
+    width: 220,
+    height: 80,
   },
   motto: {
-    marginTop: 18,
+    position: 'absolute',
+    bottom: '24%',
+    left: 0,
+    right: 0,
     textAlign: 'center',
     fontFamily: fonts.bodyMedium,
     fontSize: typography.body,
     color: colors.textMuted,
     letterSpacing: 0.1,
   },
-  // Loader sits at the bottom safe area, holding the three-dot bounce.
-  loaderWrap: {
+  loaderRow: {
     position: 'absolute',
-    bottom: '12%',
+    bottom: 56,
     left: 0,
     right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    height: 16,
   },
-  // 8 × 8 brand-blue dots — small enough to read as a loader, large enough
-  // to feel intentional. The bounce uses translateY in `dotNStyle`.
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: colors.primary,
+  },
+  dotSpacer: {
+    marginHorizontal: 12,
   },
   // Reveal disc — seeded under the logo. Scales 0 → 1 to swallow the screen.
   reveal: {

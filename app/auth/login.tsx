@@ -18,7 +18,6 @@ import { SignInWithAppleButton } from '../../src/components/native/SignInWithApp
 import { DevSkip } from '../../src/components/DevSkip';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { authFormStyles } from '../../src/styles/authFormStyles';
-import { hapticSelection } from '../../src/utils/haptics';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
 import { colors, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
@@ -77,7 +76,7 @@ export default function LoginScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Go back"
-              onPress={() => { hapticSelection(); router.back(); }}
+              onPress={() => router.back()}
               hitSlop={10}
               style={styles.backBtn}
             >
@@ -97,18 +96,6 @@ export default function LoginScreen() {
           </Text>
           <Text style={styles.subtitle}>Sign in to continue communicating.</Text>
 
-          {/* Apple Sign-In leads the form so users with limited typing
-              speed don't have to scroll past email / password to find it. */}
-          <View style={styles.appleLead}>
-            <SignInWithAppleButton onPress={signInWithApple} loading={submitting} />
-          </View>
-
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>Or use email</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
           <View style={styles.form}>
             <View>
               <Text style={authFormStyles.label}>Email</Text>
@@ -127,7 +114,7 @@ export default function LoginScreen() {
               <Text style={authFormStyles.label}>Password</Text>
               <TextField
                 accessibilityLabel="Password"
-                placeholder="At least 6 characters"
+                placeholder="Your password"
                 secureTextEntry
                 autoComplete="password"
                 value={password}
@@ -146,7 +133,7 @@ export default function LoginScreen() {
               <Pressable
                 accessibilityRole="link"
                 accessibilityLabel="Forgot password"
-                onPress={() => { hapticSelection(); router.push(forgotRoute); }}
+                onPress={() => router.push(forgotRoute)}
                 hitSlop={8}
               >
                 <Text style={styles.link}>Forgot?</Text>
@@ -168,10 +155,18 @@ export default function LoginScreen() {
             onPress={login}
           />
 
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <SignInWithAppleButton onPress={signInWithApple} loading={submitting} />
+
           <Pressable
             accessibilityRole="link"
             accessibilityLabel="Create a new account"
-            onPress={() => { hapticSelection(); router.push(signUpRoute); }}
+            onPress={() => router.push(signUpRoute)}
             style={styles.createRow}
           >
             <Text style={styles.createText}>
@@ -241,14 +236,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
     gap: spacing.md,
   },
-  appleLead: {
-    marginTop: spacing.lg,
-  },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginVertical: spacing.lg,
+    marginVertical: spacing.xs,
   },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border, opacity: 0.5 },
   dividerText: {

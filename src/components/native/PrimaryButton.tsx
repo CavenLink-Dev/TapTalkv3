@@ -96,16 +96,19 @@ export function PrimaryButton({
     );
   }, [success, reduceMotion, successV]);
 
-  // Design rule: flat fills only. No press glow, no brand shadow — pressed
-  // state reads via fill cross-fade + a small scale dip, nothing else.
   const containerStyle = useAnimatedStyle(() => {
     const pressedFill = interpolateColor(pressed.value, [0, 1], [baseFill, palette.pressed]);
     const finalFill   = interpolateColor(successV.value, [0, 1], [pressedFill, colors.success]);
     const scale       = reduceMotion ? 1 : 1 - pressed.value * (1 - animation.scalePressLg);
+    const shadowOpacity = reduceMotion ? 0 : 0.22 * pressed.value;
     return {
       backgroundColor: finalFill,
       transform: [{ scale }],
       opacity: opacity.value,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity,
+      shadowRadius: 16,
     };
   });
 

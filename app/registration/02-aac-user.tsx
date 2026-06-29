@@ -92,7 +92,7 @@ export default function RegStep2AacUser() {
             <Text style={authFormStyles.label}>Legal first name</Text>
             <TextField
               accessibilityLabel="Legal first name"
-              placeholder="e.g. Alex"
+              placeholder="First"
               autoCapitalize="words"
               value={data.firstName}
               onChangeText={(t) => update({ firstName: t })}
@@ -103,7 +103,7 @@ export default function RegStep2AacUser() {
             <Text style={authFormStyles.label}>Legal last name</Text>
             <TextField
               accessibilityLabel="Legal last name"
-              placeholder="e.g. Smith"
+              placeholder="Last"
               autoCapitalize="words"
               value={data.lastName}
               onChangeText={(t) => update({ lastName: t })}

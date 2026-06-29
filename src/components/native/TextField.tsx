@@ -103,17 +103,20 @@ export const TextField = React.forwardRef<TextInput, TextFieldProps>(function Te
     successV.value = success ? withSpring(1, springPop) : withTiming(0, timingFocus());
   }, [success, successV, reduceMotion]);
 
-  // Design rule: filled inputs, no idle border, no focus glow. Border only
-  // animates in on focus / error / success and there is no shadow.
   const containerStyle = useAnimatedStyle(() => {
-    const baseBorder = interpolateColor(focus.value, [0, 1], ['rgba(0,0,0,0)', colors.primary]);
+    const baseBorder = interpolateColor(focus.value, [0, 1], [colors.borderBlue, colors.primary]);
     const errBorder  = interpolateColor(errorV.value,   [0, 1], [baseBorder, colors.danger]);
     const finalBorder = interpolateColor(successV.value, [0, 1], [errBorder, colors.success]);
-    const borderWidth = focus.value * 2;
+    const borderWidth = 1.5 + focus.value * 0.5;
+    const shadowOpacity = reduceMotion ? 0 : 0.16 * focus.value;
     return {
       borderColor: finalBorder,
       borderWidth,
       transform: [{ translateX: shakeX.value }],
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity,
+      shadowRadius: 14,
     };
   });
 

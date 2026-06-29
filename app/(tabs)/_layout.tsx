@@ -41,8 +41,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="tools"
         options={{
-          title: 'Tools',
-          tabBarIcon: icon('tools'),
+          title: 'Settings',
+          tabBarIcon: icon('calendar'),
         }}
       />
       <Tabs.Screen
@@ -58,11 +58,9 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    // Tighter rhythm with the 48pt icons — was 96, felt empty above/below.
-    // Bottom padding accommodates the home-indicator safe area.
-    height: 78,
-    paddingTop: 4,
-    paddingBottom: 18,
+    height: 96,
+    paddingTop: 10,
+    paddingBottom: 10,
     backgroundColor: colors.surface,
     borderTopWidth: 1.5,
     borderTopColor: colors.border,

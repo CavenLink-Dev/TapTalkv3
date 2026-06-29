@@ -29,11 +29,6 @@ export function Screen({ title, subtitle, children, scroll = true }: ScreenProps
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          // Rubber-band bounce on iOS even when content fits; matching
-          // overscroll glow on Android. Gives every screen the same feel.
-          bounces
-          alwaysBounceVertical
-          overScrollMode="always"
         >
           {content}
         </ScrollView>
