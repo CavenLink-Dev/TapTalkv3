@@ -42,6 +42,13 @@ const ICONS: Record<BottomNavIconName, IconVariants> = {
 // Smaller than the previous 60/64 so the tab bar reads closer to a standard
 // iOS tab bar without losing legibility for users with low vision.
 const ICON_SIZE = 48;
+// Activity SVG has a landscape aspect ratio (~1.26:1) so it appears shorter
+// than the other square/portrait icons at the same pixel size. Render it at
+// 56px so its constrained height (~44–47px) matches the visual weight of the
+// other icons (~44–48px). Applies equally to selected + unselected variants.
+const ICON_SIZES: Partial<Record<BottomNavIconName, number>> = {
+  activity: 56,
+};
 const TRANSITION_MS = 200;
 const IDLE_TINT = '#4B555C';
 
@@ -105,18 +112,20 @@ export function BottomNavIcon({
     ]).start();
   }, [focused, selectedOpacity, unselectedOpacity, scale]);
 
+  const iconSize = ICON_SIZES[name] ?? ICON_SIZE;
+
   if (!selectedUri || !unselectedUri) {
     // Reserve layout so the tab bar doesn't reflow on first paint.
-    return <View style={{ width: ICON_SIZE, height: ICON_SIZE }} />;
+    return <View style={{ width: iconSize, height: iconSize }} />;
   }
 
   return (
-    <Animated.View style={[styles.wrap, { transform: [{ scale }] }]}>
+    <Animated.View style={[{ width: iconSize, height: iconSize }, { transform: [{ scale }] }]}>
       <Animated.View style={[styles.layer, { opacity: unselectedOpacity }]}>
-        <SvgUri uri={unselectedUri} width={ICON_SIZE} height={ICON_SIZE} />
+        <SvgUri uri={unselectedUri} width={iconSize} height={iconSize} />
       </Animated.View>
       <Animated.View style={[styles.layer, { opacity: selectedOpacity }]}>
-        <SvgUri uri={selectedUri} width={ICON_SIZE} height={ICON_SIZE} />
+        <SvgUri uri={selectedUri} width={iconSize} height={iconSize} />
       </Animated.View>
     </Animated.View>
   );

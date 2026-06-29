@@ -25,9 +25,8 @@
  *   positions reshuffle every level so muscle-memory doesn't replace the
  *   skill being practised.
  *
- * Speech is off by default (no "Circle matched", no "Find the X"). The
- * sound toggle in the header switches whether tapping a shape speaks its
- * name — that is the only TTS the game ever does.
+ * Sound effects only — no TTS. The sound toggle gates select/confirm/correct/
+ * incorrect/level-complete audio feedback.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -52,12 +51,12 @@ import Svg, {
   Rect as SvgRect,
   Path as SvgPath,
 } from 'react-native-svg';
-import * as Speech from 'expo-speech';
 import { Card } from '../../src/components/native/Card';
 import { ActivityProgressBar } from '../../src/components/activities/ActivityProgressBar';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
+import { playSound } from '../../src/utils/sounds';
 
 // ─── Shapes ────────────────────────────────────────────────────────────────
 
@@ -573,6 +572,29 @@ function SuccessOverlay({
   );
 }
 
+// ─── Feedback messages ─────────────────────────────────────────────────────
+
+const CORRECT_MESSAGES = [
+  'Great work!',
+  'Great job!',
+  'Nice one!',
+  'Well done!',
+  'Awesome!',
+  'Perfect!',
+  'Brilliant!',
+  'Keep it up!',
+  'You got it!',
+  'Spot on!',
+  'Fantastic!',
+  'Amazing!',
+  'Superb!',
+  'Nailed it!',
+];
+
+function randomCorrectMessage(): string {
+  return CORRECT_MESSAGES[Math.floor(Math.random() * CORRECT_MESSAGES.length)]!;
+}
+
 // ─── Screen ────────────────────────────────────────────────────────────────
 
 type Phase = 'select' | 'play' | 'won';
@@ -606,11 +628,14 @@ export default function ShapeMatchScreen() {
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [hintedShapeId, setHintedShapeId] = useState<string | null>(null);
   const [tryAgainVisible, setTryAgainVisible] = useState(false);
-  const [soundOn, setSoundOn] = useState(false);
+  const [correctToastVisible, setCorrectToastVisible] = useState(false);
+  const [correctMessage, setCorrectMessage] = useState('');
+  const [soundOn, setSoundOn] = useState(true);
   const [levelPillFlash, setLevelPillFlash] = useState(false);
 
-  const tryAgainFade = useRef(new Animated.Value(0)).current;
-  const levelPillScale = useRef(new Animated.Value(1)).current;
+  const tryAgainFade    = useRef(new Animated.Value(0)).current;
+  const correctToastFade = useRef(new Animated.Value(0)).current;
+  const levelPillScale  = useRef(new Animated.Value(1)).current;
   const slotRects = useRef<Map<ShapeKind, Rect>>(new Map());
 
   const count = layout.shapes.length;
@@ -625,8 +650,25 @@ export default function ShapeMatchScreen() {
   const allMatched = placed.size === count;
 
   // Auto-advance after the user matches every shape in a level.
+  // Shows a randomised green "correct" toast first, then advances
+  // after a longer delay so the user has time to read it.
   useEffect(() => {
     if (phase !== 'play' || !allMatched) return;
+
+    // Level complete sound.
+    playSound('level_complete', soundOn);
+
+    // Show correct toast immediately.
+    setCorrectMessage(randomCorrectMessage());
+    setCorrectToastVisible(true);
+    correctToastFade.setValue(0);
+    Animated.sequence([
+      Animated.timing(correctToastFade, { toValue: 1, duration: 160, useNativeDriver: true }),
+      Animated.delay(800),
+      Animated.timing(correctToastFade, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => setCorrectToastVisible(false));
+
+    // Advance the level after the toast has had time to be read.
     const t = setTimeout(() => {
       if (level >= totalLevels) {
         setPhase('won');
@@ -644,9 +686,10 @@ export default function ShapeMatchScreen() {
       setSelectedShapeId(null);
       setHintedShapeId(null);
       slotRects.current.clear();
-    }, 650);
+    }, 1300);
     return () => clearTimeout(t);
-  }, [allMatched, phase, level, totalLevels, difficulty, levelPillScale]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allMatched, phase]);
 
   // Try Again toast.
   const showTryAgain = useCallback(() => {
@@ -665,6 +708,7 @@ export default function ShapeMatchScreen() {
       if (!shape || placed.has(shape.id)) return;
       if (shape.kind === targetKind) {
         hapticSelection();
+        playSound('correct', soundOn);
         setPlaced(prev => {
           const next = new Set(prev);
           next.add(shape.id);
@@ -673,6 +717,7 @@ export default function ShapeMatchScreen() {
         setSelectedShapeId(null);
         setHintedShapeId(null);
       } else {
+        playSound('incorrect', soundOn);
         showTryAgain();
         setSelectedShapeId(null);
       }
@@ -685,13 +730,8 @@ export default function ShapeMatchScreen() {
       hapticSelection();
       const shape = layout.shapes.find(s => s.id === shapeId);
       if (!shape || placed.has(shapeId)) return;
+      playSound('select_selection', soundOn);
       setSelectedShapeId(shapeId);
-      // The only TTS in the game: speak the shape name when its tile is
-      // tapped — only when the user has the sound switch on.
-      if (soundOn) {
-        Speech.stop();
-        Speech.speak(shape.label, { rate: 0.95 });
-      }
     },
     [layout.shapes, placed, soundOn],
   );
@@ -699,9 +739,10 @@ export default function ShapeMatchScreen() {
   const onSlotTap = useCallback(
     (kind: ShapeKind) => {
       if (!selectedShapeId) return;
+      playSound('confirm_selection', soundOn);
       attemptMatch(selectedShapeId, kind);
     },
-    [selectedShapeId, attemptMatch],
+    [selectedShapeId, attemptMatch, soundOn],
   );
 
   const onShapeDragRelease = useCallback(
@@ -713,13 +754,14 @@ export default function ShapeMatchScreen() {
           dropY >= rect.y &&
           dropY <= rect.y + rect.h
         ) {
+          playSound('confirm_selection', soundOn);
           attemptMatch(shapeId, kind);
           return;
         }
       }
       // Outside any slot — the shape just springs home silently.
     },
-    [attemptMatch],
+    [attemptMatch, soundOn],
   );
 
   // ── Controls ─────────────────────────────────────────────────────────────
@@ -993,7 +1035,7 @@ export default function ShapeMatchScreen() {
             </Pressable>
           </View>
 
-          {/* Try-again toast */}
+          {/* Try-again toast — wrong placement, blue (no red). */}
           {tryAgainVisible ? (
             <Animated.View
               style={[
@@ -1002,8 +1044,22 @@ export default function ShapeMatchScreen() {
               ]}
               pointerEvents="none"
             >
-              <Ionicons name="refresh-circle-outline" size={20} color="#A65900" />
+              <Ionicons name="refresh-circle-outline" size={20} color={colors.primary} />
               <Text style={styles.tryAgainText}>Try Again</Text>
+            </Animated.View>
+          ) : null}
+
+          {/* Correct toast — level complete, green with randomised message. */}
+          {correctToastVisible ? (
+            <Animated.View
+              style={[
+                styles.correctToast,
+                { bottom: insets.bottom + 90, opacity: correctToastFade },
+              ]}
+              pointerEvents="none"
+            >
+              <Ionicons name="checkmark-circle-outline" size={20} color="#1A7A3A" />
+              <Text style={styles.correctToastText}>{correctMessage}</Text>
             </Animated.View>
           ) : null}
         </View>
@@ -1182,13 +1238,34 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    backgroundColor: '#FFF4E0',
+    // Blue — no red, no amber (rule 30: calm, not punishing).
+    backgroundColor: '#E6F4FD',
     borderRadius: radii.pill,
   },
   tryAgainText: {
     fontSize: typography.body,
     fontWeight: '800',
-    color: '#A65900',
+    color: colors.primary,
+  },
+
+  // Green toast for level completion.
+  correctToast: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: '#D6F0DD',
+    borderRadius: radii.pill,
+  },
+  correctToastText: {
+    fontSize: typography.body,
+    fontWeight: '800',
+    color: '#1A7A3A',
   },
 
   // ── Overlays ─────────────────────────────────────────────────────────────

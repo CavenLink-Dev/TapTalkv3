@@ -12,6 +12,7 @@ import { Href, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { hapticSelection } from '../../src/utils/haptics';
 
 // Preserved from the previous "tools" tab so the existing voice/display
 // sub-routes remain reachable now that the bottom tab is the Daily Planner.
@@ -107,7 +108,7 @@ function SettingItem({ row, onPress }: { row: SettingRow; onPress?: () => void }
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={row.label}
-      onPress={onPress}
+      onPress={() => { hapticSelection(); onPress?.(); }}
       style={({ pressed }) => [styles.settingRow, pressed && styles.settingRowPressed]}
     >
       <View style={[styles.settingIcon, { backgroundColor: row.iconBg }]}>

@@ -4,6 +4,8 @@
 
 These rules were locked with the user during the Shape Match build. They exist because the audience (users with autism, speech impairment, motor differences, cognitive load) reacts badly to anything that feels random, infinite, or judgmental. Every rule here is a guard against one of those failure modes.
 
+**Shape Match is the reference shell for every Activity game.** Do not copy the Shape Match gameplay unless the game is actually shape matching. Do copy its non-game structure: start overlay, Easy / Medium / Hard rows, bright page, shared progress bar, header, sound toggle, instruction placement, footer buttons, completion overlay, Reduce Motion handling, and calm feedback rules.
+
 ---
 
 ## 1. Start overlay — what it shows, what it doesn't
@@ -12,10 +14,11 @@ When the user taps an activity card, **never open the game immediately**. Always
 
 1. **Title** — the activity name. Centered, heading weight.
 2. **Subtitle** — one short sentence describing what the user will do.
-3. **DIFFICULTY section** — small uppercase eyebrow, then rows for each level.
-   - Rows show **just the difficulty name** (`Easy`, `Medium`, `Hard`). Do **not** include subtitles like "4 shapes · 15 levels". Simple is the rule.
+3. **DIFFICULTY section** — small uppercase eyebrow, then exactly these rows when the game supports all three: `Easy`, `Medium`, `Hard`.
+   - Rows show **just the difficulty name**. Do **not** include subtitles like "4 shapes · 15 levels". Simple is the rule.
    - Use radio rows (circle + label). Active row gets a soft tinted background.
    - All offered levels must actually be playable. Don't ship "Coming soon" rows in a difficulty list.
+   - If a future game truly cannot support all three difficulties on day one, show only the playable rows. Never show disabled difficulty rows.
 4. **Cancel + Start Game** buttons in a single row at the bottom.
 
 ### Things to NEVER include in a start overlay
@@ -107,6 +110,29 @@ The instruction line sits directly below the level pill/pill. It must be:
 - ❌ **Never speak "wrong" / "no" / "try again" / "incorrect"** — punishing.
 - ❌ **Never speak instructions** like "Find the Circle." or "Try the Square outline." — the game's visual structure is the instruction; speaking it implies the user is failing to follow along.
 
+### 3.1 Activity sound effects — canonical MP3 cues
+
+Every activity may use the same short MP3 cue categories. Keep them subtle, low-volume, and non-judgmental. These cues are sound effects, not spoken praise or spoken correction.
+
+| Cue | When it plays | Rule |
+|-----|---------------|------|
+| `select_selection` | User selects/taps a game item before answering, e.g. tapping a Shape Match shape. | Light tap/selection feedback. Safe to use often. |
+| `confirm_selection` | User commits an answer/target, e.g. placing the selected shape into an outline or choosing a card/answer. | Confirms intent only; does not mean correct. |
+| `correct` | The committed answer is correct. | Short, calm success sound. No voice saying "correct". |
+| `incorrect` | The committed answer is incorrect. | Soft, non-punishing cue. Pair with gentle return / Try Again toast. No harsh buzz. |
+| `level_complete` | All required answers for the level are complete. | Plays once before level advances or success overlay opens. |
+| `denied` | Extremely rare. Only when the user is blocked from an action that truly cannot happen. | Avoid whenever possible. Never make the user feel rejected or punished. Prefer disabled UI, clear state, or no-op over this sound. |
+
+Interaction sequence example for Shape Match:
+
+1. User taps a shape → `select_selection`.
+2. User picks/places the answer target → `confirm_selection`.
+3. If correct → `correct`.
+4. If incorrect → `incorrect` + gentle return + Try Again toast.
+5. When the whole level is complete → `level_complete`.
+
+Do not stack sounds on top of each other. If two cues would overlap, play the more specific outcome cue (`correct`, `incorrect`, or `level_complete`) after the commit cue with a tiny delay, or skip the less important cue.
+
 ---
 
 ## 4. Wrong answer behaviour
@@ -115,9 +141,10 @@ When the user places the wrong shape / picks the wrong card / answers wrong:
 
 1. **Gentle return.** Animate the dragged element back to its origin with `Animated.spring` (recommended params: `friction: 8, tension: 110`).
 2. **Soft amber toast.** Show a small chip near the bottom: amber background `#FFF4E0`, amber text `#A65900`, label `Try Again` (caps, friendly). Fade in 160 ms, hold 900 ms, fade out 220 ms. Auto-dismiss — never blocks the user.
-3. ❌ **No `Alert.alert`** for wrong answers. Modal alerts read as scary punishment.
-4. ❌ **No "You Failed" / "Game Over" / "Wrong!" copy**. Ever.
-5. ❌ **No score penalty, no shake-cam, no red flash.**
+3. **Sound cue:** play `incorrect` only if activity sound effects are enabled. Keep it soft and non-punishing.
+4. ❌ **No `Alert.alert`** for wrong answers. Modal alerts read as scary punishment.
+5. ❌ **No "You Failed" / "Game Over" / "Wrong!" copy**. Ever.
+6. ❌ **No score penalty, no shake-cam, no red flash.**
 
 The point: getting it wrong is part of learning. The interaction should make that obvious.
 
@@ -127,9 +154,10 @@ The point: getting it wrong is part of learning. The interaction should make tha
 
 1. Lock the placement (the shape / card stays put).
 2. Light success haptic via `expo-haptics`.
-3. Fade-in the filled state on the slot over ~240 ms (Reduce Motion: 120 ms).
-4. No celebratory audio. No "correct!" voice. No confetti per-shape (save confetti for the end-of-difficulty victory).
-5. When ALL placements are correct → **auto-advance**. Do not require a tap.
+3. Play `correct` only if activity sound effects are enabled.
+4. Fade-in the filled state on the slot over ~240 ms (Reduce Motion: 120 ms).
+5. No celebratory voice. No "correct!" voice. No confetti per-shape (save confetti for the end-of-difficulty victory).
+6. When ALL placements are correct → **auto-advance**. Do not require a tap.
 
 ---
 
@@ -137,7 +165,7 @@ The point: getting it wrong is part of learning. The interaction should make tha
 
 - Every difficulty has a fixed total number of levels (e.g. Easy 15, Medium 25, Hard 30). Show this total in the level pill.
 - Each level **re-shuffles** position (and any other randomisable state) so the user can't memorise positions.
-- On completion of a level: short 600–700 ms delay, level pill flashes green, layout swaps to the next level.
+- On completion of a level: play `level_complete` if activity sound effects are enabled, short 600–700 ms delay, level pill/progress indicator flashes green, layout swaps to the next level.
 - Final level completed → success overlay (see below).
 - Forward/Back navigation always starts the destination level **from the beginning**. Do not preserve placed state across the jump.
 
@@ -212,7 +240,8 @@ app/activities/<game-id>.tsx        ← single-file game route
   ├ Difficulty type
   ├ Shape/Card/Item type
   ├ Level layout generator
-  ├ Render: header, level pill, instruction, body, footer
+  ├ Sound cue map (`select_selection`, `confirm_selection`, `correct`, `incorrect`, `level_complete`, `denied`)
+  ├ Render: header, progress bar / level indicator, instruction, body, footer
   ├ StartOverlay component (Modal)
   ├ SuccessOverlay component (Modal)
   └ All styles inline in StyleSheet.create

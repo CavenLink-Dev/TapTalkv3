@@ -98,9 +98,15 @@ export default function Splash() {
 
   const loaderOpacity = useSharedValue(0);
 
-  // Loader — snake-style rotating arc with a soft halo background.
-  const spin = useSharedValue(0);
-  const haloPulse = useSharedValue(0.6);
+  // Loader — three dots that bounce in sequence (left → center → right)
+  // then hold briefly before looping. Each dot has its own translateY so we
+  // can stagger the bounces with a single Reanimated cycle per dot.
+  const dot1Y = useSharedValue(0);
+  const dot2Y = useSharedValue(0);
+  const dot3Y = useSharedValue(0);
+  // Reduce-motion path uses opacity instead of translation. Shared base so
+  // all three dots breathe together.
+  const dotsOpacity = useSharedValue(1);
 
   // Swallow
   const foregroundFade = useSharedValue(1);          // multiplied into logo/motto/loader
@@ -134,9 +140,9 @@ export default function Splash() {
       mottoOpacity.value  = withDelay(150, withTiming(1, { duration: T.rm.fadeIn }));
       loaderOpacity.value = withDelay(280, withTiming(1, { duration: T.rm.fadeIn }));
 
-      // Reduce-motion: hold the spinner static, just pulse the halo opacity
-      // so there's a calm sign of life without rotation.
-      haloPulse.value = withDelay(
+      // Reduce-motion: hold all three dots static, just pulse the opacity
+      // together so there's a calm sign of life without translation.
+      dotsOpacity.value = withDelay(
         T.rm.fadeIn,
         withRepeat(
           withSequence(
@@ -192,27 +198,32 @@ export default function Splash() {
       withTiming(1, { duration: T.loaderIn.duration, easing: easeOut }),
     );
 
-    // Spinner — continuous rotation (snake vibe). Stops naturally when
-    // foregroundFade hits 0 in the swallow phase (they share the multiplier).
-    spin.value = withDelay(
-      T.loaderIn.start,
-      withRepeat(
-        withTiming(360, { duration: 1200, easing: Easing.linear }),
-        -1,
-        false,
-      ),
-    );
-    haloPulse.value = withDelay(
-      T.loaderIn.start,
+    // 3-dot bounce loader. Each dot follows the same total 1100ms cycle
+    // but the up-down portion is offset by 100ms per dot, giving a clean
+    // left → center → right wave. After all three settle the loader holds
+    // for the remainder of the cycle so the eye gets a breath before the
+    // next wave starts.
+    const BOUNCE_UP = 300;
+    const BOUNCE_DOWN = 300;
+    const STAGGER = 100;
+    const HOLD = 500;
+    const BOUNCE_HEIGHT = -8;
+    const easeBounceOut = Easing.out(Easing.quad);
+    const easeBounceIn  = Easing.in(Easing.quad);
+    const makeDotCycle = (offsetMs: number) =>
       withRepeat(
         withSequence(
-          withTiming(1,   { duration: 900, easing: easeSine }),
-          withTiming(0.6, { duration: 900, easing: easeSine }),
+          withTiming(0, { duration: offsetMs }),
+          withTiming(BOUNCE_HEIGHT, { duration: BOUNCE_UP, easing: easeBounceOut }),
+          withTiming(0,             { duration: BOUNCE_DOWN, easing: easeBounceIn }),
+          withTiming(0, { duration: HOLD + (STAGGER * 2 - offsetMs) }),
         ),
         -1,
-        true,
-      ),
-    );
+        false,
+      );
+    dot1Y.value = withDelay(T.loaderIn.start, makeDotCycle(0));
+    dot2Y.value = withDelay(T.loaderIn.start, makeDotCycle(STAGGER));
+    dot3Y.value = withDelay(T.loaderIn.start, makeDotCycle(STAGGER * 2));
 
     // BREATHE — single gentle breath cycle on the logo.
     logoScale.value = withDelay(
@@ -283,8 +294,20 @@ export default function Splash() {
     opacity: loaderOpacity.value * foregroundFade.value,
   }));
 
-  const spinnerStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${spin.value}deg` }],
+  // Per-dot translateY drives the bounce. Reduce-motion path leaves Y at 0
+  // and modulates opacity through `dotsOpacity` instead so the animation
+  // still feels alive without movement.
+  const dot1Style = useAnimatedStyle(() => ({
+    transform: [{ translateY: dot1Y.value }],
+    opacity: dotsOpacity.value,
+  }));
+  const dot2Style = useAnimatedStyle(() => ({
+    transform: [{ translateY: dot2Y.value }],
+    opacity: dotsOpacity.value,
+  }));
+  const dot3Style = useAnimatedStyle(() => ({
+    transform: [{ translateY: dot3Y.value }],
+    opacity: dotsOpacity.value,
   }));
 
   const revealStyle = useAnimatedStyle(() => ({
@@ -299,7 +322,9 @@ export default function Splash() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Logo — vertically centered so the brand mark anchors the page */}
+      {/* Logo + motto sit together as a centered stack. The motto reads
+          directly beneath the logo so the brand mark anchors the page and
+          the supporting line breathes with it. */}
       <Animated.View style={[styles.logoBlock, logoStyle]}>
         <Image
           source={require('../../asset/taptalk_logo.png')}
@@ -307,18 +332,18 @@ export default function Splash() {
           resizeMode="contain"
           accessibilityLabel="TapTalk"
         />
-      </Animated.View>
-
-      {/* Bottom stack — motto sits low, loader directly beneath. No halo
-          glow: flat rotating arc only. */}
-      <View style={styles.bottomStack}>
         <Animated.Text style={[styles.motto, mottoStyle]}>
           Tap To Talk
         </Animated.Text>
-        <Animated.View style={[styles.loaderWrap, loaderStyle]} pointerEvents="none">
-          <Animated.View style={[styles.loaderRing, spinnerStyle]} />
-        </Animated.View>
-      </View>
+      </Animated.View>
+
+      {/* Loader — three dots bouncing in sequence, pinned to the bottom of
+          the safe area. Stops naturally when foregroundFade hits 0. */}
+      <Animated.View style={[styles.loaderWrap, loaderStyle]} pointerEvents="none">
+        <Animated.View style={[styles.dot, dot1Style]} />
+        <Animated.View style={[styles.dot, dot2Style]} />
+        <Animated.View style={[styles.dot, dot3Style]} />
+      </Animated.View>
 
       {/* SWALLOW disc + brand wordmark — sit above everything else */}
       <Animated.View pointerEvents="none" style={[styles.reveal, revealStyle]} />
@@ -332,8 +357,10 @@ export default function Splash() {
 }
 
 // Disc seed sits at the logo's centered position so the inflate reads as a
-// "pull from the brand mark" rather than a generic centered radial.
-const REVEAL_SEED_Y = SCREEN_H * 0.42;
+// "pull from the brand mark" rather than a generic centered radial. The
+// logo is vertically centered in `logoBlock` (50% of screen height), so
+// the seed matches its origin exactly.
+const REVEAL_SEED_Y = SCREEN_H * 0.5;
 
 const styles = StyleSheet.create({
   container: {
@@ -341,6 +368,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   // Logo centered both axes — the brand mark is the anchor of the screen.
+  // Motto stacks directly beneath via flex order so it reads as one
+  // composed mark rather than a disconnected line at the bottom.
   logoBlock: {
     position: 'absolute',
     top: 0,
@@ -354,34 +383,33 @@ const styles = StyleSheet.create({
     width: 240,
     height: 88,
   },
-  // Bottom stack — motto + loader live together as one block, pinned to the
-  // lower portion of the page so the centered logo has room to breathe.
-  bottomStack: {
-    position: 'absolute',
-    bottom: '12%',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    gap: 20,
-  },
   motto: {
+    marginTop: 18,
     textAlign: 'center',
     fontFamily: fonts.bodyMedium,
     fontSize: typography.body,
     color: colors.textMuted,
     letterSpacing: 0.1,
   },
+  // Loader sits at the bottom safe area, holding the three-dot bounce.
   loaderWrap: {
+    position: 'absolute',
+    bottom: '12%',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+    height: 16,
   },
-  loaderRing: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 3,
-    borderColor: 'rgba(25, 154, 238, 0.2)',
-    borderTopColor: colors.primary,
+  // 8 × 8 brand-blue dots — small enough to read as a loader, large enough
+  // to feel intentional. The bounce uses translateY in `dotNStyle`.
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
   },
   // Reveal disc — seeded under the logo. Scales 0 → 1 to swallow the screen.
   reveal: {

@@ -159,6 +159,7 @@ export type Action =
   | { type: 'APPEND_WORD'; payload: AACWord }
   | { type: 'CLEAR_WORDS' }
   | { type: 'REMOVE_LAST_WORD' }
+  | { type: 'REMOVE_WORD_AT_INDEX'; payload: number }
   | { type: 'SET_BOARD'; payload: string }
   | { type: 'SET_KEYBOARD_TEXT'; payload: string }
   | { type: 'ADD_TASK'; payload: Task }

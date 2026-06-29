@@ -25,16 +25,15 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import {
   Animated,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
+import { Screen } from '../../src/components/native/Screen';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
 import {
@@ -158,7 +157,7 @@ function ToolCard({ tool, pinned, onOpen, onToggleStar }: {
       rightThreshold={32}
     >
       <Pressable
-        onPress={onOpen}
+        onPress={() => { hapticSelection(); onOpen(); }}
         accessibilityRole="button"
         accessibilityLabel={`Open ${tool.title}. ${tool.subtitle}`}
         style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
@@ -223,86 +222,53 @@ export default function ToolsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        bounces
-        alwaysBounceVertical
-        overScrollMode="always"
-      >
-        <Text style={styles.pageTitle} accessibilityRole="header">Tools</Text>
-        <Text style={styles.pageHint}>
-          Tap a tool to open it. Tap the star or swipe left on a card to pin a favourite to the top.
-        </Text>
+    <Screen title="Tools" subtitle="Tap a tool to open it. Tap the star or swipe left on a card to pin a favourite to the top.">
+      {pinned.length > 0 && (
+        <View style={styles.section}>
+          <SectionHeader icon="star" label="Favourites" />
+          <View style={styles.list}>
+            {pinned.map(tool => (
+              <ToolCard
+                key={tool.id}
+                tool={tool}
+                pinned
+                onOpen={() => open(tool)}
+                onToggleStar={() => toggleFavourite(tool.id)}
+              />
+            ))}
+          </View>
+        </View>
+      )}
 
-        {pinned.length > 0 && (
-          <View style={styles.section}>
-            <SectionHeader icon="star" label="Favourites" />
-            <View style={styles.list}>
-              {pinned.map(tool => (
-                <ToolCard
-                  key={tool.id}
-                  tool={tool}
-                  pinned
-                  onOpen={() => open(tool)}
-                  onToggleStar={() => toggleFavourite(tool.id)}
-                />
-              ))}
-            </View>
+      <View style={styles.section}>
+        <SectionHeader label="Tools" />
+        {unpinned.length === 0 ? (
+          <Card style={styles.emptyCard}>
+            <Text style={styles.emptyText}>
+              Every tool is in Favourites right now. Unpin one to see it here.
+            </Text>
+          </Card>
+        ) : (
+          <View style={styles.list}>
+            {unpinned.map(tool => (
+              <ToolCard
+                key={tool.id}
+                tool={tool}
+                pinned={isFavourite(tool.id)}
+                onOpen={() => open(tool)}
+                onToggleStar={() => toggleFavourite(tool.id)}
+              />
+            ))}
           </View>
         )}
-
-        <View style={styles.section}>
-          <SectionHeader label="Tools" />
-          {unpinned.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <Text style={styles.emptyText}>
-                Every tool is in Favourites right now. Unpin one to see it here.
-              </Text>
-            </Card>
-          ) : (
-            <View style={styles.list}>
-              {unpinned.map(tool => (
-                <ToolCard
-                  key={tool.id}
-                  tool={tool}
-                  pinned={isFavourite(tool.id)}
-                  onOpen={() => open(tool)}
-                  onToggleStar={() => toggleFavourite(tool.id)}
-                />
-              ))}
-            </View>
-          )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </Screen>
   );
 }
 
 // ─── Styles ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  scroll: {
-    padding: spacing.lg,
-    paddingBottom: 40,
-    gap: spacing.lg,
-  },
-
-  pageTitle: {
-    fontSize: typography.title,
-    fontWeight: '900',
-    color: colors.text,
-    letterSpacing: typography.trackTitle,
-  },
-  pageHint: {
-    fontSize: typography.callout,
-    color: colors.textMuted,
-    lineHeight: 21,
-    marginTop: -spacing.sm,
-  },
-
   section: {
     gap: spacing.sm,
   },

@@ -48,7 +48,7 @@ export default function VoiceSettingsScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => { hapticSelection(); router.back(); }}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           style={styles.backButton}

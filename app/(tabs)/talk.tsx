@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
+  Alert,
   Animated as RNAnimated,
   Easing as RNEasing,
   Image,
@@ -19,17 +20,20 @@ import Reanimated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, useRouter } from 'expo-router';
 import { BackspaceIcon, BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
+import { MulberrySymbol } from '../../src/components/symbols/MulberrySymbol';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
-import { colors, spacing } from '../../src/theme/tokens';
-import { hapticSelection } from '../../src/utils/haptics';
+import { animation, colors, spacing } from '../../src/theme/tokens';
+import { hapticError, hapticSelection } from '../../src/utils/haptics';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 
 type TileKind = 'folder' | 'word' | 'action';
 type BoardMode = 'home' | 'foods' | 'animals' | 'tools' | 'quick' | 'settings';
@@ -46,6 +50,17 @@ type BoardTile = {
   target?: BoardMode;
   speech?: string;
   background?: keyof typeof TILE_ASSETS;
+  // Production-quality Mulberry pictogram (asset-map ID, e.g.
+  // `mulberry_apple_1ogqpa9`). Resolves through `expo-asset` for a sharp
+  // bundled SVG.
+  mulberrySymbolId?: string;
+  // Optional curated fallback key (e.g. `good`, `bad`). Used when an
+  // asset-map ID isn't a clean match for the label.
+  mulberryName?: string;
+  // Optional word-type label (e.g. 'noun', 'verb') exposed as an
+  // accessibilityHint so VoiceOver users get the same semantic layer
+  // that colour gives sighted users (principle 23).
+  wordType?: string;
 };
 
 type WindowRect = LayoutRectangle;
@@ -63,11 +78,30 @@ const MESSAGE_HEIGHT = 104;
 const TOP_NAV_HEIGHT = 76;
 const COLLAPSED_TOGGLE_HEIGHT = 17;
 const BOARD_COLUMNS = 4;
-const TILE_GAP = 3;
-const TILE_LEFT_PADDING = 16;
+// +1pt of breathing room between every tile — picks up the request to
+// loosen the grid without dropping a column. Drives both the horizontal
+// `columnGap` and vertical `rowGap` on `boardContent`, and is factored
+// into `tileSize` so the right column still lands inside the safe-area
+// gutter.
+const TILE_GAP = 4;
+// 4pt gutter on top of the safe-area inset. Halved from 8pt because the
+// side margin was still reading as wasted space — the freed width below
+// goes straight into the tiles via the `tileSize` row maths.
+const TILE_LEFT_PADDING = 4;
 const BOARD_TOP_GAP = 18;
-const TILE_SIZE = 88;
-const FOLDER_HEIGHT_RATIO = 181 / 176;
+// Soft cap on tile size. Actual size is `min(TILE_SIZE, fit-to-row)`, so
+// on a standard 390-393pt iPhone the row maths drives the tile to ~94pt
+// (up from 91 at 8pt gutter). On wider devices (Plus / Pro Max / iPad)
+// tiles cap here — raised from 96 so the recovered gutter space actually
+// produces bigger folders/symbols instead of leftover whitespace.
+const TILE_SIZE = 104;
+// All board tiles — folders and words alike — render as perfect squares so
+// the grid reads as a single rhythm. The previous `FOLDER_HEIGHT_RATIO`
+// made folders ~3% taller than words, which showed up as "Foods looks
+// bigger than Actions" in QA. Keeping a constant lets us swap to a
+// different square multiplier if needed without re-threading the ratio
+// through every render path.
+const TILE_HEIGHT_RATIO = 1;
 const MESSAGE_CHIP_SIZE = 40;
 const MESSAGE_SLOT_COUNT = 6;
 const MESSAGE_SLOT_GAP = 5;
@@ -116,38 +150,49 @@ const SYMBOL_GREEN  = '#34C759';
 const SYMBOL_BLUE   = '#0A84FF';
 const SYMBOL_PURPLE = '#BF5AF2';
 
+// Mulberry symbols selected to match the existing tile labels. Asset-map
+// IDs (production-quality bundled SVGs) are preferred; curated `name`
+// fallbacks are used where the asset-map naming isn't a clean match.
+// Mappings live alongside the tile data so the data-to-symbol
+// relationship is obvious during review.
 const HOME_TILES: BoardTile[] = [
-  { id: 'people', label: 'People', kind: 'folder', target: 'quick', color: '#1DCDFF', background: 'folderExample' },
-  { id: 'foods', label: 'Foods', kind: 'folder', target: 'foods', color: '#1DCDFF', background: 'folderExample' },
+  // 'people' / 'places' / 'actions' don't have a clean 1:1 Mulberry asset
+  // — we keep the folder image and let the label carry the meaning until
+  // the user picks a curated symbol. 'foods' has a clean match.
+  { id: 'people', label: 'People', kind: 'folder', target: 'quick',   color: '#1DCDFF', background: 'folderExample' },
+  { id: 'foods',  label: 'Foods',  kind: 'folder', target: 'foods',   color: '#1DCDFF', background: 'folderExample', mulberrySymbolId: 'mulberry_food_atkyaz' },
   { id: 'places', label: 'Places', kind: 'folder', target: 'animals', color: '#1DCDFF', background: 'folderExample' },
-  { id: 'actions', label: 'Actions', kind: 'folder', target: 'tools', color: '#1DCDFF', background: 'folderExample' },
+  { id: 'actions',label: 'Actions',kind: 'folder', target: 'tools',   color: '#1DCDFF', background: 'folderExample' },
 ];
 
 const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
   home: HOME_TILES,
   foods: [
-    { id: 'cheese', label: 'Cheese', kind: 'word',   color: SYMBOL_YELLOW, speech: 'cheese' },
-    { id: 'apple',  label: 'Apple',  kind: 'word',   color: SYMBOL_RED,    speech: 'apple'  },
-    { id: 'bread',  label: 'Bread',  kind: 'word',   color: SYMBOL_ORANGE, speech: 'bread'  },
+    { id: 'cheese', label: 'Cheese', kind: 'word',   color: SYMBOL_YELLOW, speech: 'cheese', mulberrySymbolId: 'mulberry_cheese_qsgfck', wordType: 'noun' },
+    { id: 'apple',  label: 'Apple',  kind: 'word',   color: SYMBOL_RED,    speech: 'apple',  mulberrySymbolId: 'mulberry_apple_1ogqpa9',  wordType: 'noun' },
+    { id: 'bread',  label: 'Bread',  kind: 'word',   color: SYMBOL_ORANGE, speech: 'bread',  mulberrySymbolId: 'mulberry_bread_t6g6ux',   wordType: 'noun' },
     { id: 'back-foods', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
   ],
   animals: [
-    { id: 'cat',  label: 'Cat',  kind: 'word', color: SYMBOL_ORANGE, speech: 'cat'  },
-    { id: 'dog',  label: 'Dog',  kind: 'word', color: SYMBOL_GREEN,  speech: 'dog'  },
-    { id: 'fish', label: 'Fish', kind: 'word', color: SYMBOL_BLUE,   speech: 'fish' },
+    { id: 'cat',  label: 'Cat',  kind: 'word', color: SYMBOL_ORANGE, speech: 'cat',  mulberrySymbolId: 'mulberry_cat_1lz3nun',  wordType: 'noun' },
+    { id: 'dog',  label: 'Dog',  kind: 'word', color: SYMBOL_GREEN,  speech: 'dog',  mulberrySymbolId: 'mulberry_dog_1bfmoh1',  wordType: 'noun' },
+    { id: 'fish', label: 'Fish', kind: 'word', color: SYMBOL_BLUE,   speech: 'fish', mulberrySymbolId: 'mulberry_fish_1u95ovx', wordType: 'noun' },
     { id: 'back-animals', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
   ],
   tools: [
-    { id: 'loud-tool', label: 'Loud',   kind: 'word',   color: SYMBOL_BLUE   , speech: 'loud'  },
-    { id: 'quiet',     label: 'Quiet',  kind: 'word',   color: SYMBOL_PURPLE , speech: 'quiet' },
+    { id: 'loud-tool', label: 'Loud',   kind: 'word',   color: SYMBOL_BLUE,   speech: 'loud',  mulberrySymbolId: 'mulberry_loud_1kbu7nf',  wordType: 'adjective' },
+    { id: 'quiet',     label: 'Quiet',  kind: 'word',   color: SYMBOL_PURPLE, speech: 'quiet', mulberrySymbolId: 'mulberry_quiet_4csbx1',  wordType: 'adjective' },
     { id: 'repeat',    label: 'Repeat', kind: 'action', color: SYMBOL_GREEN },
     { id: 'clear-tool',label: 'Clear',  kind: 'action', color: SYMBOL_RED   },
   ],
   quick: [
-    { id: 'yes',  label: 'Yes',  kind: 'word', color: SYMBOL_GREEN, speech: 'yes'  },
-    { id: 'no',   label: 'No',   kind: 'word', color: SYMBOL_RED,   speech: 'no'   },
-    { id: 'help', label: 'Help', kind: 'word', color: SYMBOL_BLUE,  speech: 'help' },
-    { id: 'stop', label: 'Stop', kind: 'word', color: SYMBOL_RED,   speech: 'stop' },
+    // Curated fallbacks: the Mulberry asset map has no plain 'yes'/'no'
+    // pictograms, so we lean on the curated `good` / `bad` glyphs which
+    // ship as inline SVG strings.
+    { id: 'yes',  label: 'Yes',  kind: 'word', color: SYMBOL_GREEN, speech: 'yes',  mulberryName: 'good', wordType: 'interjection' },
+    { id: 'no',   label: 'No',   kind: 'word', color: SYMBOL_RED,   speech: 'no',   mulberryName: 'bad',  wordType: 'interjection' },
+    { id: 'help', label: 'Help', kind: 'word', color: SYMBOL_BLUE,  speech: 'help', mulberrySymbolId: 'mulberry_help_1g1ppr', wordType: 'verb' },
+    { id: 'stop', label: 'Stop', kind: 'word', color: SYMBOL_RED,   speech: 'stop', wordType: 'verb' },
   ],
   settings: [
     { id: 'hide-nav',        label: 'Hide nav', kind: 'action', color: SYMBOL_PURPLE },
@@ -173,20 +218,38 @@ function BoardNavTile({ tile, size }: { tile: BoardTile; size: number }) {
   );
 }
 
-function BoardFolderTile({ tile, size }: { tile: BoardTile; size: number }) {
-  const folderHeight = Math.round(size * FOLDER_HEIGHT_RATIO);
-
+// Mulberry pictograms render inside the `symbolMount` region at ~52% of
+// the tile size, which keeps them comfortably below the label without
+// crowding. Returns null when the tile has no symbol assigned so existing
+// tiles (e.g. People, Places) stay clean until we curate one for them.
+function TileSymbol({ tile, size }: { tile: BoardTile; size: number }) {
+  if (!tile.mulberrySymbolId && !tile.mulberryName) return null;
+  const symbolSize = Math.round(size * 0.52);
   return (
-    <View style={[styles.tileShell, { width: size, height: folderHeight }]}>
+    <View style={styles.symbolMount} pointerEvents="none">
+      <MulberrySymbol
+        symbolId={tile.mulberrySymbolId}
+        name={tile.mulberryName}
+        size={symbolSize}
+      />
+    </View>
+  );
+}
+
+function BoardFolderTile({ tile, size }: { tile: BoardTile; size: number }) {
+  // Folder tiles render at the same square footprint as word tiles so the
+  // grid reads as one rhythm regardless of `kind`.
+  return (
+    <View style={[styles.tileShell, { width: size, height: size }]}>
       <Image
         source={TILE_ASSETS[tile.background ?? 'folder']}
         resizeMode="stretch"
-        style={[styles.tileBackground, { width: size, height: folderHeight }]}
+        style={[styles.tileBackground, { width: size, height: size }]}
       />
       <Text style={styles.folderLabel} numberOfLines={1} adjustsFontSizeToFit>
         {tile.label}
       </Text>
-      <View style={styles.symbolMount} />
+      <TileSymbol tile={tile} size={size} />
     </View>
   );
 }
@@ -194,7 +257,8 @@ function BoardFolderTile({ tile, size }: { tile: BoardTile; size: number }) {
 function BoardWordTile({ tile, size }: { tile: BoardTile; size: number }) {
   // Flat coloured fill at 30% opacity — replaces the previous baked PNG
   // backgrounds so the tile reads as a clean tinted chip. The label sits
-  // above at full opacity for legibility.
+  // above at full opacity for legibility; the Mulberry symbol sits below
+  // in the `symbolMount` region.
   return (
     <View style={[styles.wordTile, { width: size, height: size }]}>
       <View
@@ -206,12 +270,20 @@ function BoardWordTile({ tile, size }: { tile: BoardTile; size: number }) {
       <Text style={styles.wordLabel} numberOfLines={1} adjustsFontSizeToFit>
         {tile.label}
       </Text>
-      <View style={styles.symbolMount} />
+      <TileSymbol tile={tile} size={size} />
     </View>
   );
 }
 
-function MessageChip({ tile, label }: { tile?: BoardTile; label: string }) {
+function MessageChip({
+  tile,
+  label,
+  onRemove,
+}: {
+  tile?: BoardTile;
+  label: string;
+  onRemove?: () => void;
+}) {
   const chipTile = tile ?? {
     id: label,
     label,
@@ -220,8 +292,8 @@ function MessageChip({ tile, label }: { tile?: BoardTile; label: string }) {
     background: 'cyan' as const,
   };
 
-  return (
-    <View style={styles.messageChip}>
+  const inner = (
+    <>
       <Image
         source={wordBackgroundForTile(chipTile)}
         resizeMode="stretch"
@@ -230,8 +302,27 @@ function MessageChip({ tile, label }: { tile?: BoardTile; label: string }) {
       <Text style={styles.messageChipLabel} numberOfLines={1} adjustsFontSizeToFit>
         {label}
       </Text>
-    </View>
+    </>
   );
+
+  // When removable (item 10): chips become Pressable so VoiceOver users and
+  // sighted users can tap to remove individual words without backspacing
+  // from the end. Principle 5 — deeper detail in-place; Principle 20 — hit
+  // target kept at the full chip size.
+  if (onRemove) {
+    return (
+      <Pressable
+        onPress={onRemove}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${label}`}
+        style={({ pressed }) => [styles.messageChip, pressed && { opacity: 0.7 }]}
+      >
+        {inner}
+      </Pressable>
+    );
+  }
+
+  return <View style={styles.messageChip}>{inner}</View>;
 }
 
 function GhostTileClone({
@@ -241,6 +332,9 @@ function GhostTileClone({
   ghost: GhostTile;
   onDone: (id: string) => void;
 }) {
+  // Item 1 — Reduce Motion: skip the arc-fly and instead fade in-place
+  // at the source tile position. Full motion keeps the arc + shrink.
+  const reduceMotion = useReduceMotion();
   const progress = useSharedValue(0);
   const fromX = ghost.from.x + ghost.from.width / 2 - ghost.size / 2;
   const fromY = ghost.from.y + ghost.from.height / 2 - ghost.size / 2;
@@ -251,27 +345,34 @@ function GhostTileClone({
     progress.value = withTiming(
       1,
       {
-        duration: 430,
-        easing: ReanimatedEasing.bezier(0.22, 1, 0.36, 1),
+        duration: reduceMotion ? animation.durReduced : 430,
+        easing: reduceMotion ? undefined : ReanimatedEasing.bezier(0.22, 1, 0.36, 1),
       },
       finished => {
         if (finished) runOnJS(onDone)(ghost.id);
       },
     );
-  }, [ghost.id, onDone, progress]);
+  }, [ghost.id, onDone, progress, reduceMotion]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: 0.55 * (1 - progress.value),
-    transform: [
-      { translateX: fromX + (toX - fromX) * progress.value },
-      { translateY: fromY + (toY - fromY) * progress.value },
-      { scale: 1 - 0.55 * progress.value },
-    ],
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    if (reduceMotion) {
+      // Fade in-place only — no translate, no shrink.
+      return { opacity: 0.55 * (1 - progress.value) };
+    }
+    return {
+      opacity: 0.55 * (1 - progress.value),
+      transform: [
+        { translateX: fromX + (toX - fromX) * progress.value },
+        { translateY: fromY + (toY - fromY) * progress.value },
+        { scale: 1 - 0.55 * progress.value },
+      ],
+    };
+  });
 
-  const cloneHeight = ghost.tile.kind === 'folder'
-    ? Math.round(ghost.size * FOLDER_HEIGHT_RATIO)
-    : ghost.size;
+  // Folder and word tiles now share the same square footprint, so the
+  // ghost clone tracks the unified size directly. `TILE_HEIGHT_RATIO`
+  // stays available in case we later differentiate kinds again.
+  const cloneHeight = Math.round(ghost.size * TILE_HEIGHT_RATIO);
 
   return (
     <Reanimated.View
@@ -281,6 +382,9 @@ function GhostTileClone({
         {
           width: ghost.size,
           height: cloneHeight,
+          // RM: position absolutely at the source tile so the fade
+          // happens where the tile actually is, not at the origin.
+          ...(reduceMotion ? { left: fromX, top: fromY } : {}),
         },
         animatedStyle,
       ]}
@@ -307,18 +411,34 @@ function BoardTileButton({
 }) {
   const pressableRef = useRef<View>(null);
   const scale = useRef(new RNAnimated.Value(1)).current;
+  // Item 2 — RM: swap spring scale for an opacity dip so the tile
+  // still acknowledges the press without moving (principle 18).
+  const tileOpacity = useRef(new RNAnimated.Value(1)).current;
+  const reduceMotion = useReduceMotion();
 
   const animateTo = useCallback((toValue: number) => {
+    if (reduceMotion) {
+      RNAnimated.timing(tileOpacity, {
+        toValue: toValue < 1 ? 0.7 : 1,
+        duration: toValue < 1 ? animation.durFast : animation.durRelease,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
     RNAnimated.spring(scale, {
       toValue,
       speed: 30,
       bounciness: 7,
       useNativeDriver: true,
     }).start();
-  }, [scale]);
+  }, [reduceMotion, scale, tileOpacity]);
 
   const isNav = tile.id === 'back' || tile.id === 'home';
-  const tileHeight = (!isNav && tile.kind === 'folder') ? Math.round(size * FOLDER_HEIGHT_RATIO) : size;
+  // Every kind — folder, word, action, nav — renders as a square so the
+  // grid is visually consistent. `size` is already clamped against the
+  // available board width up the tree, so this also satisfies the 44pt
+  // minimum touch-target rule.
+  const tileHeight = Math.round(size * TILE_HEIGHT_RATIO);
 
   const handlePress = useCallback(() => {
     onMeasuredPress?.();
@@ -327,12 +447,19 @@ function BoardTileButton({
     });
   }, [onMeasuredPress, onPress]);
 
+  // Item 7 — word-type hint for VoiceOver (principle 23: don't rely on
+  // colour alone). Folder tiles already say "Open …" in the label.
+  const a11yHint = tile.kind === 'word' && tile.wordType
+    ? `Word type: ${tile.wordType}`
+    : undefined;
+
   return (
-    <RNAnimated.View style={{ width: size, height: tileHeight, transform: [{ scale }] }}>
+    <RNAnimated.View style={{ width: size, height: tileHeight, transform: [{ scale }], opacity: tileOpacity }}>
       <Pressable
         ref={pressableRef}
         accessibilityRole="button"
         accessibilityLabel={isNav ? tile.label : tile.kind === 'folder' ? `Open ${tile.label}` : `Say ${tile.label}`}
+        accessibilityHint={a11yHint}
         onPress={handlePress}
         onPressIn={() => animateTo(0.94)}
         onPressOut={() => animateTo(1)}
@@ -360,6 +487,8 @@ function TopNavTab({
   onPress: () => void;
 }) {
   const meta = TOP_TAB_META[tab];
+  // Items 3 & 4 — RM: zero duration + no scale lift (principle 18).
+  const reduceMotion = useReduceMotion();
 
   // Single shared value drives both colour and scale so the active tab
   // brightens and lifts together. JS-driver because of the colour
@@ -369,11 +498,11 @@ function TopNavTab({
   useEffect(() => {
     RNAnimated.timing(activeAnim, {
       toValue: active ? 1 : 0,
-      duration: 180,
+      duration: reduceMotion ? 0 : 180,
       easing: RNEasing.out(RNEasing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [active, activeAnim]);
+  }, [active, activeAnim, reduceMotion]);
 
   const tintColor = activeAnim.interpolate({
     inputRange:  [0, 1],
@@ -381,7 +510,7 @@ function TopNavTab({
   });
   const scale = activeAnim.interpolate({
     inputRange:  [0, 1],
-    outputRange: [1, 1.05],
+    outputRange: [1, reduceMotion ? 1 : 1.05],
   });
 
   return (
@@ -448,16 +577,18 @@ function TopNav({
   onTabPress: (tab: TopTab) => void;
   onToggle: () => void;
 }) {
+  // Item 3 — RM: collapse/expand at duration 0 (principle 18).
+  const reduceMotion = useReduceMotion();
   const anim = useRef(new RNAnimated.Value(visible ? 1 : 0)).current;
 
   useEffect(() => {
     RNAnimated.timing(anim, {
       toValue: visible ? 1 : 0,
-      duration: 220,
+      duration: reduceMotion ? 0 : 220,
       easing: RNEasing.out(RNEasing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [anim, visible]);
+  }, [anim, reduceMotion, visible]);
 
   const slotHeight = anim.interpolate({
     inputRange: [0, 1],
@@ -516,11 +647,41 @@ export default function TalkScreen() {
   const [ghosts, setGhosts] = useState<GhostTile[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   const scrollPositions = useRef<Partial<Record<BoardMode, number>>>({});
+  const reduceMotion = useReduceMotion();
   const hapticIfEnabled = useCallback(() => {
     if (state.accessibility.hapticsEnabled !== false) hapticSelection();
   }, [state.accessibility.hapticsEnabled]);
 
-  const boardWidth = Math.min(width, FIGMA_WIDTH);
+  // Item 8 — error banner shake animation (principle 13 + 14).
+  const bannerShakeX = useSharedValue(0);
+  const bannerAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: bannerShakeX.value }],
+  }));
+  useEffect(() => {
+    if (!lastError) return;
+    // Haptic always fires; shake only when Reduce Motion is off.
+    if (state.accessibility.hapticsEnabled !== false) hapticError();
+    if (reduceMotion) return;
+    const amp = animation.shakeAmp;
+    bannerShakeX.value = withSequence(
+      withTiming(-amp,          { duration: 55 }),
+      withTiming( amp,          { duration: 65 }),
+      withTiming(-amp * 0.65,   { duration: 65 }),
+      withTiming( amp * 0.45,   { duration: 65 }),
+      withTiming(-amp * 0.22,   { duration: 65 }),
+      withTiming( 0,            { duration: 55 }),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastError]);
+
+  // Horizontal safe-area insets are 0 on most iPhones in portrait, but go
+  // non-zero on iPad split view and landscape. Subtracting them up front
+  // means `TILE_LEFT_PADDING` always reads as 16pt from the *safe* zone,
+  // not from the raw screen edge, and the right column never sits flush
+  // against the bezel.
+  const insets = useSafeAreaInsets();
+  const availableWidth = Math.max(0, width - insets.left - insets.right);
+  const boardWidth = Math.min(availableWidth, FIGMA_WIDTH);
   const tileSize = Math.min(
     TILE_SIZE,
     Math.floor((boardWidth - TILE_LEFT_PADDING * 2 - TILE_GAP * (BOARD_COLUMNS - 1)) / BOARD_COLUMNS),
@@ -662,7 +823,10 @@ export default function TalkScreen() {
     }
     if (tile.kind === 'folder' && tile.target) {
       navigateTo(tile.target);
-      announce(`${tile.label} folder`);
+      // Item 6 — richer folder announcement: include the symbol count so
+      // VoiceOver users know what awaits them inside (principle 21).
+      const symbolCount = BOARD_TILES[tile.target]?.length ?? 0;
+      announce(`${tile.label} board, ${symbolCount} symbol${symbolCount !== 1 ? 's' : ''}`);
       return;
     }
     if (tile.kind === 'action') {
@@ -687,20 +851,25 @@ export default function TalkScreen() {
     // for now. CLEAR is an in-place action on the message strip.
     if (tab === 'taptalk') {
       router.push('/board/keyboard' as Href);
+      // Item 5 — announce destination for VoiceOver (principle 21).
+      announce('TapTalk keyboard');
       return;
     }
     if (tab === 'quick') {
       router.push('/board/quick-talk' as Href);
+      announce('Quick Talk');
       return;
     }
     if (tab === 'clear') {
       clearMessage();
       setActiveTab(tab);
+      // clearMessage() already announces "Message cleared".
       return;
     }
     // EDIT — placeholder, intentionally no-op for v1.
     setActiveTab(tab);
-  }, [clearMessage, hapticIfEnabled, router]);
+    announce(`${TOP_TAB_META[tab].label} selected`);
+  }, [announce, clearMessage, hapticIfEnabled, router]);
 
   const handleSpeak = useCallback(() => {
     repeatMessage();
@@ -717,6 +886,38 @@ export default function TalkScreen() {
     setActiveTab('taptalk');
   }, [dispatch, hapticIfEnabled, hasWords]);
 
+  // Item 10 — tap individual chips to remove them (principle 25 / 26).
+  const handleRemoveWord = useCallback((index: number) => {
+    hapticIfEnabled();
+    const label = state.messageWords[index]?.label ?? 'word';
+    dispatch({ type: 'REMOVE_WORD_AT_INDEX', payload: index });
+    announce(`Removed ${label}`);
+  }, [announce, dispatch, hapticIfEnabled, state.messageWords]);
+
+  // Item 9 — long-press backspace to clear all with a confirmation
+  // alert (principles 12 + 6: destructive actions need confirmation;
+  // Alert.alert for focused tasks).
+  const handleBackspaceLongPress = useCallback(() => {
+    if (!hasWords) return;
+    hapticIfEnabled();
+    Alert.alert(
+      'Clear message?',
+      'All words will be removed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            if (state.accessibility.hapticsEnabled !== false) hapticError();
+            clearMessage();
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [clearMessage, hapticIfEnabled, hasWords, state.accessibility.hapticsEnabled]);
+
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       scrollPositions.current[activeMode] = e.nativeEvent.contentOffset.y;
@@ -727,15 +928,19 @@ export default function TalkScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View ref={rootRef} style={styles.screenRoot}>
+        {/* Item 8 — shake wrapper lets the banner animate on error
+            while the inner Pressable stays the dismiss hit target. */}
         {lastError ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss speech error"
-            onPress={clearError}
-            style={styles.errorBanner}
-          >
-            <Text style={styles.errorText}>Speech unavailable: {lastError.message}</Text>
-          </Pressable>
+          <Reanimated.View style={bannerAnimStyle}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss speech error"
+              onPress={clearError}
+              style={styles.errorBanner}
+            >
+              <Text style={styles.errorText}>Speech unavailable: {lastError.message}</Text>
+            </Pressable>
+          </Reanimated.View>
         ) : null}
 
         <View style={styles.messageArea}>
@@ -770,6 +975,7 @@ export default function TalkScreen() {
                       <MessageChip
                         label={word.label}
                         tile={chipTileLookup.get(word.label.toLowerCase())}
+                        onRemove={() => handleRemoveWord(index)}
                       />
                     ) : null}
                   </View>
@@ -780,7 +986,10 @@ export default function TalkScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={hasWords ? 'Backspace' : 'Return to home board'}
+            accessibilityHint={hasWords ? 'Hold to clear all words' : undefined}
             onPress={handleBackspace}
+            onLongPress={handleBackspaceLongPress}
+            delayLongPress={500}
             style={styles.backspace}
           >
             {/* Slightly heavier — bigger glyph reads stronger against
@@ -805,8 +1014,12 @@ export default function TalkScreen() {
           contentContainerStyle={[
             styles.boardContent,
             {
-              paddingLeft: Math.max(TILE_LEFT_PADDING, (width - boardWidth) / 2 + TILE_LEFT_PADDING),
-              paddingRight: Math.max(TILE_LEFT_PADDING, (width - boardWidth) / 2 + TILE_LEFT_PADDING),
+              // Start from the safe-zone inset, then add TILE_LEFT_PADDING
+              // (16pt) inside it. The extra `(availableWidth - boardWidth)/2`
+              // term centres the board on wider devices (iPhone Plus / Pro
+              // Max / iPad) once `availableWidth` exceeds the Figma cap.
+              paddingLeft:  insets.left  + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
+              paddingRight: insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
             },
           ]}
           showsVerticalScrollIndicator={false}
@@ -1070,12 +1283,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  // Symbol mount sits below the label and centers the Mulberry pictogram.
+  // Top offset clears the label (16 + 24 line-height + a hair of breathing
+  // room) so glyph + label never overlap on the smallest 88×88 tile.
   symbolMount: {
     position: 'absolute',
     left: 0,
     right: 0,
-    top: 38,
-    bottom: 0,
+    top: 42,
+    bottom: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   wordTile: {
     position: 'relative',

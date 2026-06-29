@@ -5,6 +5,7 @@
 
 import React, { useCallback, useRef } from 'react';
 import { Animated, GestureResponderEvent, Pressable, StyleProp, ViewStyle } from 'react-native';
+import { hapticSelection } from '../../utils/haptics';
 
 interface TabButtonProps {
   children?: React.ReactNode;
@@ -28,6 +29,7 @@ export function PressableTabButton({
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = useCallback(() => {
+    hapticSelection();
     Animated.spring(scale, {
       toValue: 0.82,
       speed: 60,

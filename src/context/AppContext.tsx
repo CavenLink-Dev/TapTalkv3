@@ -153,6 +153,8 @@ export function appReducer(state: AppState, action: Action): AppState {
       return { ...state, messageWords: [] };
     case 'REMOVE_LAST_WORD':
       return { ...state, messageWords: state.messageWords.slice(0, -1) };
+    case 'REMOVE_WORD_AT_INDEX':
+      return { ...state, messageWords: state.messageWords.filter((_, i) => i !== action.payload) };
     case 'SET_BOARD':
       return { ...state, currentBoard: action.payload };
     case 'SET_KEYBOARD_TEXT':

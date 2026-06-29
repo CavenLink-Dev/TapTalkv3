@@ -18,6 +18,7 @@ import { SignInWithAppleButton } from '../../src/components/native/SignInWithApp
 import { DevSkip } from '../../src/components/DevSkip';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { authFormStyles } from '../../src/styles/authFormStyles';
+import { hapticSelection } from '../../src/utils/haptics';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
 import { colors, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
@@ -76,7 +77,7 @@ export default function LoginScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Go back"
-              onPress={() => router.back()}
+              onPress={() => { hapticSelection(); router.back(); }}
               hitSlop={10}
               style={styles.backBtn}
             >
@@ -145,7 +146,7 @@ export default function LoginScreen() {
               <Pressable
                 accessibilityRole="link"
                 accessibilityLabel="Forgot password"
-                onPress={() => router.push(forgotRoute)}
+                onPress={() => { hapticSelection(); router.push(forgotRoute); }}
                 hitSlop={8}
               >
                 <Text style={styles.link}>Forgot?</Text>
@@ -170,7 +171,7 @@ export default function LoginScreen() {
           <Pressable
             accessibilityRole="link"
             accessibilityLabel="Create a new account"
-            onPress={() => router.push(signUpRoute)}
+            onPress={() => { hapticSelection(); router.push(signUpRoute); }}
             style={styles.createRow}
           >
             <Text style={styles.createText}>

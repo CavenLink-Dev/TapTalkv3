@@ -10,6 +10,7 @@ import { TapTalkMascot } from '../../src/components/TapTalkMascot';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { listStyles } from '../../src/styles/listStyles';
 import { verifyPin } from '../../src/utils/pin';
+import { hapticSelection } from '../../src/utils/haptics';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
 const documents = [
@@ -42,6 +43,7 @@ export default function MeScreen() {
   };
 
   const toggleLock = useCallback(() => {
+    hapticSelection();
     if (caregiverLocked && state.parent.pin) {
       setPinPromptVisible(true);
       setPinInput('');
@@ -134,7 +136,7 @@ export default function MeScreen() {
         <Pressable
           accessibilityRole="link"
           accessibilityLabel="Open symbol licences"
-          onPress={() => router.push(attributionRoute)}
+          onPress={() => { hapticSelection(); router.push(attributionRoute); }}
           style={styles.docRow}
         >
           <Ionicons name="information-circle-outline" size={20} color={colors.primary} style={styles.docIcon} />

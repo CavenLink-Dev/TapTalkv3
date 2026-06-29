@@ -26,11 +26,14 @@ import {
   Alert,
   Animated,
   Easing,
+  Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -51,7 +54,7 @@ const MINUTES  = Array.from({ length: 60 }, (_, i) => i); // 0–59
 const SECONDS  = Array.from({ length: 60 }, (_, i) => i); // 0–59
 const DELAY_MINS = Array.from({ length: 61 }, (_, i) => i); // 0–60
 
-type Face = 'digital' | 'analog';
+type Face = 'modern' | 'old-school' | 'analog';
 
 interface Duration {
   h: number;
@@ -121,18 +124,131 @@ function playChime(sound: string): void {
   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
 }
 
-// ─── Digital face ───────────────────────────────────────────────────────────
+// ─── Modern digital face ────────────────────────────────────────────────────
+// SVG canvas: 1720 × 771. Three gaps inside black screen (x=125,y=150,w=1470,h=450).
+// Colons at x=600 and x=1070 (width 50 each).
 
-function DigitalFace({ remainingSec }: { remainingSec: number }) {
+function ModernFace({ remainingSec }: { remainingSec: number }) {
+  const { width } = useWindowDimensions();
   const h = Math.floor(remainingSec / 3600);
   const m = Math.floor((remainingSec % 3600) / 60);
   const s = remainingSec % 60;
+
+  const imgH = width * (771 / 1720);
+  const fontSize = width * 0.13;
+
+  // Gap bounds (SVG px → screen %)
+  const screenY  = imgH * (150 / 771);      // screen top of the gaps
+  const gapH     = imgH * (450 / 771);      // gap height on screen
+
+  const segments = [
+    { xLeft: width * (125  / 1720), gapW: width * (475 / 1720), value: pad2(h) }, // hours
+    { xLeft: width * (650  / 1720), gapW: width * (420 / 1720), value: pad2(m) }, // minutes
+    { xLeft: width * (1120 / 1720), gapW: width * (475 / 1720), value: pad2(s) }, // seconds
+  ];
+
   return (
-    <View style={styles.digitalWrap} accessibilityLiveRegion="polite">
-      <Text style={styles.digitalText}>
-        {pad2(h)}:{pad2(m)}:{pad2(s)}
-      </Text>
-      <Text style={styles.digitalSub}>Remaining</Text>
+    <View
+      style={{ width, height: imgH, alignSelf: 'center' }}
+      accessibilityLiveRegion="polite"
+    >
+      <Image
+        source={require('../../asset/clock_variations/clock_modern_digital/clock_digital_modern.png')}
+        style={{ position: 'absolute', width, height: imgH }}
+        resizeMode="stretch"
+      />
+      {segments.map(({ xLeft, gapW, value }) => (
+        <View
+          key={xLeft}
+          style={{
+            position: 'absolute',
+            left: xLeft,
+            top: screenY,
+            width: gapW,
+            height: gapH,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text
+            style={{
+              color: '#FFFFFF',
+              fontSize,
+              fontWeight: '800',
+              fontVariant: ['tabular-nums'],
+              fontFamily: Platform.select({ ios: undefined, android: 'sans-serif-medium' }),
+            }}
+          >
+            {value}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ─── Old-school digital face ─────────────────────────────────────────────────
+// SVG canvas: 1725 × 725. Three dark boxes at y=195, h=360.
+// Hours: x=82.5, w=410 | Minutes: x=582.5, w=410 | Seconds: x=1082.5, w=410
+
+function OldSchoolFace({ remainingSec }: { remainingSec: number }) {
+  const { width } = useWindowDimensions();
+  const h = Math.floor(remainingSec / 3600);
+  const m = Math.floor((remainingSec % 3600) / 60);
+  const s = remainingSec % 60;
+
+  const imgH    = width * (725 / 1725);
+  const fontSize = width * 0.115;
+
+  const screenY = imgH * (195 / 725);
+  const gapH    = imgH * (360 / 725);
+  const gapW    = width * (410 / 1725);
+
+  const segments = [
+    { xLeft: width * (82.5  / 1725), value: pad2(h) },  // hours
+    { xLeft: width * (582.5 / 1725), value: pad2(m) },  // minutes
+    { xLeft: width * (1082.5 / 1725), value: pad2(s) }, // seconds
+  ];
+
+  return (
+    <View
+      style={{ width, height: imgH, alignSelf: 'center' }}
+      accessibilityLiveRegion="polite"
+    >
+      <Image
+        source={require('../../asset/clock_variations/clock_old_school_digital/clock_old_school.png')}
+        style={{ position: 'absolute', width, height: imgH }}
+        resizeMode="stretch"
+      />
+      {segments.map(({ xLeft, value }) => (
+        <View
+          key={xLeft}
+          style={{
+            position: 'absolute',
+            left: xLeft,
+            top: screenY,
+            width: gapW,
+            height: gapH,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text
+            style={{
+              color: '#FF8800',
+              fontSize,
+              fontWeight: '700',
+              fontVariant: ['tabular-nums'],
+              fontFamily: Platform.select({
+                ios: 'Courier New',
+                android: 'monospace',
+              }),
+            }}
+          >
+            {value}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -251,7 +367,7 @@ export default function VisualTimerScreen() {
   const [soundAtEnd, setSoundAtEnd] = useState<boolean>(false);
   const [endSound, setEndSound] = useState<string>('bell');
   const [locked, setLocked] = useState<boolean>(false);
-  const [face, setFace] = useState<Face>('digital');
+  const [face, setFace] = useState<Face>('modern');
 
   // Disclosure expansion state.
   const [soundExpanded, setSoundExpanded] = useState(false);
@@ -374,7 +490,7 @@ export default function VisualTimerScreen() {
       soundAtEnd ? 'End' : null,
     ].filter(Boolean).join(' · ');
   }, [chimeEveryMin, soundAtStart, soundAtEnd]);
-  const summaryAppearance = face === 'digital' ? 'Digital' : 'Analog';
+  const summaryAppearance = face === 'modern' ? 'Modern' : face === 'old-school' ? 'Old School' : 'Analog';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -742,8 +858,10 @@ function RunOverlay({
         {phase === 'delay' ? (
           <Text style={styles.runDelayLabel}>Starting in…</Text>
         ) : null}
-        {face === 'digital' ? (
-          <DigitalFace remainingSec={remaining} />
+        {face === 'modern' ? (
+          <ModernFace remainingSec={remaining} />
+        ) : face === 'old-school' ? (
+          <OldSchoolFace remainingSec={remaining} />
         ) : (
           <AnalogFace remainingSec={remaining} />
         )}
@@ -894,7 +1012,7 @@ function SegmentedFacePicker({
 }) {
   return (
     <View style={styles.segmented} accessibilityRole="radiogroup">
-      {(['digital', 'analog'] as Face[]).map(f => {
+      {([ ['modern', 'Modern'], ['old-school', 'Old School'], ['analog', 'Analog'] ] as [Face, string][]).map(([f, label]) => {
         const active = f === face;
         return (
           <Pressable
@@ -909,11 +1027,11 @@ function SegmentedFacePicker({
               pressed && { opacity: 0.86 },
             ]}
             accessibilityRole="radio"
-            accessibilityLabel={f === 'digital' ? 'Digital face' : 'Analog face'}
+            accessibilityLabel={`${label} face`}
             accessibilityState={{ selected: active }}
           >
             <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-              {f === 'digital' ? 'Digital' : 'Analog'}
+              {label}
             </Text>
           </Pressable>
         );

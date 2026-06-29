@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   },
   logoWrap: {
     alignItems: 'flex-start',
-    marginBottom: spacing.xl,
+    marginBottom: 8,
   },
   logo: {
     width: 200,
