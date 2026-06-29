@@ -32,7 +32,7 @@ import { Card } from '../../src/components/native/Card';
 import { ActivityProgressBar } from '../../src/components/activities/ActivityProgressBar';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { hapticSelection } from '../../src/utils/haptics';
-import { playSound, playSelectThenConfirm } from '../../src/utils/sounds';
+import { playSound, playSelectThenConfirm, playStreakSound } from '../../src/utils/sounds';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -321,6 +321,7 @@ export default function MemoryMatchScreen() {
 
     if (level >= totalLevels) {
       playSound('level_complete', soundOn);
+      playStreakSound(level, soundOn);
       setPhase('won');
       return;
     }

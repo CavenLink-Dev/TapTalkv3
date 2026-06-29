@@ -56,7 +56,7 @@ import { ActivityProgressBar } from '../../src/components/activities/ActivityPro
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
-import { playSound } from '../../src/utils/sounds';
+import { playSound, playStreakSound } from '../../src/utils/sounds';
 
 // ─── Shapes ────────────────────────────────────────────────────────────────
 
@@ -655,8 +655,8 @@ export default function ShapeMatchScreen() {
   useEffect(() => {
     if (phase !== 'play' || !allMatched) return;
 
-    // Level complete sound.
     playSound('level_complete', soundOn);
+    playStreakSound(level, soundOn);
 
     // Show correct toast immediately.
     setCorrectMessage(randomCorrectMessage());
@@ -730,10 +730,15 @@ export default function ShapeMatchScreen() {
       hapticSelection();
       const shape = layout.shapes.find(s => s.id === shapeId);
       if (!shape || placed.has(shapeId)) return;
-      playSound('select_selection', soundOn);
-      setSelectedShapeId(shapeId);
+      // Already selected → deselect/change sound; fresh tap → select sound
+      if (selectedShapeId) {
+        playSound('change_select_selection', soundOn);
+      } else {
+        playSound('select_selection', soundOn);
+      }
+      setSelectedShapeId(prev => prev === shapeId ? null : shapeId);
     },
-    [layout.shapes, placed, soundOn],
+    [layout.shapes, placed, selectedShapeId, soundOn],
   );
 
   const onSlotTap = useCallback(

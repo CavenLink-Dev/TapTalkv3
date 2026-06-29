@@ -65,3 +65,5 @@
 ## Branching and pushing
 
 User pushes from their own editor. Make local edits only. Do **not** run `git push`, do **not** create commits unless explicitly asked.
+
+now i want you to focus on the last screen the last point screen . Game statistics etc. what do you think it should show i want a square soft corner overlay with easy "Again" access. Cancel, 
