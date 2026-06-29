@@ -17,17 +17,17 @@ export type SoundKey =
 
 const SOURCES: Record<SoundKey, number> = {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  select_selection:  require('../../asset/sounds/select_selection.mp3'),
+  select_selection:  require('../../assets/sounds/select_selection.mp3'),
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  confirm_selection: require('../../asset/sounds/confirm_selection.mp3'),
+  confirm_selection: require('../../assets/sounds/confirm_selection.mp3'),
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  correct:           require('../../asset/sounds/correct.mp3'),
+  correct:           require('../../assets/sounds/correct.mp3'),
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  incorrect:         require('../../asset/sounds/incorrect.mp3'),
+  incorrect:         require('../../assets/sounds/incorrect.mp3'),
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  level_complete:    require('../../asset/sounds/level_complete.mp3'),
+  level_complete:    require('../../assets/sounds/level_complete.mp3'),
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  denied:            require('../../asset/sounds/denied.mp3'),
+  denied:            require('../../assets/sounds/denied.mp3'),
 };
 
 const players: Partial<Record<SoundKey, AudioPlayer>> = {};

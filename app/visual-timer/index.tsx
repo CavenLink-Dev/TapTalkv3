@@ -153,7 +153,7 @@ function ModernFace({ remainingSec }: { remainingSec: number }) {
       accessibilityLiveRegion="polite"
     >
       <Image
-        source={require('../../asset/clock_variations/clock_modern_digital/clock_digital_modern.png')}
+        source={require('../../assets/clock_variations/clock_modern_digital/clock_digital_modern.png')}
         style={{ position: 'absolute', width, height: imgH }}
         resizeMode="stretch"
       />
@@ -216,7 +216,7 @@ function OldSchoolFace({ remainingSec }: { remainingSec: number }) {
       accessibilityLiveRegion="polite"
     >
       <Image
-        source={require('../../asset/clock_variations/clock_old_school_digital/clock_old_school.png')}
+        source={require('../../assets/clock_variations/clock_old_school_digital/clock_old_school.png')}
         style={{ position: 'absolute', width, height: imgH }}
         resizeMode="stretch"
       />

@@ -31,7 +31,7 @@ const ACTIVITY_LIST: ActivityCard[] = [
     name: 'Shape Match',
     description: 'Match shapes to their outlines.',
     tag: 'Visual',
-    image: require('../../asset/activities/shape-match.png'),
+    image: require('../../assets/activities/shape-match.png'),
   },
   {
     id: 'memory-match',
@@ -41,7 +41,7 @@ const ACTIVITY_LIST: ActivityCard[] = [
     name: 'Memory Match',
     description: 'A shape appears then hides. Pick what you saw.',
     tag: 'Memory',
-    image: require('../../asset/activities/memory-match.png'),
+    image: require('../../assets/activities/memory-match.png'),
   },
   {
     id: 'picture-match',
@@ -51,7 +51,7 @@ const ACTIVITY_LIST: ActivityCard[] = [
     name: 'Picture Match',
     description: 'A word is shown. Find the matching card.',
     tag: 'Language',
-    image: require('../../asset/activities/picture-match.png'),
+    image: require('../../assets/activities/picture-match.png'),
   },
   {
     id: 'count-along',
@@ -61,7 +61,7 @@ const ACTIVITY_LIST: ActivityCard[] = [
     name: 'Count Along',
     description: 'Count the dots and choose the right number.',
     tag: 'Numbers',
-    image: require('../../asset/activities/count-along.png'),
+    image: require('../../assets/activities/count-along.png'),
   },
 ];
 

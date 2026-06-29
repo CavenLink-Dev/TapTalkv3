@@ -327,7 +327,7 @@ export default function Splash() {
           the supporting line breathes with it. */}
       <Animated.View style={[styles.logoBlock, logoStyle]}>
         <Image
-          source={require('../../asset/taptalk_logo.png')}
+          source={require('../../assets/taptalk_logo.png')}
           style={styles.logo}
           resizeMode="contain"
           accessibilityLabel="TapTalk"

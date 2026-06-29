@@ -24,7 +24,7 @@ export default function GetStarted() {
       <View style={styles.hero}>
         <Animated.View entering={FadeInDown.duration(400)} style={styles.logoWrap}>
           <Image
-            source={require('../../asset/taptalk_logo.png')}
+            source={require('../../assets/taptalk_logo.png')}
             style={styles.logo}
             resizeMode="contain"
             accessibilityLabel="TapTalk"
