@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { Screen } from '../../src/components/native/Screen';
@@ -9,6 +10,7 @@ import { TapTalkMascot } from '../../src/components/TapTalkMascot';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { listStyles } from '../../src/styles/listStyles';
 import { verifyPin } from '../../src/utils/pin';
+import { hapticSelection } from '../../src/utils/haptics';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 
 const documents = [
@@ -41,6 +43,7 @@ export default function MeScreen() {
   };
 
   const toggleLock = useCallback(() => {
+    hapticSelection();
     if (caregiverLocked && state.parent.pin) {
       setPinPromptVisible(true);
       setPinInput('');
@@ -107,9 +110,10 @@ export default function MeScreen() {
 
       <Card style={listStyles.section}>
         <Text style={listStyles.sectionTitle}>Edit Profile</Text>
+        <Text style={styles.fieldLabel}>Display name</Text>
         <TextField
           accessibilityLabel="Display name"
-          placeholder="Display name"
+          placeholder="e.g. Alex"
           value={displayName}
           onChangeText={setDisplayName}
           style={styles.profileInput}
@@ -125,17 +129,17 @@ export default function MeScreen() {
         <Text style={listStyles.sectionTitle}>Library & Guides</Text>
         {documents.map((doc) => (
           <View key={doc} style={styles.docRow}>
-            <Text style={styles.docIcon}>📚</Text>
+            <Ionicons name="book-outline" size={20} color={colors.primary} style={styles.docIcon} />
             <Text style={styles.docText}>{doc}</Text>
           </View>
         ))}
         <Pressable
           accessibilityRole="link"
           accessibilityLabel="Open symbol licences"
-          onPress={() => router.push(attributionRoute)}
+          onPress={() => { hapticSelection(); router.push(attributionRoute); }}
           style={styles.docRow}
         >
-          <Text style={styles.docIcon}>i</Text>
+          <Ionicons name="information-circle-outline" size={20} color={colors.primary} style={styles.docIcon} />
           <Text style={styles.docText}>Symbol Licences & Attribution</Text>
         </Pressable>
       </Card>
@@ -180,7 +184,7 @@ export default function MeScreen() {
             <Text style={styles.pinPromptLabel}>Enter your 6-digit PIN to disable lock</Text>
             <TextField
               accessibilityLabel="Enter PIN to disable lock"
-              placeholder="6-digit PIN"
+              placeholder="e.g. 123456"
               secureTextEntry
               keyboardType="number-pad"
               maxLength={6}
@@ -245,15 +249,15 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   docIcon: {
-    fontSize: 20,
+    width: 24,
+    textAlign: 'center',
   },
+  // Rhythm comes from vertical padding alone — no decorative dividers.
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   docText: {
     flex: 1,
@@ -305,8 +309,16 @@ const styles = StyleSheet.create({
   profileCopy: {
     flex: 1,
   },
+  fieldLabel: {
+    marginTop: spacing.md,
+    marginBottom: 6,
+    fontSize: typography.caption,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 0.2,
+  },
   profileInput: {
-    marginVertical: spacing.md,
+    marginBottom: spacing.md,
   },
   settingRow: {
     flexDirection: 'row',
@@ -330,11 +342,6 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     backgroundColor: colors.surface,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.18,
-    shadowRadius: 2,
-    elevation: 2,
   },
   switchTrack: {
     width: 48,

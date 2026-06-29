@@ -130,7 +130,7 @@ export default function RegStep8Accessibility() {
               ]}
               accessibilityElementsHidden
             >
-              <Text style={styles.previewEmoji}>🍎</Text>
+              <Ionicons name="nutrition-outline" size={40} color={previewTextColor} style={styles.previewEmoji} />
               <Text
                 style={[
                   styles.previewWord,
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
-  previewEmoji: { fontSize: 36 },
+  previewEmoji: { marginBottom: 4 },
   previewWord: { fontFamily: fonts.displayHeavy },
   previewBtn: {
     flex: 1,

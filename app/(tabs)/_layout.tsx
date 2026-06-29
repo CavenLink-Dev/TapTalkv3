@@ -41,8 +41,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="tools"
         options={{
-          title: 'Settings',
-          tabBarIcon: icon('calendar'),
+          title: 'Tools',
+          tabBarIcon: icon('tools'),
         }}
       />
       <Tabs.Screen
@@ -58,11 +58,11 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 96,
-    paddingTop: 10,
-    paddingBottom: 10,
+    height: 78,
+    paddingTop: 6,
+    paddingBottom: 18,
     backgroundColor: colors.surface,
-    borderTopWidth: 1.5,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
   tabBarItem: {

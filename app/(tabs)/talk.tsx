@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
+  Alert,
   Animated as RNAnimated,
   Easing as RNEasing,
   Image,
   LayoutRectangle,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,19 +20,27 @@ import Reanimated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
-import { BackspaceIcon } from '../../src/components/icons/FigmaIcons';
+import { Ionicons } from '@expo/vector-icons';
+import { Href, useRouter } from 'expo-router';
+import { BackspaceIcon, BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
+import { MulberrySymbol } from '../../src/components/symbols/MulberrySymbol';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
-import { colors, spacing } from '../../src/theme/tokens';
-import { hapticSelection } from '../../src/utils/haptics';
+import { animation, colors, spacing } from '../../src/theme/tokens';
+import { hapticError, hapticSelection } from '../../src/utils/haptics';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 
 type TileKind = 'folder' | 'word' | 'action';
 type BoardMode = 'home' | 'foods' | 'animals' | 'tools' | 'quick' | 'settings';
-type TopTab = 'taptalk' | 'tools' | 'quick' | 'setting';
+// New top-nav vocabulary: TAPTALK opens the keyboard page, QUICK opens
+// Quick Talk, EDIT is a stub for now (no behaviour), CLEAR clears the
+// message strip in place. See to_do/NEXT.md "Board top nav" for the lock.
+type TopTab = 'taptalk' | 'quick' | 'edit' | 'clear';
 
 type BoardTile = {
   id: string;
@@ -39,6 +50,17 @@ type BoardTile = {
   target?: BoardMode;
   speech?: string;
   background?: keyof typeof TILE_ASSETS;
+  // Production-quality Mulberry pictogram (asset-map ID, e.g.
+  // `mulberry_apple_1ogqpa9`). Resolves through `expo-asset` for a sharp
+  // bundled SVG.
+  mulberrySymbolId?: string;
+  // Optional curated fallback key (e.g. `good`, `bad`). Used when an
+  // asset-map ID isn't a clean match for the label.
+  mulberryName?: string;
+  // Optional word-type label (e.g. 'noun', 'verb') exposed as an
+  // accessibilityHint so VoiceOver users get the same semantic layer
+  // that colour gives sighted users (principle 23).
+  wordType?: string;
 };
 
 type WindowRect = LayoutRectangle;
@@ -56,11 +78,30 @@ const MESSAGE_HEIGHT = 104;
 const TOP_NAV_HEIGHT = 76;
 const COLLAPSED_TOGGLE_HEIGHT = 17;
 const BOARD_COLUMNS = 4;
-const TILE_GAP = 3;
-const TILE_LEFT_PADDING = 16;
-const BOARD_TOP_GAP = 16;
-const TILE_SIZE = 88;
-const FOLDER_HEIGHT_RATIO = 181 / 176;
+// +1pt of breathing room between every tile — picks up the request to
+// loosen the grid without dropping a column. Drives both the horizontal
+// `columnGap` and vertical `rowGap` on `boardContent`, and is factored
+// into `tileSize` so the right column still lands inside the safe-area
+// gutter.
+const TILE_GAP = 4;
+// 4pt gutter on top of the safe-area inset. Halved from 8pt because the
+// side margin was still reading as wasted space — the freed width below
+// goes straight into the tiles via the `tileSize` row maths.
+const TILE_LEFT_PADDING = 4;
+const BOARD_TOP_GAP = 18;
+// Soft cap on tile size. Actual size is `min(TILE_SIZE, fit-to-row)`, so
+// on a standard 390-393pt iPhone the row maths drives the tile to ~94pt
+// (up from 91 at 8pt gutter). On wider devices (Plus / Pro Max / iPad)
+// tiles cap here — raised from 96 so the recovered gutter space actually
+// produces bigger folders/symbols instead of leftover whitespace.
+const TILE_SIZE = 104;
+// All board tiles — folders and words alike — render as perfect squares so
+// the grid reads as a single rhythm. The previous `FOLDER_HEIGHT_RATIO`
+// made folders ~3% taller than words, which showed up as "Foods looks
+// bigger than Actions" in QA. Keeping a constant lets us swap to a
+// different square multiplier if needed without re-threading the ratio
+// through every render path.
+const TILE_HEIGHT_RATIO = 1;
 const MESSAGE_CHIP_SIZE = 40;
 const MESSAGE_SLOT_COUNT = 6;
 const MESSAGE_SLOT_GAP = 5;
@@ -79,119 +120,174 @@ const TILE_ASSETS = {
   purple: require('../../assets/aac/board_tiles/symbol-purple.png'),
 };
 
-const TOP_TAB_ASSETS = {
-  taptalk: {
-    icon: require('../../assets/top_bar/taptalk-icon.png'),
-    label: require('../../assets/top_bar/taptalk-label.png'),
-    iconSize: { width: 49, height: 35 },
-    labelSize: { width: 52, height: 9 },
-  },
-  tools: {
-    icon: require('../../assets/top_bar/tools-icon.png'),
-    label: require('../../assets/top_bar/tools-label.png'),
-    iconSize: { width: 33, height: 33 },
-    labelSize: { width: 39, height: 9 },
-  },
-  quick: {
-    icon: require('../../assets/top_bar/quick-icon.png'),
-    label: require('../../assets/top_bar/quick-label.png'),
-    iconSize: { width: 34, height: 34 },
-    labelSize: { width: 37, height: 10 },
-  },
-  setting: {
-    icon: require('../../assets/top_bar/setting-icon.png'),
-    label: require('../../assets/top_bar/setting-label.png'),
-    iconSize: { width: 31, height: 30 },
-    labelSize: { width: 50, height: 9 },
-  },
-} as const;
+function wordBackgroundForTile(tile: BoardTile) {
+  return TILE_ASSETS[tile.background ?? 'cyan'];
+}
 
+// Top-nav tab metadata. Replaces the brightly-coloured cartoon PNGs with
+// neutral outlined Ionicons + uppercase text labels — matches the bottom
+// nav vocabulary (one tint, two states: idle grey, active brand blue).
+const TOP_TAB_META: Record<TopTab, { icon: React.ComponentProps<typeof Ionicons>['name']; label: string }> = {
+  taptalk: { icon: 'keypad-outline',         label: 'TAPTALK' },
+  quick:   { icon: 'flash-outline',          label: 'QUICK'   },
+  edit:    { icon: 'create-outline',         label: 'EDIT'    },
+  clear:   { icon: 'close-circle-outline',   label: 'CLEAR'   },
+};
+
+// Idle / active colours, kept inline so the tint animation has explicit
+// endpoints to interpolate between.
+const TOP_TAB_IDLE_COLOR   = '#8A8F95';
+// Active state mirrors the bottom-nav outline weight — a deep neutral
+// rather than brand blue, so the press feedback reads as "selected" without
+// shouting. Was `colors.primary` (#199AEE); the blue felt disconnected from
+// the rest of the chrome.
+const TOP_TAB_ACTIVE_COLOR = colors.symbolOutline;
+
+// ─── Symbol palette ──────────────────────────────────────────────────────────
+// Vibrant, matte primaries chosen from the iOS system palette. The tile
+// background renders these flat (no PNG) at 30% opacity so the boards read
+// as clean, soft-coloured chips rather than busy stickers.
+const SYMBOL_RED    = '#FF3B30';
+const SYMBOL_ORANGE = '#FF9F0A';
+const SYMBOL_YELLOW = '#FFD60A';
+const SYMBOL_GREEN  = '#34C759';
+const SYMBOL_BLUE   = '#0A84FF';
+const SYMBOL_PURPLE = '#BF5AF2';
+
+// Mulberry symbols selected to match the existing tile labels. Asset-map
+// IDs (production-quality bundled SVGs) are preferred; curated `name`
+// fallbacks are used where the asset-map naming isn't a clean match.
+// Mappings live alongside the tile data so the data-to-symbol
+// relationship is obvious during review.
 const HOME_TILES: BoardTile[] = [
-  { id: 'people', label: 'People', kind: 'folder', target: 'quick', color: '#1DCDFF', background: 'folderExample' },
-  { id: 'foods', label: 'Foods', kind: 'folder', target: 'foods', color: '#1DCDFF', background: 'folderExample' },
+  // 'people' / 'places' / 'actions' don't have a clean 1:1 Mulberry asset
+  // — we keep the folder image and let the label carry the meaning until
+  // the user picks a curated symbol. 'foods' has a clean match.
+  { id: 'people', label: 'People', kind: 'folder', target: 'quick',   color: '#1DCDFF', background: 'folderExample' },
+  { id: 'foods',  label: 'Foods',  kind: 'folder', target: 'foods',   color: '#1DCDFF', background: 'folderExample', mulberrySymbolId: 'mulberry_food_atkyaz' },
   { id: 'places', label: 'Places', kind: 'folder', target: 'animals', color: '#1DCDFF', background: 'folderExample' },
-  { id: 'actions', label: 'Actions', kind: 'folder', target: 'tools', color: '#1DCDFF', background: 'folderExample' },
+  { id: 'actions',label: 'Actions',kind: 'folder', target: 'tools',   color: '#1DCDFF', background: 'folderExample' },
 ];
 
 const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
   home: HOME_TILES,
   foods: [
-    { id: 'cheese', label: 'Cheese', kind: 'word', color: '#1DCDFF', speech: 'cheese' },
-    { id: 'apple', label: 'Apple', kind: 'word', color: '#1DCDFF', speech: 'apple' },
-    { id: 'bread', label: 'Bread', kind: 'word', color: '#706820', speech: 'bread' },
-    { id: 'back-foods', label: 'Home', kind: 'folder', target: 'home', color: '#3C673E' },
+    { id: 'cheese', label: 'Cheese', kind: 'word',   color: SYMBOL_YELLOW, speech: 'cheese', mulberrySymbolId: 'mulberry_cheese_qsgfck', wordType: 'noun' },
+    { id: 'apple',  label: 'Apple',  kind: 'word',   color: SYMBOL_RED,    speech: 'apple',  mulberrySymbolId: 'mulberry_apple_1ogqpa9',  wordType: 'noun' },
+    { id: 'bread',  label: 'Bread',  kind: 'word',   color: SYMBOL_ORANGE, speech: 'bread',  mulberrySymbolId: 'mulberry_bread_t6g6ux',   wordType: 'noun' },
+    { id: 'back-foods', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
   ],
   animals: [
-    { id: 'cat', label: 'Cat', kind: 'word', color: '#1DCDFF', speech: 'cat' },
-    { id: 'dog', label: 'Dog', kind: 'word', color: '#1DCDFF', speech: 'dog' },
-    { id: 'fish', label: 'Fish', kind: 'word', color: '#416670', speech: 'fish' },
-    { id: 'back-animals', label: 'Home', kind: 'folder', target: 'home', color: '#4B5C68' },
+    { id: 'cat',  label: 'Cat',  kind: 'word', color: SYMBOL_ORANGE, speech: 'cat',  mulberrySymbolId: 'mulberry_cat_1lz3nun',  wordType: 'noun' },
+    { id: 'dog',  label: 'Dog',  kind: 'word', color: SYMBOL_GREEN,  speech: 'dog',  mulberrySymbolId: 'mulberry_dog_1bfmoh1',  wordType: 'noun' },
+    { id: 'fish', label: 'Fish', kind: 'word', color: SYMBOL_BLUE,   speech: 'fish', mulberrySymbolId: 'mulberry_fish_1u95ovx', wordType: 'noun' },
+    { id: 'back-animals', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
   ],
   tools: [
-    { id: 'loud-tool', label: 'Loud', kind: 'word', color: '#C7E4EF', speech: 'loud' },
-    { id: 'quiet', label: 'Quiet', kind: 'word', color: '#C7E4EF', speech: 'quiet' },
-    { id: 'repeat', label: 'Repeat', kind: 'action', color: '#703232' },
-    { id: 'clear-tool', label: 'Clear', kind: 'action', color: '#7A3D3D' },
+    { id: 'loud-tool', label: 'Loud',   kind: 'word',   color: SYMBOL_BLUE,   speech: 'loud',  mulberrySymbolId: 'mulberry_loud_1kbu7nf',  wordType: 'adjective' },
+    { id: 'quiet',     label: 'Quiet',  kind: 'word',   color: SYMBOL_PURPLE, speech: 'quiet', mulberrySymbolId: 'mulberry_quiet_4csbx1',  wordType: 'adjective' },
+    { id: 'repeat',    label: 'Repeat', kind: 'action', color: SYMBOL_GREEN },
+    { id: 'clear-tool',label: 'Clear',  kind: 'action', color: SYMBOL_RED   },
   ],
   quick: [
-    { id: 'yes', label: 'Yes', kind: 'word', color: '#3C673E', speech: 'yes' },
-    { id: 'no', label: 'No', kind: 'word', color: '#703232', speech: 'no' },
-    { id: 'help', label: 'Help', kind: 'word', color: '#3E486B', speech: 'help' },
-    { id: 'stop', label: 'Stop', kind: 'word', color: '#6A2E65', speech: 'stop' },
+    // Curated fallbacks: the Mulberry asset map has no plain 'yes'/'no'
+    // pictograms, so we lean on the curated `good` / `bad` glyphs which
+    // ship as inline SVG strings.
+    { id: 'yes',  label: 'Yes',  kind: 'word', color: SYMBOL_GREEN, speech: 'yes',  mulberryName: 'good', wordType: 'interjection' },
+    { id: 'no',   label: 'No',   kind: 'word', color: SYMBOL_RED,   speech: 'no',   mulberryName: 'bad',  wordType: 'interjection' },
+    { id: 'help', label: 'Help', kind: 'word', color: SYMBOL_BLUE,  speech: 'help', mulberrySymbolId: 'mulberry_help_1g1ppr', wordType: 'verb' },
+    { id: 'stop', label: 'Stop', kind: 'word', color: SYMBOL_RED,   speech: 'stop', wordType: 'verb' },
   ],
   settings: [
-    { id: 'hide-nav', label: 'Hide nav', kind: 'action', color: '#4B5C68' },
-    { id: 'clear-settings', label: 'Clear', kind: 'action', color: '#7A3D3D' },
-    { id: 'home-settings', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
-    { id: 'repeat-settings', label: 'Repeat', kind: 'action', color: '#703232' },
+    { id: 'hide-nav',        label: 'Hide nav', kind: 'action', color: SYMBOL_PURPLE },
+    { id: 'clear-settings',  label: 'Clear',    kind: 'action', color: SYMBOL_RED    },
+    { id: 'home-settings',   label: 'Home',     kind: 'folder', target: 'home', color: '#1DCDFF' },
+    { id: 'repeat-settings', label: 'Repeat',   kind: 'action', color: SYMBOL_GREEN  },
   ],
 };
 
-function BoardFolderTile({ tile, size }: { tile: BoardTile; size: number }) {
-  const folderHeight = Math.round(size * FOLDER_HEIGHT_RATIO);
+const BACK_TILE: BoardTile = { id: 'back', label: 'Back', kind: 'action', color: '#6B7580' };
+const HOME_TILE: BoardTile = { id: 'home', label: 'Home', kind: 'action', color: '#6B7580' };
 
+function BoardNavTile({ tile, size }: { tile: BoardTile; size: number }) {
   return (
-    <View style={[styles.tileShell, { width: size, height: folderHeight }]}>
+    <View style={[styles.navTileShell, { width: size, height: size }]}>
+      <View style={styles.navTileIconMount}>
+        {tile.id === 'back' ? <BoardBackIcon size={40} /> : <BoardHomeIcon size={40} />}
+      </View>
+      <Text style={styles.navTileLabel} numberOfLines={1} adjustsFontSizeToFit>
+        {tile.label}
+      </Text>
+    </View>
+  );
+}
+
+// Mulberry pictograms render inside the `symbolMount` region at ~52% of
+// the tile size, which keeps them comfortably below the label without
+// crowding. Returns null when the tile has no symbol assigned so existing
+// tiles (e.g. People, Places) stay clean until we curate one for them.
+function TileSymbol({ tile, size }: { tile: BoardTile; size: number }) {
+  if (!tile.mulberrySymbolId && !tile.mulberryName) return null;
+  const symbolSize = Math.round(size * 0.52);
+  return (
+    <View style={styles.symbolMount} pointerEvents="none">
+      <MulberrySymbol
+        symbolId={tile.mulberrySymbolId}
+        name={tile.mulberryName}
+        size={symbolSize}
+      />
+    </View>
+  );
+}
+
+function BoardFolderTile({ tile, size }: { tile: BoardTile; size: number }) {
+  // Folder tiles render at the same square footprint as word tiles so the
+  // grid reads as one rhythm regardless of `kind`.
+  return (
+    <View style={[styles.tileShell, { width: size, height: size }]}>
       <Image
         source={TILE_ASSETS[tile.background ?? 'folder']}
         resizeMode="stretch"
-        style={[styles.tileBackground, { width: size, height: folderHeight }]}
+        style={[styles.tileBackground, { width: size, height: size }]}
       />
       <Text style={styles.folderLabel} numberOfLines={1} adjustsFontSizeToFit>
         {tile.label}
       </Text>
-      <View style={styles.symbolMount} />
+      <TileSymbol tile={tile} size={size} />
     </View>
   );
 }
 
-function wordBackgroundForTile(tile: BoardTile) {
-  if (tile.background) return TILE_ASSETS[tile.background];
-  if (tile.color === '#DCC1F1') return TILE_ASSETS.straw;
-  if (tile.color === '#3C673E') return TILE_ASSETS.green;
-  if (tile.color === '#703232' || tile.color === '#7A3D3D' || tile.color === '#6A2E65') {
-    return TILE_ASSETS.red;
-  }
-  return TILE_ASSETS.loud;
-}
-
 function BoardWordTile({ tile, size }: { tile: BoardTile; size: number }) {
+  // Flat coloured fill at 30% opacity — replaces the previous baked PNG
+  // backgrounds so the tile reads as a clean tinted chip. The label sits
+  // above at full opacity for legibility; the Mulberry symbol sits below
+  // in the `symbolMount` region.
   return (
     <View style={[styles.wordTile, { width: size, height: size }]}>
-      <Image
-        source={wordBackgroundForTile(tile)}
-        resizeMode="stretch"
-        style={[styles.tileBackground, { width: size, height: size }]}
+      <View
+        style={[
+          styles.wordTileFill,
+          { width: size, height: size, backgroundColor: tile.color, opacity: 0.3 },
+        ]}
       />
       <Text style={styles.wordLabel} numberOfLines={1} adjustsFontSizeToFit>
         {tile.label}
       </Text>
-      <View style={styles.symbolMount} />
+      <TileSymbol tile={tile} size={size} />
     </View>
   );
 }
 
-function MessageChip({ tile, label }: { tile?: BoardTile; label: string }) {
+function MessageChip({
+  tile,
+  label,
+  onRemove,
+}: {
+  tile?: BoardTile;
+  label: string;
+  onRemove?: () => void;
+}) {
   const chipTile = tile ?? {
     id: label,
     label,
@@ -200,8 +296,8 @@ function MessageChip({ tile, label }: { tile?: BoardTile; label: string }) {
     background: 'cyan' as const,
   };
 
-  return (
-    <View style={styles.messageChip}>
+  const inner = (
+    <>
       <Image
         source={wordBackgroundForTile(chipTile)}
         resizeMode="stretch"
@@ -210,8 +306,27 @@ function MessageChip({ tile, label }: { tile?: BoardTile; label: string }) {
       <Text style={styles.messageChipLabel} numberOfLines={1} adjustsFontSizeToFit>
         {label}
       </Text>
-    </View>
+    </>
   );
+
+  // When removable (item 10): chips become Pressable so VoiceOver users and
+  // sighted users can tap to remove individual words without backspacing
+  // from the end. Principle 5 — deeper detail in-place; Principle 20 — hit
+  // target kept at the full chip size.
+  if (onRemove) {
+    return (
+      <Pressable
+        onPress={onRemove}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${label}`}
+        style={({ pressed }) => [styles.messageChip, pressed && { opacity: 0.7 }]}
+      >
+        {inner}
+      </Pressable>
+    );
+  }
+
+  return <View style={styles.messageChip}>{inner}</View>;
 }
 
 function GhostTileClone({
@@ -221,6 +336,9 @@ function GhostTileClone({
   ghost: GhostTile;
   onDone: (id: string) => void;
 }) {
+  // Item 1 — Reduce Motion: skip the arc-fly and instead fade in-place
+  // at the source tile position. Full motion keeps the arc + shrink.
+  const reduceMotion = useReduceMotion();
   const progress = useSharedValue(0);
   const fromX = ghost.from.x + ghost.from.width / 2 - ghost.size / 2;
   const fromY = ghost.from.y + ghost.from.height / 2 - ghost.size / 2;
@@ -231,27 +349,34 @@ function GhostTileClone({
     progress.value = withTiming(
       1,
       {
-        duration: 430,
-        easing: ReanimatedEasing.bezier(0.22, 1, 0.36, 1),
+        duration: reduceMotion ? animation.durReduced : 430,
+        easing: reduceMotion ? undefined : ReanimatedEasing.bezier(0.22, 1, 0.36, 1),
       },
       finished => {
         if (finished) runOnJS(onDone)(ghost.id);
       },
     );
-  }, [ghost.id, onDone, progress]);
+  }, [ghost.id, onDone, progress, reduceMotion]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: 0.55 * (1 - progress.value),
-    transform: [
-      { translateX: fromX + (toX - fromX) * progress.value },
-      { translateY: fromY + (toY - fromY) * progress.value },
-      { scale: 1 - 0.55 * progress.value },
-    ],
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    if (reduceMotion) {
+      // Fade in-place only — no translate, no shrink.
+      return { opacity: 0.55 * (1 - progress.value) };
+    }
+    return {
+      opacity: 0.55 * (1 - progress.value),
+      transform: [
+        { translateX: fromX + (toX - fromX) * progress.value },
+        { translateY: fromY + (toY - fromY) * progress.value },
+        { scale: 1 - 0.55 * progress.value },
+      ],
+    };
+  });
 
-  const cloneHeight = ghost.tile.kind === 'folder'
-    ? Math.round(ghost.size * FOLDER_HEIGHT_RATIO)
-    : ghost.size;
+  // Folder and word tiles now share the same square footprint, so the
+  // ghost clone tracks the unified size directly. `TILE_HEIGHT_RATIO`
+  // stays available in case we later differentiate kinds again.
+  const cloneHeight = Math.round(ghost.size * TILE_HEIGHT_RATIO);
 
   return (
     <Reanimated.View
@@ -261,6 +386,9 @@ function GhostTileClone({
         {
           width: ghost.size,
           height: cloneHeight,
+          // RM: position absolutely at the source tile so the fade
+          // happens where the tile actually is, not at the origin.
+          ...(reduceMotion ? { left: fromX, top: fromY } : {}),
         },
         animatedStyle,
       ]}
@@ -287,17 +415,34 @@ function BoardTileButton({
 }) {
   const pressableRef = useRef<View>(null);
   const scale = useRef(new RNAnimated.Value(1)).current;
+  // Item 2 — RM: swap spring scale for an opacity dip so the tile
+  // still acknowledges the press without moving (principle 18).
+  const tileOpacity = useRef(new RNAnimated.Value(1)).current;
+  const reduceMotion = useReduceMotion();
 
   const animateTo = useCallback((toValue: number) => {
+    if (reduceMotion) {
+      RNAnimated.timing(tileOpacity, {
+        toValue: toValue < 1 ? 0.7 : 1,
+        duration: toValue < 1 ? animation.durFast : animation.durRelease,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
     RNAnimated.spring(scale, {
       toValue,
       speed: 30,
       bounciness: 7,
       useNativeDriver: true,
     }).start();
-  }, [scale]);
+  }, [reduceMotion, scale, tileOpacity]);
 
-  const tileHeight = tile.kind === 'folder' ? Math.round(size * FOLDER_HEIGHT_RATIO) : size;
+  const isNav = tile.id === 'back' || tile.id === 'home';
+  // Every kind — folder, word, action, nav — renders as a square so the
+  // grid is visually consistent. `size` is already clamped against the
+  // available board width up the tree, so this also satisfies the 44pt
+  // minimum touch-target rule.
+  const tileHeight = Math.round(size * TILE_HEIGHT_RATIO);
 
   const handlePress = useCallback(() => {
     onMeasuredPress?.();
@@ -306,18 +451,27 @@ function BoardTileButton({
     });
   }, [onMeasuredPress, onPress]);
 
+  // Item 7 — word-type hint for VoiceOver (principle 23: don't rely on
+  // colour alone). Folder tiles already say "Open …" in the label.
+  const a11yHint = tile.kind === 'word' && tile.wordType
+    ? `Word type: ${tile.wordType}`
+    : undefined;
+
   return (
-    <RNAnimated.View style={{ width: size, height: tileHeight, transform: [{ scale }] }}>
+    <RNAnimated.View style={{ width: size, height: tileHeight, transform: [{ scale }], opacity: tileOpacity }}>
       <Pressable
         ref={pressableRef}
         accessibilityRole="button"
-        accessibilityLabel={tile.kind === 'folder' ? `Open ${tile.label}` : `Say ${tile.label}`}
+        accessibilityLabel={isNav ? tile.label : tile.kind === 'folder' ? `Open ${tile.label}` : `Say ${tile.label}`}
+        accessibilityHint={a11yHint}
         onPress={handlePress}
         onPressIn={() => animateTo(0.94)}
         onPressOut={() => animateTo(1)}
         style={({ pressed }) => [styles.tilePressable, pressed && styles.tilePressed]}
       >
-        {tile.kind === 'folder' ? (
+        {tile.id === 'back' || tile.id === 'home' ? (
+          <BoardNavTile tile={tile} size={size} />
+        ) : tile.kind === 'folder' ? (
           <BoardFolderTile tile={tile} size={size} />
         ) : (
           <BoardWordTile tile={tile} size={size} />
@@ -327,32 +481,87 @@ function BoardTileButton({
   );
 }
 
-function TopNavIcon({ tab }: { tab: TopTab }) {
-  const assets = TOP_TAB_ASSETS[tab];
+function TopNavTab({
+  tab,
+  active,
+  onPress,
+}: {
+  tab: TopTab;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const meta = TOP_TAB_META[tab];
+  // Items 3 & 4 — RM: zero duration + no scale lift (principle 18).
+  const reduceMotion = useReduceMotion();
+
+  // Single shared value drives both colour and scale so the active tab
+  // brightens and lifts together. JS-driver because of the colour
+  // interpolation; only 1–4 tabs animate at a time so this is fine.
+  const activeAnim = useRef(new RNAnimated.Value(active ? 1 : 0)).current;
+
+  useEffect(() => {
+    RNAnimated.timing(activeAnim, {
+      toValue: active ? 1 : 0,
+      duration: reduceMotion ? 0 : 180,
+      easing: RNEasing.out(RNEasing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [active, activeAnim, reduceMotion]);
+
+  const tintColor = activeAnim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [TOP_TAB_IDLE_COLOR, TOP_TAB_ACTIVE_COLOR],
+  });
+  const scale = activeAnim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [1, reduceMotion ? 1 : 1.05],
+  });
 
   return (
-    <View style={styles.topTabContent}>
-      <Image
-        source={assets.icon}
-        resizeMode="contain"
-        style={[styles.topTabIconImage, assets.iconSize]}
-      />
-      <Image
-        source={assets.label}
-        resizeMode="contain"
-        style={[styles.topTabLabelImage, assets.labelSize]}
-      />
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${meta.label} top tab`}
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.topTab,
+        // Subtle press-in dip — uses Pressable's own state so it doesn't
+        // need its own Animated value.
+        pressed && styles.topTabPressed,
+      ]}
+    >
+      <RNAnimated.View style={[styles.topTabContent, { transform: [{ scale }] }]}>
+        <Ionicons
+          name={meta.icon}
+          size={28}
+          // Animated.Color can't pass directly into Ionicons' color prop, so
+          // we let the parent View tint via animated text-style trick.
+          color={TOP_TAB_IDLE_COLOR}
+          // Replace the static icon with an absolute-positioned overlay that
+          // fades in the active tint on top.
+        />
+        {/* Active-coloured overlay icon — opacity tracks activeAnim. */}
+        <RNAnimated.View style={[styles.topTabIconOverlay, { opacity: activeAnim }]}>
+          <Ionicons name={meta.icon} size={28} color={TOP_TAB_ACTIVE_COLOR} />
+        </RNAnimated.View>
+        <RNAnimated.Text style={[styles.topTabLabel, { color: tintColor }]}>
+          {meta.label}
+        </RNAnimated.Text>
+      </RNAnimated.View>
+    </Pressable>
   );
 }
 
-function ToggleChevron({ open }: { open: boolean }) {
+function ToggleChevron({ open, active }: { open: boolean; active: boolean }) {
+  // Arrow darkens (rather than lights blue) when the nav is open or pressed,
+  // so the chevron lives in the same neutral family as the top-tab icons.
+  const stroke = active ? colors.symbolOutline : '#9A9A9A';
   return (
     <Svg width={36} height={16} viewBox="0 0 36 16">
       <Polyline
         points={open ? '9,10 18,4 27,10' : '9,5 18,11 27,5'}
         fill="none"
-        stroke={colors.primaryDark}
+        stroke={stroke}
         strokeWidth={3}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -372,16 +581,18 @@ function TopNav({
   onTabPress: (tab: TopTab) => void;
   onToggle: () => void;
 }) {
+  // Item 3 — RM: collapse/expand at duration 0 (principle 18).
+  const reduceMotion = useReduceMotion();
   const anim = useRef(new RNAnimated.Value(visible ? 1 : 0)).current;
 
   useEffect(() => {
     RNAnimated.timing(anim, {
       toValue: visible ? 1 : 0,
-      duration: 220,
+      duration: reduceMotion ? 0 : 220,
       easing: RNEasing.out(RNEasing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [anim, visible]);
+  }, [anim, reduceMotion, visible]);
 
   const slotHeight = anim.interpolate({
     inputRange: [0, 1],
@@ -398,25 +609,26 @@ function TopNav({
         pointerEvents={visible ? 'auto' : 'none'}
         style={[styles.topNavPanel, { opacity: panelOpacity }]}
       >
-        {(['taptalk', 'tools', 'quick', 'setting'] as TopTab[]).map(tab => (
-          <Pressable
+        {(['taptalk', 'quick', 'edit', 'clear'] as TopTab[]).map(tab => (
+          <TopNavTab
             key={tab}
-            accessibilityRole="button"
-            accessibilityLabel={`${tab} top tab`}
+            tab={tab}
+            active={activeTab === tab}
             onPress={() => onTabPress(tab)}
-            style={[styles.topTab, activeTab === tab && styles.topTabActive]}
-          >
-            <TopNavIcon tab={tab} />
-          </Pressable>
+          />
         ))}
       </RNAnimated.View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={visible ? 'Hide top navigation' : 'Show top navigation'}
         onPress={onToggle}
-        style={[styles.navToggle, visible ? styles.navToggleOpen : styles.navToggleClosed]}
+        style={({ pressed }) => [
+          styles.navToggle,
+          visible ? styles.navToggleOpen : styles.navToggleClosed,
+          !(visible || pressed) && styles.navToggleIdle,
+        ]}
       >
-        <ToggleChevron open={visible} />
+        {({ pressed }) => <ToggleChevron open={visible} active={visible || pressed} />}
       </Pressable>
     </RNAnimated.View>
   );
@@ -429,17 +641,61 @@ export default function TalkScreen() {
   const ghostsRef = useRef<GhostTile[]>([]);
   const { state, dispatch } = useAppContext();
   const { speak, lastError, clearError } = useSpeech();
+  const router = useRouter();
+  // Default to closed — board is the hero, top nav stays out of the way
+  // until the user explicitly taps the chevron to open it.
   const [showTopNav, setShowTopNav] = useState(false);
   const [activeMode, setActiveMode] = useState<BoardMode>('home');
+  const [previousMode, setPreviousMode] = useState<BoardMode | null>(null);
   const [activeTab, setActiveTab] = useState<TopTab>('taptalk');
   const [ghosts, setGhosts] = useState<GhostTile[]>([]);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollPositions = useRef<Partial<Record<BoardMode, number>>>({});
+  const reduceMotion = useReduceMotion();
+  const hapticIfEnabled = useCallback(() => {
+    if (state.accessibility.hapticsEnabled !== false) hapticSelection();
+  }, [state.accessibility.hapticsEnabled]);
 
-  const boardWidth = Math.min(width, FIGMA_WIDTH);
+  // Item 8 — error banner shake animation (principle 13 + 14).
+  const bannerShakeX = useSharedValue(0);
+  const bannerAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: bannerShakeX.value }],
+  }));
+  useEffect(() => {
+    if (!lastError) return;
+    // Haptic always fires; shake only when Reduce Motion is off.
+    if (state.accessibility.hapticsEnabled !== false) hapticError();
+    if (reduceMotion) return;
+    const amp = animation.shakeAmp;
+    bannerShakeX.value = withSequence(
+      withTiming(-amp,          { duration: 55 }),
+      withTiming( amp,          { duration: 65 }),
+      withTiming(-amp * 0.65,   { duration: 65 }),
+      withTiming( amp * 0.45,   { duration: 65 }),
+      withTiming(-amp * 0.22,   { duration: 65 }),
+      withTiming( 0,            { duration: 55 }),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastError]);
+
+  // Horizontal safe-area insets are 0 on most iPhones in portrait, but go
+  // non-zero on iPad split view and landscape. Subtracting them up front
+  // means `TILE_LEFT_PADDING` always reads as 16pt from the *safe* zone,
+  // not from the raw screen edge, and the right column never sits flush
+  // against the bezel.
+  const insets = useSafeAreaInsets();
+  const availableWidth = Math.max(0, width - insets.left - insets.right);
+  const boardWidth = Math.min(availableWidth, FIGMA_WIDTH);
   const tileSize = Math.min(
     TILE_SIZE,
     Math.floor((boardWidth - TILE_LEFT_PADDING * 2 - TILE_GAP * (BOARD_COLUMNS - 1)) / BOARD_COLUMNS),
   );
   const tiles = BOARD_TILES[activeMode];
+
+  useEffect(() => {
+    const y = scrollPositions.current[activeMode] ?? 0;
+    scrollRef.current?.scrollTo({ y, animated: false });
+  }, [activeMode]);
   const chipTileLookup = useMemo(() => {
     const lookup = new Map<string, BoardTile>();
     Object.values(BOARD_TILES).flat().forEach(tile => {
@@ -486,8 +742,8 @@ export default function TalkScreen() {
 
     if (!ghost) return;
     appendWord(ghost.tile);
-    hapticSelection();
-  }, [appendWord]);
+    hapticIfEnabled();
+  }, [appendWord, hapticIfEnabled]);
 
   const repeatMessage = useCallback(() => {
     if (!messageText.trim()) {
@@ -545,58 +801,150 @@ export default function TalkScreen() {
     });
   }, [addGhost, appendWord, state.messageWords.length, tileSize]);
 
+  const navigateTo = useCallback((target: BoardMode) => {
+    setPreviousMode(activeMode);
+    setActiveMode(target);
+    dispatch({ type: 'SET_BOARD', payload: target });
+  }, [activeMode, dispatch]);
+
   const handleTilePress = useCallback((tile: BoardTile, rect: WindowRect | null) => {
-    hapticSelection();
+    hapticIfEnabled();
+    if (tile.id === 'back') {
+      const dest = previousMode ?? 'home';
+      setActiveMode(dest);
+      setPreviousMode(null);
+      dispatch({ type: 'SET_BOARD', payload: dest });
+      announce('Back');
+      return;
+    }
+    if (tile.id === 'home') {
+      setActiveMode('home');
+      setPreviousMode(null);
+      setActiveTab('taptalk');
+      dispatch({ type: 'SET_BOARD', payload: 'home' });
+      announce('Home');
+      return;
+    }
     if (tile.kind === 'folder' && tile.target) {
-      setActiveMode(tile.target);
-      dispatch({ type: 'SET_BOARD', payload: tile.target });
-      announce(`${tile.label} folder`);
+      navigateTo(tile.target);
+      // Item 6 — richer folder announcement: include the symbol count so
+      // VoiceOver users know what awaits them inside (principle 21).
+      const symbolCount = BOARD_TILES[tile.target]?.length ?? 0;
+      announce(`${tile.label} board, ${symbolCount} symbol${symbolCount !== 1 ? 's' : ''}`);
       return;
     }
     if (tile.kind === 'action') {
       if (tile.id.includes('clear')) clearMessage();
       if (tile.id.includes('repeat')) repeatMessage();
       if (tile.id === 'hide-nav') setShowTopNav(false);
+      if (tile.id === 'home-settings') {
+        setActiveMode('home');
+        setPreviousMode(null);
+        setActiveTab('taptalk');
+        dispatch({ type: 'SET_BOARD', payload: 'home' });
+      }
       return;
     }
     startGhostToMessage(tile, rect);
-  }, [announce, clearMessage, dispatch, repeatMessage, startGhostToMessage]);
+  }, [announce, clearMessage, dispatch, hapticIfEnabled, navigateTo, previousMode, repeatMessage, startGhostToMessage]);
 
   const handleTopTab = useCallback((tab: TopTab) => {
-    hapticSelection();
+    hapticIfEnabled();
+    // TAPTALK opens the dedicated keyboard page (new route — see
+    // app/board/keyboard). QUICK opens Quick Talk. EDIT is a stub
+    // for now. CLEAR is an in-place action on the message strip.
+    if (tab === 'taptalk') {
+      router.push('/board/keyboard' as Href);
+      // Item 5 — announce destination for VoiceOver (principle 21).
+      announce('TapTalk keyboard');
+      return;
+    }
+    if (tab === 'quick') {
+      router.push('/board/quick-talk' as Href);
+      announce('Quick Talk');
+      return;
+    }
+    if (tab === 'clear') {
+      clearMessage();
+      setActiveTab(tab);
+      // clearMessage() already announces "Message cleared".
+      return;
+    }
+    // EDIT — placeholder, intentionally no-op for v1.
     setActiveTab(tab);
-    if (tab === 'taptalk') setActiveMode('home');
-    if (tab === 'tools') setActiveMode('tools');
-    if (tab === 'quick') setActiveMode('quick');
-    if (tab === 'setting') setActiveMode('settings');
-  }, []);
+    announce(`${TOP_TAB_META[tab].label} selected`);
+  }, [announce, clearMessage, hapticIfEnabled, router]);
 
   const handleSpeak = useCallback(() => {
     repeatMessage();
   }, [repeatMessage]);
 
   const handleBackspace = useCallback(() => {
-    hapticSelection();
+    hapticIfEnabled();
     if (hasWords) {
       dispatch({ type: 'REMOVE_LAST_WORD' });
       return;
     }
     setActiveMode('home');
+    setPreviousMode(null);
     setActiveTab('taptalk');
-  }, [dispatch, hasWords]);
+  }, [dispatch, hapticIfEnabled, hasWords]);
+
+  // Item 10 — tap individual chips to remove them (principle 25 / 26).
+  const handleRemoveWord = useCallback((index: number) => {
+    hapticIfEnabled();
+    const label = state.messageWords[index]?.label ?? 'word';
+    dispatch({ type: 'REMOVE_WORD_AT_INDEX', payload: index });
+    announce(`Removed ${label}`);
+  }, [announce, dispatch, hapticIfEnabled, state.messageWords]);
+
+  // Item 9 — long-press backspace to clear all with a confirmation
+  // alert (principles 12 + 6: destructive actions need confirmation;
+  // Alert.alert for focused tasks).
+  const handleBackspaceLongPress = useCallback(() => {
+    if (!hasWords) return;
+    hapticIfEnabled();
+    Alert.alert(
+      'Clear message?',
+      'All words will be removed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            if (state.accessibility.hapticsEnabled !== false) hapticError();
+            clearMessage();
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [clearMessage, hapticIfEnabled, hasWords, state.accessibility.hapticsEnabled]);
+
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scrollPositions.current[activeMode] = e.nativeEvent.contentOffset.y;
+    },
+    [activeMode],
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View ref={rootRef} style={styles.screenRoot}>
+        {/* Item 8 — shake wrapper lets the banner animate on error
+            while the inner Pressable stays the dismiss hit target. */}
         {lastError ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss speech error"
-            onPress={clearError}
-            style={styles.errorBanner}
-          >
-            <Text style={styles.errorText}>Speech unavailable: {lastError.message}</Text>
-          </Pressable>
+          <Reanimated.View style={bannerAnimStyle}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss speech error"
+              onPress={clearError}
+              style={styles.errorBanner}
+            >
+              <Text style={styles.errorText}>Speech unavailable: {lastError.message}</Text>
+            </Pressable>
+          </Reanimated.View>
         ) : null}
 
         <View style={styles.messageArea}>
@@ -631,6 +979,7 @@ export default function TalkScreen() {
                       <MessageChip
                         label={word.label}
                         tile={chipTileLookup.get(word.label.toLowerCase())}
+                        onRemove={() => handleRemoveWord(index)}
                       />
                     ) : null}
                   </View>
@@ -641,10 +990,15 @@ export default function TalkScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={hasWords ? 'Backspace' : 'Return to home board'}
+            accessibilityHint={hasWords ? 'Hold to clear all words' : undefined}
             onPress={handleBackspace}
+            onLongPress={handleBackspaceLongPress}
+            delayLongPress={500}
             style={styles.backspace}
           >
-            <BackspaceIcon size={50} />
+            {/* Slightly heavier — bigger glyph reads stronger against
+                the white message strip without changing the tap target. */}
+            <BackspaceIcon size={56} />
           </Pressable>
         </View>
 
@@ -653,21 +1007,28 @@ export default function TalkScreen() {
           activeTab={activeTab}
           onTabPress={handleTopTab}
           onToggle={() => {
-            hapticSelection();
+            hapticIfEnabled();
             setShowTopNav(value => !value);
           }}
         />
 
         <ScrollView
+          ref={scrollRef}
           style={styles.board}
           contentContainerStyle={[
             styles.boardContent,
             {
-              paddingLeft: Math.max(TILE_LEFT_PADDING, (width - boardWidth) / 2 + TILE_LEFT_PADDING),
-              paddingRight: Math.max(TILE_LEFT_PADDING, (width - boardWidth) / 2 + TILE_LEFT_PADDING),
+              // Start from the safe-zone inset, then add TILE_LEFT_PADDING
+              // (16pt) inside it. The extra `(availableWidth - boardWidth)/2`
+              // term centres the board on wider devices (iPhone Plus / Pro
+              // Max / iPad) once `availableWidth` exceeds the Figma cap.
+              paddingLeft:  insets.left  + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
+              paddingRight: insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
             },
           ]}
           showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={50}
         >
           {tiles.map(tile => (
             <BoardTileButton
@@ -677,6 +1038,29 @@ export default function TalkScreen() {
               onPress={rect => handleTilePress(tile, rect)}
             />
           ))}
+          {activeMode !== 'home' ? (
+            <View
+              style={[
+                styles.navRow,
+                {
+                  paddingLeft: 0,
+                  paddingRight: 0,
+                  width: boardWidth - TILE_LEFT_PADDING * 2,
+                },
+              ]}
+            >
+              <BoardTileButton
+                tile={BACK_TILE}
+                size={tileSize}
+                onPress={rect => handleTilePress(BACK_TILE, rect)}
+              />
+              <BoardTileButton
+                tile={HOME_TILE}
+                size={tileSize}
+                onPress={rect => handleTilePress(HOME_TILE, rect)}
+              />
+            </View>
+          ) : null}
         </ScrollView>
 
         <View pointerEvents="none" style={styles.ghostOverlay}>
@@ -811,20 +1195,30 @@ const styles = StyleSheet.create({
     height: 57,
     alignItems: 'center',
     justifyContent: 'center',
-    opacity: 1,
   },
-  topTabActive: {
-    opacity: 1,
+  // Slight opacity dip on touch — Pressable feedback while the scale/colour
+  // animation handles the active state.
+  topTabPressed: {
+    opacity: 0.85,
   },
   topTabContent: {
     alignItems: 'center',
     justifyContent: 'center',
+    height: '100%',
   },
-  topTabIconImage: {
-    marginBottom: 2,
+  // Coloured icon overlay sits exactly on top of the idle icon so the
+  // active tint can fade in without re-rendering layout.
+  topTabIconOverlay: {
+    position: 'absolute',
+    top: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  topTabLabelImage: {
-    marginTop: 0,
+  topTabLabel: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
   },
   navToggle: {
     position: 'absolute',
@@ -848,6 +1242,12 @@ const styles = StyleSheet.create({
     top: -1,
     borderBottomLeftRadius: 3,
     borderBottomRightRadius: 3,
+  },
+  // Neutral idle look when closed and not being pressed — keeps the blue
+  // strictly tied to pressed/active states without changing the open visuals.
+  navToggleIdle: {
+    borderColor: '#9A9A9A',
+    backgroundColor: '#FFFFFF',
   },
   board: {
     flex: 1,
@@ -878,34 +1278,49 @@ const styles = StyleSheet.create({
   },
   folderLabel: {
     position: 'absolute',
-    left: 5,
-    right: 5,
-    top: 12,
+    left: 16,
+    right: 16,
+    top: 16,
     color: '#202020',
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '800',
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '600',
     textAlign: 'center',
   },
+  // Symbol mount sits below the label and centers the Mulberry pictogram.
+  // Top offset clears the label (16 + 24 line-height + a hair of breathing
+  // room) so glyph + label never overlap on the smallest 88×88 tile.
   symbolMount: {
     position: 'absolute',
     left: 0,
     right: 0,
-    top: 29,
-    bottom: 0,
+    top: 42,
+    bottom: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   wordTile: {
     position: 'relative',
   },
+  // Flat coloured fill behind the symbol/label. Rounded corners match the
+  // optical weight of the folder PNGs so word and folder tiles share a
+  // visual rhythm.
+  wordTileFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    borderRadius: 14,
+  },
+  // Typography mirrors `folderLabel` so words and folders read as one family.
   wordLabel: {
     position: 'absolute',
-    left: 5,
-    right: 5,
-    top: 10,
+    left: 16,
+    right: 16,
+    top: 16,
     color: '#202020',
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '800',
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '600',
     textAlign: 'center',
   },
   ghostOverlay: {
@@ -914,5 +1329,29 @@ const styles = StyleSheet.create({
   },
   ghostTile: {
     position: 'absolute',
+  },
+  navRow: {
+    flexDirection: 'row',
+    gap: TILE_GAP,
+    marginTop: TILE_GAP,
+  },
+  navTileShell: {
+    position: 'relative',
+    backgroundColor: '#E8EBED',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTileIconMount: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTileLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B555C',
+    textAlign: 'center',
+    paddingBottom: 6,
   },
 });

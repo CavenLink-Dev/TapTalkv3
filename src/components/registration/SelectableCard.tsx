@@ -71,16 +71,13 @@ export function SelectableCard({
       [colors.surface, '#EAF5FE'],
     );
     const scale = reduceMotion ? 1 : 1 - pressed.value * (1 - 0.98);
-    const shadowOpacity = reduceMotion ? 0 : 0.18 * selectedV.value;
+    // Design rule: no glow on selection — the border + tinted fill
+    // already communicate the state clearly.
     return {
       borderWidth,
       borderColor,
       backgroundColor: background,
       transform: [{ scale }],
-      shadowColor: colors.primary,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity,
-      shadowRadius: 16,
     };
   });
 

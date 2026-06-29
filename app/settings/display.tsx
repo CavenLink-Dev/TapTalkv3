@@ -45,11 +45,18 @@ export default function DisplaySettingsScreen() {
     dispatch({ type: 'SET_ACCESSIBILITY', payload: { highContrast: !highContrast } });
   }, [dispatch, highContrast]);
 
+  const { hapticsEnabled } = state.accessibility;
+  const toggleHaptics = useCallback(() => {
+    const next = !hapticsEnabled;
+    if (next) hapticSelection();
+    dispatch({ type: 'SET_ACCESSIBILITY', payload: { hapticsEnabled: next } });
+  }, [dispatch, hapticsEnabled]);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => { hapticSelection(); router.back(); }}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           style={styles.backButton}
@@ -60,7 +67,13 @@ export default function DisplaySettingsScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        bounces
+        alwaysBounceVertical
+        overScrollMode="always"
+      >
 
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>TEXT SIZE</Text>
@@ -132,6 +145,21 @@ export default function DisplaySettingsScreen() {
             </View>
             <View style={[styles.track, highContrast && styles.trackOn]}>
               <View style={[styles.thumb, highContrast && styles.thumbOn]} />
+            </View>
+          </Pressable>
+          <Pressable
+            onPress={toggleHaptics}
+            accessibilityRole="switch"
+            accessibilityLabel="Haptic feedback"
+            accessibilityState={{ checked: hapticsEnabled }}
+            style={[styles.toggleRow, { marginTop: 12 }]}
+          >
+            <View style={styles.toggleLeft}>
+              <Text style={styles.toggleTitle}>Haptic Feedback</Text>
+              <Text style={styles.toggleDesc}>Vibrate on button and tile taps.</Text>
+            </View>
+            <View style={[styles.track, hapticsEnabled && styles.trackOn]}>
+              <View style={[styles.thumb, hapticsEnabled && styles.thumbOn]} />
             </View>
           </Pressable>
         </Card>

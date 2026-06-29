@@ -1,0 +1,477 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  GestureResponderEvent,
+  ImageBackground,
+  PanResponder,
+  PanResponderGestureState,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Href, useRouter } from 'expo-router';
+import { Screen } from '../../src/components/native/Screen';
+import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { hapticSelection } from '../../src/utils/haptics';
+import {
+  ToolId,
+  toggleFavourite,
+  useFavouriteTools,
+} from '../../src/features/tools/favourites-store';
+import { setToolOrder, useToolOrder } from '../../src/features/tools/order-store';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
+
+type Tool = {
+  id: ToolId;
+  title: string;
+  subtitle: string;
+  tag: string;
+  accent: string;
+  accentBg: string;
+  image: number;
+  route: Href;
+};
+
+const TOOLS: Tool[] = [
+  {
+    id: 'calendar',
+    title: 'Calendar',
+    subtitle: 'Plan your day, step by step.',
+    tag: 'Plan',
+    accent: colors.primary,
+    accentBg: '#E6F4FD',
+    image: require('../../assets/tools/calendar.png'),
+    route: '/calendar' as Href,
+  },
+  {
+    id: 'step-by-step',
+    title: 'Step by Step',
+    subtitle: 'Show steps with pictures and timers.',
+    tag: 'Routine',
+    accent: '#7B61FF',
+    accentBg: '#EFEAFF',
+    image: require('../../assets/tools/step-by-step.png'),
+    route: '/first-then' as Href,
+  },
+  {
+    id: 'visual-timer',
+    title: 'Visual Timer',
+    subtitle: 'A calm countdown you can see.',
+    tag: 'Time',
+    accent: '#34C759',
+    accentBg: '#E6F8EB',
+    image: require('../../assets/tools/visual-timer.png'),
+    route: '/visual-timer' as Href,
+  },
+];
+
+const TOOL_BY_ID = new Map<ToolId, Tool>(TOOLS.map(tool => [tool.id, tool]));
+const CARD_GAP = spacing.sm;
+const CARD_HEIGHT = 214;
+
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  const next = [...items];
+  const [item] = next.splice(fromIndex, 1);
+  if (item === undefined) return items;
+  next.splice(toIndex, 0, item);
+  return next;
+}
+
+function ToolCard({
+  tool,
+  favourite,
+  showDragHandle,
+  dragging,
+  onOpen,
+  onRevealDragHandles,
+  onHideDragHandles,
+  onToggleStar,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+}: {
+  tool: Tool;
+  favourite: boolean;
+  showDragHandle: boolean;
+  dragging: boolean;
+  onOpen: () => void;
+  onRevealDragHandles: () => void;
+  onHideDragHandles: () => void;
+  onToggleStar: () => void;
+  onDragStart: () => void;
+  onDragMove: (gesture: PanResponderGestureState) => void;
+  onDragEnd: () => void;
+}) {
+  const starScale = useRef(new Animated.Value(1)).current;
+  const suppressOpenAfterLongPress = useRef(false);
+  const reduceMotion = useReduceMotion();
+  const panResponder = useMemo(
+    () => PanResponder.create({
+      onMoveShouldSetPanResponder: () => dragging,
+      onPanResponderMove: (_event, gesture) => onDragMove(gesture),
+      onPanResponderRelease: onDragEnd,
+      onPanResponderTerminate: onDragEnd,
+    }),
+    [dragging, onDragEnd, onDragMove],
+  );
+
+  useEffect(() => {
+    if (reduceMotion) {
+      starScale.setValue(1);
+      return;
+    }
+    Animated.sequence([
+      Animated.spring(starScale, {
+        toValue: 1.18,
+        useNativeDriver: true,
+        speed: 28,
+        bounciness: 12,
+      }),
+      Animated.spring(starScale, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 22,
+        bounciness: 8,
+      }),
+    ]).start();
+  }, [favourite, reduceMotion, starScale]);
+
+  const startDrag = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+    hapticSelection();
+    onDragStart();
+  };
+
+  const revealDragHandles = () => {
+    suppressOpenAfterLongPress.current = true;
+    hapticSelection();
+    onRevealDragHandles();
+  };
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${tool.title}. ${tool.subtitle}`}
+      accessibilityHint={showDragHandle ? 'Use the menu handle on the left to reorder this tool.' : 'Press and hold to show reorder handles.'}
+      onLongPress={revealDragHandles}
+      delayLongPress={240}
+      onPress={() => {
+        if (suppressOpenAfterLongPress.current) {
+          suppressOpenAfterLongPress.current = false;
+          return;
+        }
+        if (showDragHandle) {
+          hapticSelection();
+          onHideDragHandles();
+          return;
+        }
+        hapticSelection();
+        onOpen();
+      }}
+      style={({ pressed }) => [
+        styles.card,
+        dragging && styles.cardDragging,
+        pressed && !dragging && styles.cardPressed,
+      ]}
+    >
+      <ImageBackground
+        source={tool.image}
+        style={[styles.cardHero, { backgroundColor: tool.accentBg }]}
+        imageStyle={styles.cardHeroImage}
+        resizeMode="cover"
+      />
+
+      <View style={styles.cardBody}>
+        <View style={styles.cardContentRow}>
+          {showDragHandle ? (
+            <Pressable
+              onLongPress={startDrag}
+              delayLongPress={180}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={`Hold and drag to reorder ${tool.title}`}
+              style={[styles.iconButton, styles.dragHandle]}
+              {...panResponder.panHandlers}
+            >
+              <Ionicons name="menu" size={25} color={dragging ? tool.accent : colors.textMuted} />
+            </Pressable>
+          ) : null}
+
+          <View style={styles.copy}>
+            <View style={[styles.tag, { backgroundColor: tool.accentBg }]}>
+              <Text style={[styles.tagText, { color: tool.accent }]}>
+                {tool.tag}
+              </Text>
+            </View>
+            <Text style={styles.name}>{tool.title}</Text>
+            <Text style={styles.description} numberOfLines={2}>
+              {tool.subtitle}
+            </Text>
+          </View>
+
+          <View style={styles.actions}>
+            <Pressable
+              onPress={(event) => {
+                event.stopPropagation();
+                hapticSelection();
+                if (showDragHandle) {
+                  onHideDragHandles();
+                }
+                onToggleStar();
+              }}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={favourite ? `Remove ${tool.title} from favourites` : `Add ${tool.title} to favourites`}
+              accessibilityState={{ selected: favourite }}
+              style={[styles.iconButton, styles.starButton]}
+            >
+              <Animated.View style={{ transform: [{ scale: starScale }] }}>
+                <Ionicons
+                  name={favourite ? 'star' : 'star-outline'}
+                  size={24}
+                  color={favourite ? '#F5B400' : colors.textTertiary}
+                />
+              </Animated.View>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function SectionHeader({ icon, label }: { icon?: React.ComponentProps<typeof Ionicons>['name']; label: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      {icon ? <Ionicons name={icon} size={15} color="#F5B400" /> : null}
+      <Text style={styles.sectionTitle}>{label}</Text>
+    </View>
+  );
+}
+
+export default function ToolsScreen() {
+  const router = useRouter();
+  const favs = useFavouriteTools();
+  const savedOrder = useToolOrder();
+  const [showDragHandles, setShowDragHandles] = useState(false);
+  const [draftOrder, setDraftOrder] = useState<ToolId[] | null>(null);
+  const [draggingId, setDraggingId] = useState<ToolId | null>(null);
+  const dragStartIndex = useRef(0);
+  const draftOrderRef = useRef<ToolId[] | null>(null);
+  const draggingIdRef = useRef<ToolId | null>(null);
+
+  const orderedIds = draftOrder ?? savedOrder;
+  const orderedTools = orderedIds
+    .map(id => TOOL_BY_ID.get(id))
+    .filter((tool): tool is Tool => Boolean(tool));
+  const favouriteTools = orderedTools.filter(tool => favs.includes(tool.id));
+  const regularTools = orderedTools.filter(tool => !favs.includes(tool.id));
+  const visibleIds = [...favouriteTools, ...regularTools].map(tool => tool.id);
+
+  const open = (tool: Tool) => {
+    hapticSelection();
+    router.push(tool.route);
+  };
+
+  const startDrag = (toolId: ToolId) => {
+    dragStartIndex.current = visibleIds.indexOf(toolId);
+    draftOrderRef.current = visibleIds;
+    draggingIdRef.current = toolId;
+    setDraftOrder(visibleIds);
+    setDraggingId(toolId);
+  };
+
+  const moveDraggedTool = (gesture: PanResponderGestureState) => {
+    const activeDraggingId = draggingIdRef.current;
+    if (!activeDraggingId) return;
+
+    const currentOrder = draftOrderRef.current ?? visibleIds;
+    const fromIndex = currentOrder.indexOf(activeDraggingId);
+    if (fromIndex < 0) return;
+
+    const startIndex = dragStartIndex.current;
+    const rowHeight = CARD_HEIGHT + CARD_GAP;
+    const nextIndex = Math.max(
+      0,
+      Math.min(
+        currentOrder.length - 1,
+        startIndex + Math.round(gesture.dy / rowHeight),
+      ),
+    );
+
+    if (nextIndex !== fromIndex) {
+      hapticSelection();
+      const nextOrder = moveItem(currentOrder, fromIndex, nextIndex);
+      draftOrderRef.current = nextOrder;
+      setDraftOrder(nextOrder);
+    }
+  };
+
+  const endDrag = () => {
+    if (draftOrderRef.current) {
+      setToolOrder(draftOrderRef.current);
+    }
+    draftOrderRef.current = null;
+    draggingIdRef.current = null;
+    setDraggingId(null);
+    setDraftOrder(null);
+  };
+
+  return (
+    <Screen
+      title="Tools"
+      subtitle={showDragHandles ? 'Hold a left menu handle and drag up or down to reorder.' : 'Tap a tool to open it. Press and hold a tool to organise.'}
+    >
+      {favouriteTools.length > 0 ? (
+        <View style={styles.section}>
+          <SectionHeader icon="star" label="Favourites" />
+          <View style={styles.list}>
+            {favouriteTools.map(tool => (
+              <ToolCard
+                key={tool.id}
+                tool={tool}
+                favourite={favs.includes(tool.id)}
+                showDragHandle={showDragHandles}
+                dragging={draggingId === tool.id}
+                onOpen={() => open(tool)}
+                onRevealDragHandles={() => setShowDragHandles(true)}
+                onHideDragHandles={() => setShowDragHandles(false)}
+                onToggleStar={() => toggleFavourite(tool.id)}
+                onDragStart={() => startDrag(tool.id)}
+                onDragMove={moveDraggedTool}
+                onDragEnd={endDrag}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {regularTools.length > 0 ? (
+        <View style={styles.section}>
+          {favouriteTools.length > 0 ? <SectionHeader label="Tools" /> : null}
+          <View style={styles.list}>
+            {regularTools.map(tool => (
+              <ToolCard
+                key={tool.id}
+                tool={tool}
+                favourite={favs.includes(tool.id)}
+                showDragHandle={showDragHandles}
+                dragging={draggingId === tool.id}
+                onOpen={() => open(tool)}
+                onRevealDragHandles={() => setShowDragHandles(true)}
+                onHideDragHandles={() => setShowDragHandles(false)}
+                onToggleStar={() => toggleFavourite(tool.id)}
+                onDragStart={() => startDrag(tool.id)}
+                onDragMove={moveDraggedTool}
+                onDragEnd={endDrag}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  list: {
+    gap: CARD_GAP,
+  },
+  card: {
+    height: CARD_HEIGHT,
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    overflow: 'hidden',
+  },
+  cardPressed: {
+    opacity: 0.88,
+  },
+  cardDragging: {
+    opacity: 0.82,
+    transform: [{ scale: 0.985 }],
+  },
+  cardHero: {
+    height: 112,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardHeroImage: {
+    borderTopLeftRadius: radii.card,
+    borderTopRightRadius: radii.card,
+  },
+  cardBody: {
+    padding: spacing.md,
+    gap: 4,
+  },
+  cardContentRow: {
+    minHeight: 62,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  copy: {
+    flex: 1,
+    gap: 4,
+  },
+  tag: {
+    alignSelf: 'flex-start',
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  tagText: {
+    fontSize: typography.eyebrow,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  iconButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dragHandle: {
+    borderRadius: 22,
+    backgroundColor: colors.inputBg,
+  },
+  starButton: {
+    borderRadius: 22,
+  },
+  section: {
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  sectionHeader: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.xs,
+  },
+  sectionTitle: {
+    fontSize: typography.caption,
+    fontWeight: '800',
+    color: colors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  name: {
+    fontSize: typography.body,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.2,
+  },
+  description: {
+    fontSize: typography.caption,
+    color: colors.textMuted,
+    lineHeight: 17,
+  },
+});

@@ -19,6 +19,7 @@
           "sounds": []
         }
       ],
+      "expo-audio",
       "expo-asset",
       "expo-sqlite"
     ],
