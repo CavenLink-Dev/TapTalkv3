@@ -48,7 +48,7 @@ export default function VoiceSettingsScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => { hapticSelection(); router.back(); }}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           style={styles.backButton}
@@ -59,7 +59,13 @@ export default function VoiceSettingsScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        bounces
+        alwaysBounceVertical
+        overScrollMode="always"
+      >
 
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>SPEECH RATE</Text>

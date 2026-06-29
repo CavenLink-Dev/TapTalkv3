@@ -109,7 +109,7 @@ export default function RegStep3Contact() {
               </Text>
               <TextField
                 accessibilityLabel={isGuardianFlow ? 'Guardian full name' : 'Your full name'}
-                placeholder="Full name"
+                placeholder="e.g. Alex Smith"
                 autoCapitalize="words"
                 value={data.guardianName}
                 onChangeText={(t) => update({ guardianName: t })}

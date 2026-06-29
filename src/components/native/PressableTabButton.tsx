@@ -5,6 +5,8 @@
 
 import React, { useCallback, useRef } from 'react';
 import { Animated, GestureResponderEvent, Pressable, StyleProp, ViewStyle } from 'react-native';
+import { hapticSelection } from '../../utils/haptics';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 
 interface TabButtonProps {
   children?: React.ReactNode;
@@ -26,24 +28,31 @@ export function PressableTabButton({
   accessibilityState,
 }: TabButtonProps) {
   const scale = useRef(new Animated.Value(1)).current;
+  const reduceMotion = useReduceMotion();
 
   const handlePressIn = useCallback(() => {
+    hapticSelection();
+    if (reduceMotion) return;
     Animated.spring(scale, {
       toValue: 0.82,
       speed: 60,
       bounciness: 0,
       useNativeDriver: true,
     }).start();
-  }, [scale]);
+  }, [reduceMotion, scale]);
 
   const handlePressOut = useCallback(() => {
+    if (reduceMotion) {
+      scale.setValue(1);
+      return;
+    }
     Animated.spring(scale, {
       toValue: 1,
       speed: 18,
       bounciness: 10,
       useNativeDriver: true,
     }).start();
-  }, [scale]);
+  }, [reduceMotion, scale]);
 
   return (
     <Pressable
