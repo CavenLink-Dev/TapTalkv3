@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-06-30T08:42:02.042Z",
+  "sampled": 200,
+  "missing": 0,
+  "occupancy": {
+    "mean": 0.862,
+    "stddev": 0,
+    "min": 0.862,
+    "max": 0.862
+  },
+  "tooSmallExamples": [],
+  "tooLargeExamples": [],
+  "targetsHit": {
+    "meanGte70": true,
+    "stddevLte06": true,
+    "noneBelow55": true,
+    "noneAbove95": true
+  }
+}

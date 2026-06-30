@@ -1,0 +1,482 @@
+{
+  "generatedAt": "2026-06-30T08:40:16.987Z",
+  "total": 3436,
+  "normalised": 3421,
+  "preserved": 15,
+  "flaggedForReview": [
+    {
+      "file": "ask_,_to.svg",
+      "areaRatio": 0.457
+    },
+    {
+      "file": "bite_,_to.svg",
+      "areaRatio": 0.433
+    },
+    {
+      "file": "blow_,_to.svg",
+      "areaRatio": 0.471
+    },
+    {
+      "file": "blow_kiss_,_to.svg",
+      "areaRatio": 0.351
+    },
+    {
+      "file": "bring_,_to.svg",
+      "areaRatio": 0.348
+    },
+    {
+      "file": "carry_,_to.svg",
+      "areaRatio": 0.35
+    },
+    {
+      "file": "catch_2_,_to.svg",
+      "areaRatio": 0.351
+    },
+    {
+      "file": "change_,_to.svg",
+      "areaRatio": 0.356
+    },
+    {
+      "file": "chew_,_to.svg",
+      "areaRatio": 0.485
+    },
+    {
+      "file": "choke_,_to.svg",
+      "areaRatio": 0.44
+    },
+    {
+      "file": "climb_down_,_to.svg",
+      "areaRatio": 0.474
+    },
+    {
+      "file": "climb_tree_,_to.svg",
+      "areaRatio": 0.435
+    },
+    {
+      "file": "close_door_,_to.svg",
+      "areaRatio": 0.476
+    },
+    {
+      "file": "come_,_to.svg",
+      "areaRatio": 0.469
+    },
+    {
+      "file": "copy_,_to.svg",
+      "areaRatio": 0.392
+    },
+    {
+      "file": "count_,_to.svg",
+      "areaRatio": 0.172
+    },
+    {
+      "file": "crawl_,_to.svg",
+      "areaRatio": 0.317
+    },
+    {
+      "file": "cream.svg",
+      "areaRatio": 0.02
+    },
+    {
+      "file": "cross_fingers_,_to.svg",
+      "areaRatio": 0.294
+    },
+    {
+      "file": "crouch_,_to.svg",
+      "areaRatio": 0.403
+    },
+    {
+      "file": "crumple_paper_,_to.svg",
+      "areaRatio": 0.489
+    },
+    {
+      "file": "cut_,_to.svg",
+      "areaRatio": 0.199
+    },
+    {
+      "file": "cut_with_scissors_,_to.svg",
+      "areaRatio": 0.372
+    },
+    {
+      "file": "dance_2_,_to.svg",
+      "areaRatio": 0.447
+    },
+    {
+      "file": "decorate_,_to.svg",
+      "areaRatio": 0.347
+    },
+    {
+      "file": "die_,_to.svg",
+      "areaRatio": 0.234
+    },
+    {
+      "file": "dig_,_to.svg",
+      "areaRatio": 0.459
+    },
+    {
+      "file": "drip_,_to.svg",
+      "areaRatio": 0.491
+    },
+    {
+      "file": "fasten_,_to.svg",
+      "areaRatio": 0.186
+    },
+    {
+      "file": "feed_someone_,_to.svg",
+      "areaRatio": 0.429
+    },
+    {
+      "file": "feed_someone_2_,_to.svg",
+      "areaRatio": 0.444
+    },
+    {
+      "file": "flip_coin_,_to.svg",
+      "areaRatio": 0.468
+    },
+    {
+      "file": "forward_wind.svg",
+      "areaRatio": 0.401
+    },
+    {
+      "file": "get_,_to.svg",
+      "areaRatio": 0.316
+    },
+    {
+      "file": "get_off_bus_,_to.svg",
+      "areaRatio": 0.355
+    },
+    {
+      "file": "get_on_bus_,_to.svg",
+      "areaRatio": 0.354
+    },
+    {
+      "file": "get_up_,_to.svg",
+      "areaRatio": 0.411
+    },
+    {
+      "file": "get_up_2_,_to.svg",
+      "areaRatio": 0.461
+    },
+    {
+      "file": "give_,_to.svg",
+      "areaRatio": 0.423
+    },
+    {
+      "file": "go_in_,_to.svg",
+      "areaRatio": 0.362
+    },
+    {
+      "file": "go_out_2_,_to.svg",
+      "areaRatio": 0.362
+    },
+    {
+      "file": "grab_,_to.svg",
+      "areaRatio": 0.364
+    },
+    {
+      "file": "grab_1_,_to.svg",
+      "areaRatio": 0.439
+    },
+    {
+      "file": "hang_coat_,_to.svg",
+      "areaRatio": 0.348
+    },
+    {
+      "file": "help_,_to.svg",
+      "areaRatio": 0.371
+    },
+    {
+      "file": "hike_,_to.svg",
+      "areaRatio": 0.467
+    },
+    {
+      "file": "hold_,_to.svg",
+      "areaRatio": 0.442
+    },
+    {
+      "file": "hold_hands_,_to.svg",
+      "areaRatio": 0.438
+    },
+    {
+      "file": "insert_,_to.svg",
+      "areaRatio": 0.367
+    },
+    {
+      "file": "jog_,_to.svg",
+      "areaRatio": 0.496
+    },
+    {
+      "file": "join_3.svg",
+      "areaRatio": 0.498
+    },
+    {
+      "file": "keep_,_to.svg",
+      "areaRatio": 0.334
+    },
+    {
+      "file": "kick_swimming_,_to.svg",
+      "areaRatio": 0.426
+    },
+    {
+      "file": "knit_,_to.svg",
+      "areaRatio": 0.401
+    },
+    {
+      "file": "lie_on_back_,_to.svg",
+      "areaRatio": 0.328
+    },
+    {
+      "file": "look_,_to.svg",
+      "areaRatio": 0.421
+    },
+    {
+      "file": "miss_bus_,_to.svg",
+      "areaRatio": 0.447
+    },
+    {
+      "file": "nod_,_to.svg",
+      "areaRatio": 0.472
+    },
+    {
+      "file": "open_door_,_to.svg",
+      "areaRatio": 0.494
+    },
+    {
+      "file": "open_door_1_,_to.svg",
+      "areaRatio": 0.364
+    },
+    {
+      "file": "pack_suitcase_,_to.svg",
+      "areaRatio": 0.496
+    },
+    {
+      "file": "park_,_to.svg",
+      "areaRatio": 0.482
+    },
+    {
+      "file": "plough_,_to.svg",
+      "areaRatio": 0.342
+    },
+    {
+      "file": "pray_2_,_to.svg",
+      "areaRatio": 0.336
+    },
+    {
+      "file": "press_button_,_to.svg",
+      "areaRatio": 0.482
+    },
+    {
+      "file": "put_away_,_to.svg",
+      "areaRatio": 0.47
+    },
+    {
+      "file": "put_on_helmet_,_to.svg",
+      "areaRatio": 0.488
+    },
+    {
+      "file": "raise_feet_,_to.svg",
+      "areaRatio": 0.3
+    },
+    {
+      "file": "rake_2_,_to.svg",
+      "areaRatio": 0.476
+    },
+    {
+      "file": "receive_email_,_to.svg",
+      "areaRatio": 0.316
+    },
+    {
+      "file": "relax_,_to.svg",
+      "areaRatio": 0.42
+    },
+    {
+      "file": "remove_,_to.svg",
+      "areaRatio": 0.361
+    },
+    {
+      "file": "return_,_to.svg",
+      "areaRatio": 0.371
+    },
+    {
+      "file": "rewind.svg",
+      "areaRatio": 0.424
+    },
+    {
+      "file": "ride_car_,_to.svg",
+      "areaRatio": 0.449
+    },
+    {
+      "file": "ring_bell_,_to.svg",
+      "areaRatio": 0.459
+    },
+    {
+      "file": "ring_doorbell_,_to.svg",
+      "areaRatio": 0.486
+    },
+    {
+      "file": "rub_,_to.svg",
+      "areaRatio": 0.304
+    },
+    {
+      "file": "separate_,_to.svg",
+      "areaRatio": 0.248
+    },
+    {
+      "file": "shake_,_to.svg",
+      "areaRatio": 0.493
+    },
+    {
+      "file": "share_,_to.svg",
+      "areaRatio": 0.413
+    },
+    {
+      "file": "shoot_,_to.svg",
+      "areaRatio": 0.476
+    },
+    {
+      "file": "sink_2_,_to.svg",
+      "areaRatio": 0.402
+    },
+    {
+      "file": "sit_,_to.svg",
+      "areaRatio": 0.458
+    },
+    {
+      "file": "sit_2_,_to.svg",
+      "areaRatio": 0.456
+    },
+    {
+      "file": "sleep_on_side_,_to.svg",
+      "areaRatio": 0.415
+    },
+    {
+      "file": "slide_backwards_,_to.svg",
+      "areaRatio": 0.483
+    },
+    {
+      "file": "smile_,_to.svg",
+      "areaRatio": 0.382
+    },
+    {
+      "file": "sneak_,_to.svg",
+      "areaRatio": 0.309
+    },
+    {
+      "file": "sour_cream.svg",
+      "areaRatio": 0.021
+    },
+    {
+      "file": "spell_,_to.svg",
+      "areaRatio": 0.38
+    },
+    {
+      "file": "stamp_,_to.svg",
+      "areaRatio": 0.458
+    },
+    {
+      "file": "stand_,_to.svg",
+      "areaRatio": 0.295
+    },
+    {
+      "file": "stretch_,_to.svg",
+      "areaRatio": 0.379
+    },
+    {
+      "file": "stroke_2_,_to.svg",
+      "areaRatio": 0.48
+    },
+    {
+      "file": "swim_2_,_to.svg",
+      "areaRatio": 0.278
+    },
+    {
+      "file": "talk_3_,_to.svg",
+      "areaRatio": 0.362
+    },
+    {
+      "file": "telephone_mobile_,_to.svg",
+      "areaRatio": 0.434
+    },
+    {
+      "file": "telephone_mobile_2_,_to.svg",
+      "areaRatio": 0.418
+    },
+    {
+      "file": "tie_,_to.svg",
+      "areaRatio": 0.458
+    },
+    {
+      "file": "touch_,_to.svg",
+      "areaRatio": 0.343
+    },
+    {
+      "file": "transport_car_,_to.svg",
+      "areaRatio": 0.264
+    },
+    {
+      "file": "type_,_to.svg",
+      "areaRatio": 0.394
+    },
+    {
+      "file": "unbutton_2_,_to.svg",
+      "areaRatio": 0.485
+    },
+    {
+      "file": "unlock_,_to.svg",
+      "areaRatio": 0.278
+    },
+    {
+      "file": "vomit_2_,_to.svg",
+      "areaRatio": 0.369
+    },
+    {
+      "file": "wait_,_to.svg",
+      "areaRatio": 0.438
+    },
+    {
+      "file": "walk_,_to.svg",
+      "areaRatio": 0.342
+    },
+    {
+      "file": "walk_downstairs_,_to.svg",
+      "areaRatio": 0.439
+    },
+    {
+      "file": "watch_,_to.svg",
+      "areaRatio": 0.23
+    },
+    {
+      "file": "wiggle_,_to.svg",
+      "areaRatio": 0.382
+    },
+    {
+      "file": "yawn_,_to.svg",
+      "areaRatio": 0.414
+    }
+  ],
+  "failedBbox": [],
+  "bboxBackend": "builtin",
+  "paddingFraction": 0.08,
+  "squareSide": 100,
+  "doNotTrimList": [
+    "above.svg",
+    "below.svg",
+    "across.svg",
+    "after.svg",
+    "against.svg",
+    "ahead.svg",
+    "behind.svg",
+    "beside.svg",
+    "between.svg",
+    "inside.svg",
+    "outside.svg",
+    "top.svg",
+    "bottom.svg",
+    "left.svg",
+    "right.svg",
+    "centre.svg",
+    "middle.svg",
+    "corner.svg",
+    "over.svg",
+    "under.svg"
+  ]
+}

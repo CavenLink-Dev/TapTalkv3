@@ -9,6 +9,11 @@
     "android": "expo run:android",
     "web": "expo start --web",
     "import:mulberry": "tsx scripts/importMulberry.ts",
+    "normalise:mulberry": "tsx scripts/normaliseMulberrySvg.ts",
+    "build:exemplars": "tsx scripts/buildCategoryExemplars.ts",
+    "audit:coverage": "tsx scripts/auditSymbolCoverage.ts",
+    "audit:uniformity": "tsx scripts/auditSymbolUniformity.ts",
+    "build:symbols": "npm run import:mulberry && npm run normalise:mulberry && npm run build:exemplars",
     "typecheck": "tsc --noEmit",
     "test": "jest"
   },

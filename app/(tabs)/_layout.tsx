@@ -3,7 +3,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { BottomNavIcon, BottomNavIconName } from '../../src/components/icons/BottomNavIcon';
 import { PressableTabButton } from '../../src/components/native/PressableTabButton';
-import { colors, typography } from '../../src/theme/tokens';
+import { colors } from '../../src/theme/tokens';
 
 function icon(name: BottomNavIconName) {
   return ({ focused }: { focused: boolean }) => (
@@ -16,9 +16,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: true,
-        tabBarLabelPosition: 'below-icon',
-        tabBarLabelStyle: styles.tabBarLabel,
+        tabBarShowLabel: false,
         tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
@@ -66,8 +64,8 @@ const styles = StyleSheet.create({
   // Taller bar gives the bigger icons room to breathe + a more forgiving
   // tap zone for users with motor differences.
   tabBar: {
-    height: 100,
-    paddingTop: 10,
+    height: 82,
+    paddingTop: 12,
     paddingBottom: 22,
     backgroundColor: colors.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -76,11 +74,5 @@ const styles = StyleSheet.create({
   tabBarItem: {
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  tabBarLabel: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.tab,
-    lineHeight: 12,
-    marginTop: 2,
   },
 });

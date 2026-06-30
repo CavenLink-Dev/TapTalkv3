@@ -1,0 +1,29 @@
+{
+  "_comment": "Hand-picked exemplar symbols for high-value fallback categories. Keys are the Mulberry category-en string exactly as it appears in symbol-info.csv. Values are the Mulberry display_name (filename without .svg) — the build script resolves this to a SymbolItem.id. Anything not listed here uses the auto-picked exemplar (highest aac_priority, shortest name).",
+  "exemplars": {
+    "People Feelings": "happy_man",
+    "People Profession": "person",
+    "Food Nuts": "almond",
+    "Food Vegetables": "apple",
+    "Food Drinks": "drink",
+    "Healthcare Body parts": "body",
+    "Healthcare Medical conditions": "sick",
+    "Healthcare Grooming items": "soap",
+    "Religion Festival": "calendar",
+    "Religion Person": "person",
+    "Religion General": "church",
+    "Descriptive Position": "above",
+    "Descriptive Direction": "across",
+    "Descriptive State": "happy",
+    "Descriptive Time": "clock",
+    "Transport Air": "aeroplane",
+    "Transport Road": "car",
+    "Sport": "ball",
+    "Leisure Toys": "ball",
+    "Plants and Trees": "tree",
+    "Number Activity": "number",
+    "Electrical TV": "tv",
+    "Alphabet": "A",
+    "Uncategorised": "what"
+  }
+}

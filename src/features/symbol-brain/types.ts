@@ -87,6 +87,18 @@ export interface SearchContext {
   age_level?: AgeLevel;
   childMode?: boolean;
   allowSensitive?: boolean;
+  /**
+   * Other tokens in the surrounding sentence/utterance. Used by the scorer to
+   * boost candidates whose category overlaps with the inferred sentence
+   * domain — disambiguates "bat" (animal vs sport), "bank" (river vs money).
+   */
+  sentenceTokens?: string[];
+  /**
+   * Optional explicit board domain (e.g. "school", "medical", "leisure").
+   * When set, candidates whose category contains this string get a small
+   * scoring nudge.
+   */
+  domain?: string;
 }
 
 export interface CandidateScoreParts {
@@ -97,6 +109,8 @@ export interface CandidateScoreParts {
   aacPriority: number;
   userHistory: number;
   safetyAgeLocaleFit: number;
+  /** 0..1 boost when the candidate's category overlaps the surrounding sentence's inferred categories. */
+  contextCategoryBoost: number;
 }
 
 export interface SymbolCandidate {

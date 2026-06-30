@@ -132,8 +132,19 @@
 **Reasoning:** Toolbars hold actions connected to the current view.
 
 ### 30. Keep the final experience calm and predictable
+
 **Guideline:** The app should feel clean, stable, low-effort, and easy to understand. Avoid surprise interactions, overloaded screens, and unnecessary visual noise.
 **Reasoning:** The supported interaction patterns point toward clear structure, controlled disclosure, direct actions, accessible settings, and predictable state changes.
+
+**Accessibility Requirements:**
+You should ensure that every text element uses either SF Pro or SF Pro Rounded. Implement adaptive layout with Auto Layout constraints, support Dynamic Type for scalable fonts, ensure VoiceOver labels and accessibility traits are set, use native controls for consistent gestures (e.g., swipe-back navigation), provide haptic feedback on key actions, and ensure minimum touch target sizes (e.g., 44x44 points). Implement spring animations for element transitions (e.g., when buttons or cards slide into place, let them subtly “settle"). Use opacity changes on interactive elements, such as a brief dim or fade when a button is pressed. Integrate contextual menu previews via a long press, showing a peek at content or options. Ensure all essential content is reachable and actionable without fine motor precision — think larger interactive areas for key actions. Those guidelines widen accessibility coverage substantially. Ensure the app uses large, bold header text at the top of main screens to clearly identify each section. Implement a bottom tab bar for core navigation, ensuring it is always accessible. Integrate “pull to refresh” for lists, and use contextual suggestions where appropriate to guide the user.
+
+Use opacity changes on interactive elements, such as a brief dim or fade when a button is pressed.
+
+Integrate contextual menu previews via a long press, showing a peek at content or options. 
+
+Ensure all essential content is reachable and actionable without fine motor precision think larger interactive areas for key actions. Those guidelines widen accessibility coverage substantially.
+Ensure the app uses large, bold header text at the top of main screens to clearly identify each section. Implement a bottom tab bar for core navigation, ensuring it is always accessible. Integrate “pull to refresh” for lists, and use contextual suggestions where appropriate to guide the user.
 
 ---
 

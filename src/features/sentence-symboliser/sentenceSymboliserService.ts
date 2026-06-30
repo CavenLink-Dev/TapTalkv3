@@ -15,7 +15,16 @@ export async function symboliseSentence(
 ): Promise<SymbolisedToken[]> {
   const tokens = keepAACImportantWords(sentence);
   const rows = await Promise.all(tokens.map(async (token) => {
-    const matches = await searchSymbols(token, userId, context);
+    // Pass every OTHER token in the sentence as context so the scorer can
+    // boost candidates whose category overlaps the inferred sentence domain.
+    // This is what makes ambiguous words ("bat" — animal vs sport,
+    // "bank" — river vs money) resolve sensibly.
+    const sentenceTokens = tokens.filter(t => t !== token);
+    const tokenContext: Partial<SearchContext> = {
+      ...context,
+      sentenceTokens: [...(context.sentenceTokens ?? []), ...sentenceTokens],
+    };
+    const matches = await searchSymbols(token, userId, tokenContext);
     return {
       token,
       best: matches[0] ?? null,

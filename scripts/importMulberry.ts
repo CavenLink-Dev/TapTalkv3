@@ -106,19 +106,69 @@ const AU_ALIASES: Record<string, string[]> = {
 };
 
 const MANUAL_ALIASES: Record<string, string[]> = {
+  // Social / greetings
   hello: ['hi', 'hey', 'greetings', 'good morning'],
   goodbye: ['bye', 'see you'],
   help: ['support', 'assist', 'need help'],
+
+  // Feelings
   happy: ['glad', 'pleased'],
   sad: ['unhappy', 'upset'],
   sick: ['unwell', 'ill'],
+  scared: ['afraid', 'frightened'],
+  excited: ['thrilled'],
+  tired: ['sleepy', 'exhausted'],
+
+  // Places & home
   toilet: ['bathroom', 'loo', 'wee'],
+  home: ['house'],
+
+  // People / pronouns — Mulberry doesn't ship standalone pronouns, so we
+  // alias them onto the generic "person" symbol. This keeps high-frequency
+  // AAC pronouns out of the unknown bucket without inventing a new glyph.
   mother: ['mum', 'mummy'],
   father: ['dad', 'daddy'],
+  person: [
+    'i', 'me', 'my', 'mine', 'myself',
+    'you', 'your', 'yours',
+    'he', 'him', 'his',
+    'she', 'her', 'hers',
+    'we', 'us', 'our', 'ours',
+    'they', 'them', 'their', 'theirs',
+    'someone', 'anyone',
+  ],
+  friend: ['mate', 'buddy', 'pal'],
+
+  // Verbs / requests
   eat: ['hungry', 'food'],
   drink: ['thirsty'],
-  yes: ['yeah', 'yep'],
-  no: ['nope'],
+  want: ['need', 'wish'],
+  go: ['leave', 'depart'],
+  come: ['arrive'],
+  finished: ['done', 'over', 'complete'],
+  again: ['repeat', 'more time'],
+
+  // Yes/no
+  yes: ['yeah', 'yep', 'okay', 'ok'],
+  no: ['nope', 'nah'],
+
+  // Question words — answer-the-question shorthand
+  what: ['which', 'huh'],
+  where: ['location'],
+  when: ['time'],
+  why: ['reason'],
+  who: ['person'],
+  how: ['method'],
+
+  // Quantity
+  more: ['plus', 'extra', 'another'],
+
+  // Connectors — alias onto helpful glyphs where possible
+  and: ['plus'],
+  but: ['however'],
+
+  // Numbers (digit words → number symbol)
+  number: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'],
 };
 
 const CORE_WORDS = new Set([
@@ -448,6 +498,19 @@ async function main() {
   };
 
   await fs.writeFile(path.join(IMPORT_DIR, 'seed.json'), JSON.stringify(seed, null, 2));
+  // Prefer the normalised SVG for each symbol when present; fall back to the
+  // raw import so the build still works before `npm run normalise:mulberry`
+  // has been run. The normalised folder is what gives every glyph a uniform
+  // visual frame on the AAC board.
+  const NORMALISED_DIR = path.join(ROOT, 'src', 'assets', 'symbols', 'mulberry', 'svg-normalised');
+  let normalisedFiles = new Set<string>();
+  try {
+    normalisedFiles = new Set(
+      (await fs.readdir(NORMALISED_DIR)).filter(file => file.toLowerCase().endsWith('.svg')),
+    );
+  } catch {
+    // normalisation not yet run — every symbol will resolve to the raw svg.
+  }
   await fs.writeFile(
     path.join(ROOT, 'src', 'data', 'mulberryAssetMap.generated.ts'),
     [
@@ -458,7 +521,10 @@ async function main() {
       'export const MULBERRY_ASSET_MAP: Record<string, number> = {',
       ...symbols.map(symbol => {
         const filename = path.basename(symbol.file_path);
-        return `  ${JSON.stringify(symbol.id)}: require(${JSON.stringify(`../assets/symbols/mulberry/svg/${filename}`)}),`;
+        const folder = normalisedFiles.has(filename)
+          ? 'svg-normalised'
+          : 'svg';
+        return `  ${JSON.stringify(symbol.id)}: require(${JSON.stringify(`../assets/symbols/mulberry/${folder}/${filename}`)}),`;
       }),
       '};',
       '',

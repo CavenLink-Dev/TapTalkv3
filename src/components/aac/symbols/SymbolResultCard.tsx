@@ -2,13 +2,24 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, shadows, symbolColors } from '../../../theme/tokens';
 import { SearchResult } from '../../../features/symbol-brain/types';
+import { ResolveTier } from '../../../features/symbol-brain/resolveSymbolForKeyword';
 import { MulberrySymbol } from './MulberrySymbol';
 
 type Props = {
   result: SearchResult;
   onPress?: (result: SearchResult) => void;
   compact?: boolean;
+  /**
+   * Optional fallback tier. When 'fuzzy', 'semantic', 'category' or 'unknown',
+   * the card renders a subtle dashed border + "≈" prefix so the user knows
+   * this is an approximate match — without making it look broken.
+   */
+  tier?: ResolveTier;
 };
+
+function isFallbackTier(tier?: ResolveTier): boolean {
+  return tier === 'fuzzy' || tier === 'semantic' || tier === 'category' || tier === 'unknown';
+}
 
 function colourForConcept(result: SearchResult) {
   switch (result.concept.concept_type) {
@@ -23,12 +34,17 @@ function colourForConcept(result: SearchResult) {
   }
 }
 
-export function SymbolResultCard({ result, onPress, compact }: Props) {
+export function SymbolResultCard({ result, onPress, compact, tier }: Props) {
   const bg = colourForConcept(result);
+  const fallback = isFallbackTier(tier);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${result.symbol.display_name}, ${result.confidence} confidence`}
+      accessibilityLabel={
+        fallback
+          ? `${result.symbol.display_name}, approximate match, ${result.confidence} confidence`
+          : `${result.symbol.display_name}, ${result.confidence} confidence`
+      }
       accessibilityHint="Select this symbol suggestion"
       onPress={() => onPress?.(result)}
       style={[
@@ -36,12 +52,15 @@ export function SymbolResultCard({ result, onPress, compact }: Props) {
         compact && styles.cardCompact,
         { backgroundColor: bg },
         shadows.card,
+        fallback && styles.cardFallback,
       ]}
     >
       <View style={styles.symbolBox}>
         <MulberrySymbol symbolId={result.symbol.id} size={compact ? 42 : 56} />
       </View>
-      <Text style={styles.label} numberOfLines={1}>{result.symbol.display_name}</Text>
+      <Text style={styles.label} numberOfLines={1}>
+        {fallback ? '≈ ' : ''}{result.symbol.display_name}
+      </Text>
       {!compact ? (
         <Text style={styles.meta} numberOfLines={1}>
           {Math.round(result.score * 100)}% · {result.match_reasons[0] ?? 'candidate'}
@@ -65,6 +84,13 @@ const styles = StyleSheet.create({
     width: 82,
     minHeight: 88,
     padding: 6,
+  },
+  cardFallback: {
+    // Dashed border + slight desaturation so the user can see this is an
+    // approximate match without the card feeling "wrong" or low-quality.
+    borderStyle: 'dashed',
+    borderColor: colors.textMuted,
+    opacity: 0.92,
   },
   symbolBox: {
     width: '100%',
