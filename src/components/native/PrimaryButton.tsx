@@ -10,9 +10,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LoadingDots } from '../LoadingDots';
-import { animation, colors, radii, typography } from '../../theme/tokens';
+import { animation, colors as staticColors, radii, typography } from '../../theme/tokens';
 import { springPop, timingFast, timingReduced } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { useTheme } from '../../theme/useTheme';
 import { hapticSelection, hapticSuccess } from '../../utils/haptics';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -37,12 +38,14 @@ type Palette = {
   border: string | null;
 };
 
-const PALETTES: Record<Variant, Palette> = {
-  primary:   { base: colors.primary,  pressed: colors.primaryPressed, label: colors.surface,     border: null          },
-  secondary: { base: colors.softBlue, pressed: '#C2D5E2',             label: colors.primaryDark, border: null          },
-  danger:    { base: colors.danger,   pressed: '#FF6A66',             label: colors.surface,     border: null          },
-  ghost:     { base: 'rgba(0,0,0,0)', pressed: 'rgba(0,0,0,0.04)',    label: colors.text,        border: colors.border },
-};
+function makePalettes(colors: typeof staticColors): Record<Variant, Palette> {
+  return {
+    primary:   { base: colors.primary,  pressed: colors.primaryPressed, label: colors.surface,     border: null          },
+    secondary: { base: colors.softBlue, pressed: '#C2D5E2',             label: colors.primaryDark, border: null          },
+    danger:    { base: colors.danger,   pressed: '#FF6A66',             label: colors.surface,     border: null          },
+    ghost:     { base: 'rgba(0,0,0,0)', pressed: 'rgba(0,0,0,0.04)',    label: colors.text,        border: colors.border },
+  };
+}
 
 /**
  * The single dominant action per screen. Bottom-docked, full-width by default.
@@ -70,14 +73,16 @@ export function PrimaryButton({
   style,
 }: PrimaryButtonProps) {
   const reduceMotion = useReduceMotion();
-  const palette = PALETTES[variant];
+  const t = useTheme();
+  const palettes = makePalettes(t.colors);
+  const palette = palettes[variant];
 
   const pressed  = useSharedValue(0);   // 0 → 1 while finger is down
   const successV = useSharedValue(0);   // 0 → 1 during success flash
   const opacity  = useSharedValue(1);   // reduce-motion press feedback
 
   const isLocked = disabled || loading;
-  const baseFill = disabled ? colors.disabled : palette.base;
+  const baseFill = disabled ? t.colors.disabled : palette.base;
 
   useEffect(() => {
     if (!success) return;
@@ -100,7 +105,7 @@ export function PrimaryButton({
   // state reads via fill cross-fade + a small scale dip, nothing else.
   const containerStyle = useAnimatedStyle(() => {
     const pressedFill = interpolateColor(pressed.value, [0, 1], [baseFill, palette.pressed]);
-    const finalFill   = interpolateColor(successV.value, [0, 1], [pressedFill, colors.success]);
+    const finalFill   = interpolateColor(successV.value, [0, 1], [pressedFill, t.colors.success]);
     const scale       = reduceMotion ? 1 : 1 - pressed.value * (1 - animation.scalePressLg);
     return {
       backgroundColor: finalFill,
@@ -153,6 +158,7 @@ export function PrimaryButton({
         onPress={handlePress}
         style={[
           styles.button,
+          { minHeight: t.buttonMinHeight },
           palette.border ? { borderWidth: 1.5, borderColor: palette.border } : null,
         ]}
       >
@@ -161,7 +167,7 @@ export function PrimaryButton({
         ) : (
           <View style={styles.inner}>
             <Animated.View style={[styles.check, checkStyle]} pointerEvents="none">
-              <Ionicons name="checkmark" size={22} color={colors.surface} />
+              <Ionicons name="checkmark" size={22} color={t.colors.surface} />
             </Animated.View>
             <Animated.Text
               numberOfLines={1}
@@ -169,7 +175,7 @@ export function PrimaryButton({
               minimumFontScale={0.85}
               style={[
                 styles.label,
-                { color: disabled ? colors.textTertiary : palette.label },
+                { color: disabled ? t.colors.textTertiary : palette.label, fontSize: t.typography.body },
                 labelStyle,
               ]}
             >
@@ -187,7 +193,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
   },
   button: {
-    minHeight: 54,
+    minHeight: 54, // overridden inline via t.buttonMinHeight
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.button,

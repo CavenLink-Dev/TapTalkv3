@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { useTheme } from '../../src/theme/useTheme';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
@@ -29,6 +30,7 @@ const THEME_OPTIONS: { label: string; value: Theme; icon: React.ComponentProps<t
 export default function DisplaySettingsScreen() {
   const router = useRouter();
   const { state, dispatch } = useAppContext();
+  const t = useTheme();
   const { textSize, highContrast, theme } = state.accessibility;
 
   const setTextSize = useCallback((value: TextSize) => {
@@ -54,17 +56,17 @@ export default function DisplaySettingsScreen() {
   }, [dispatch, hapticsEnabled]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
+      <View style={[styles.header, { backgroundColor: t.colors.surface, borderBottomColor: t.colors.border }]}>
         <Pressable
           onPress={() => { hapticSelection(); router.back(); }}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           style={styles.backButton}
         >
-          <Ionicons name="chevron-back" size={26} color={colors.primary} />
+          <Ionicons name="chevron-back" size={26} color={t.colors.primary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Display</Text>
+        <Text style={[styles.headerTitle, { color: t.colors.text }]}>Display</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -77,8 +79,8 @@ export default function DisplaySettingsScreen() {
       >
 
         <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>TEXT SIZE</Text>
-          <Text style={styles.sectionDesc}>Affects labels throughout the app.</Text>
+          <Text style={[styles.sectionTitle, { color: t.colors.textTertiary }]}>TEXT SIZE</Text>
+          <Text style={[styles.sectionDesc, { color: t.colors.textMuted }]}>Affects labels throughout the app.</Text>
           <View style={styles.optionGroup}>
             {TEXT_SIZE_OPTIONS.map((opt) => {
               const selected = textSize === opt.value;
@@ -89,13 +91,13 @@ export default function DisplaySettingsScreen() {
                   accessibilityRole="radio"
                   accessibilityState={{ checked: selected }}
                   accessibilityLabel={`Text size ${opt.label}`}
-                  style={[styles.option, selected && styles.optionSelected]}
+                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: t.isDark ? '#1A3A5F' : '#EAF6FE' }]}
                 >
-                  <Text style={[styles.previewText, { fontSize: opt.preview }, selected && styles.previewSelected]}>
+                  <Text style={[styles.previewText, { fontSize: opt.preview, color: t.colors.text }, selected && { color: t.colors.primary }]}>
                     {opt.label}
                   </Text>
                   {selected && (
-                    <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+                    <Ionicons name="checkmark-circle" size={22} color={t.colors.primary} />
                   )}
                 </Pressable>
               );
@@ -104,7 +106,7 @@ export default function DisplaySettingsScreen() {
         </Card>
 
         <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>THEME</Text>
+          <Text style={[styles.sectionTitle, { color: t.colors.textTertiary }]}>THEME</Text>
           <View style={styles.themeRow}>
             {THEME_OPTIONS.map((opt) => {
               const selected = theme === opt.value;
@@ -115,14 +117,14 @@ export default function DisplaySettingsScreen() {
                   accessibilityRole="radio"
                   accessibilityState={{ checked: selected }}
                   accessibilityLabel={`${opt.label} theme`}
-                  style={[styles.themeOption, selected && styles.themeOptionSelected]}
+                  style={[styles.themeOption, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: t.isDark ? '#1A3A5F' : '#EAF6FE' }]}
                 >
                   <Ionicons
                     name={opt.icon}
                     size={24}
-                    color={selected ? colors.primary : colors.textMuted}
+                    color={selected ? t.colors.primary : t.colors.textMuted}
                   />
-                  <Text style={[styles.themeLabel, selected && styles.themeLabelSelected]}>
+                  <Text style={[styles.themeLabel, { color: t.colors.textMuted }, selected && { color: t.colors.primary }]}>
                     {opt.label}
                   </Text>
                 </Pressable>
@@ -132,32 +134,32 @@ export default function DisplaySettingsScreen() {
         </Card>
 
         <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>ACCESSIBILITY</Text>
+          <Text style={[styles.sectionTitle, { color: t.colors.textTertiary }]}>ACCESSIBILITY</Text>
           <View style={styles.toggleRow}>
             <View style={styles.toggleLeft}>
-              <Text style={styles.toggleTitle}>High Contrast</Text>
-              <Text style={styles.toggleDesc}>Increases contrast for easier reading.</Text>
+              <Text style={[styles.toggleTitle, { color: t.colors.text }]}>High Contrast</Text>
+              <Text style={[styles.toggleDesc, { color: t.colors.textMuted }]}>Increases contrast for easier reading.</Text>
             </View>
             <Switch
               value={highContrast}
               onValueChange={toggleHighContrast}
-              trackColor={{ false: colors.disabled, true: colors.primary }}
-              thumbColor={colors.surface}
-              ios_backgroundColor={colors.disabled}
+              trackColor={{ false: t.colors.disabled, true: t.colors.primary }}
+              thumbColor={t.colors.surface}
+              ios_backgroundColor={t.colors.disabled}
               accessibilityLabel="High contrast mode"
             />
           </View>
           <View style={[styles.toggleRow, { marginTop: 12 }]}>
             <View style={styles.toggleLeft}>
-              <Text style={styles.toggleTitle}>Haptic Feedback</Text>
-              <Text style={styles.toggleDesc}>Vibrate on button and tile taps.</Text>
+              <Text style={[styles.toggleTitle, { color: t.colors.text }]}>Haptic Feedback</Text>
+              <Text style={[styles.toggleDesc, { color: t.colors.textMuted }]}>Vibrate on button and tile taps.</Text>
             </View>
             <Switch
               value={hapticsEnabled}
               onValueChange={toggleHaptics}
-              trackColor={{ false: colors.disabled, true: colors.primary }}
-              thumbColor={colors.surface}
-              ios_backgroundColor={colors.disabled}
+              trackColor={{ false: t.colors.disabled, true: t.colors.primary }}
+              thumbColor={t.colors.surface}
+              ios_backgroundColor={t.colors.disabled}
               accessibilityLabel="Haptic feedback"
             />
           </View>

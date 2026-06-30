@@ -7,9 +7,10 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { animation, colors, radii, typography } from '../../theme/tokens';
+import { animation, radii, typography } from '../../theme/tokens';
 import { springPop, timingBase, timingFast } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { useTheme } from '../../theme/useTheme';
 import { hapticSelection } from '../../utils/haptics';
 
 interface PillProps {
@@ -33,6 +34,7 @@ interface PillProps {
  */
 export function Pill({ label, selected, onPress, accessibilityLabel }: PillProps) {
   const reduceMotion = useReduceMotion();
+  const t = useTheme();
   const pressed  = useSharedValue(0);
   const selectedV = useSharedValue(selected ? 1 : 0);
 
@@ -41,13 +43,13 @@ export function Pill({ label, selected, onPress, accessibilityLabel }: PillProps
   }, [selected, selectedV, reduceMotion]);
 
   const containerStyle = useAnimatedStyle(() => {
-    const fill = interpolateColor(selectedV.value, [0, 1], [colors.surface, colors.primary]);
+    const fill = interpolateColor(selectedV.value, [0, 1], [t.colors.surface, t.colors.primary]);
     const scale = reduceMotion ? 1 : 1 - pressed.value * (1 - animation.scalePressMd);
     return { backgroundColor: fill, transform: [{ scale }] };
   });
 
   const labelStyle = useAnimatedStyle(() => {
-    const color = interpolateColor(selectedV.value, [0, 1], [colors.textMuted, colors.surface]);
+    const color = interpolateColor(selectedV.value, [0, 1], [t.colors.textMuted, t.colors.surface]);
     return { color };
   });
 

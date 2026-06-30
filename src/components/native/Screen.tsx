@@ -1,7 +1,8 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 interface ScreenProps {
   title?: string;
@@ -11,14 +12,40 @@ interface ScreenProps {
 }
 
 export function Screen({ title, subtitle, children, scroll = true }: ScreenProps) {
+  const t = useTheme();
+
   const content = (
     <>
       {title ? (
         <View style={styles.header}>
-          <Text style={styles.title} accessibilityRole="header">
+          <Text
+            style={[
+              styles.title,
+              {
+                color: t.colors.text,
+                fontFamily: t.typography.fontFamilyDisplay,
+                fontSize: t.typography.heading,
+              },
+            ]}
+            accessibilityRole="header"
+          >
             {title}
           </Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          {subtitle ? (
+            <Text
+              style={[
+                styles.subtitle,
+                {
+                  color: t.colors.textMuted,
+                  fontFamily: t.typography.fontFamily,
+                  fontSize: t.typography.callout,
+                  lineHeight: Math.round(t.typography.callout * 1.4),
+                },
+              ]}
+            >
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
       ) : null}
       {children}
@@ -26,7 +53,7 @@ export function Screen({ title, subtitle, children, scroll = true }: ScreenProps
   );
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: t.colors.background }]}>
       {scroll ? (
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -52,7 +79,6 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   scrollContent: {
     padding: spacing.lg,
@@ -64,15 +90,8 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 4,
-    color: colors.textMuted,
-    fontFamily: typography.fontFamily,
-    fontSize: typography.callout,
-    lineHeight: 21,
   },
   title: {
-    color: colors.text,
-    fontFamily: typography.fontFamilyDisplay,
-    fontSize: typography.heading,
     letterSpacing: -0.4,
   },
 });

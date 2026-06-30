@@ -1,6 +1,13 @@
 {
   "_comment": "Hand-picked exemplar symbols for high-value fallback categories. Keys are the Mulberry category-en string exactly as it appears in symbol-info.csv. Values are the Mulberry display_name (filename without .svg) — the build script resolves this to a SymbolItem.id. Anything not listed here uses the auto-picked exemplar (highest aac_priority, shortest name).",
   "exemplars": {
+    "Animal Mammal": "dog",
+    "Building Contents": "broom",
+    "Building Equipment and devices": "whiteboard",
+    "Celebration Item": "balloon",
+    "Country Flags": "flag united kingdom",
+    "Food Diet": "protein",
+    "Food Ingredients": "ingredients",
     "People Feelings": "happy_man",
     "People Profession": "person",
     "Food Nuts": "almond",

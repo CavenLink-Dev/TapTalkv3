@@ -40,6 +40,10 @@ import { useSpeech } from '../../src/hooks/useSpeech';
 import { animation, colors, spacing } from '../../src/theme/tokens';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
+import {
+  resolveSymbolForKeyword,
+  ResolvedSymbol,
+} from '../../src/features/symbol-brain/resolveSymbolForKeyword';
 
 type TileKind = 'folder' | 'word' | 'action';
 type BoardMode = 'home' | 'foods' | 'animals' | 'tools' | 'quick' | 'settings';
@@ -166,13 +170,14 @@ const SYMBOL_PURPLE = '#BF5AF2';
 // Mappings live alongside the tile data so the data-to-symbol
 // relationship is obvious during review.
 const HOME_TILES: BoardTile[] = [
-  // 'people' / 'places' / 'actions' don't have a clean 1:1 Mulberry asset
-  // — we keep the folder image and let the label carry the meaning until
-  // the user picks a curated symbol. 'foods' has a clean match.
-  { id: 'people', label: 'People', kind: 'folder', target: 'quick',   color: '#1DCDFF', background: 'folderExample' },
+  // Each folder now carries a curated Mulberry pictogram so the icon reads
+  // at a glance, not just the label: People → family, Places → house,
+  // Actions → run, Foods → food. These are intentional, hand-picked IDs;
+  // any folder left without one still falls back to the resolver.
+  { id: 'people', label: 'People', kind: 'folder', target: 'quick',   color: '#1DCDFF', background: 'folderExample', mulberrySymbolId: 'mulberry_family_excv0f' },
   { id: 'foods',  label: 'Foods',  kind: 'folder', target: 'foods',   color: '#1DCDFF', background: 'folderExample', mulberrySymbolId: 'mulberry_food_atkyaz' },
-  { id: 'places', label: 'Places', kind: 'folder', target: 'animals', color: '#1DCDFF', background: 'folderExample' },
-  { id: 'actions',label: 'Actions',kind: 'folder', target: 'tools',   color: '#1DCDFF', background: 'folderExample' },
+  { id: 'places', label: 'Places', kind: 'folder', target: 'animals', color: '#1DCDFF', background: 'folderExample', mulberrySymbolId: 'mulberry_house_1ice1xp' },
+  { id: 'actions',label: 'Actions',kind: 'folder', target: 'tools',   color: '#1DCDFF', background: 'folderExample', mulberrySymbolId: 'mulberry_run_1l6fpg7' },
 ];
 
 const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
@@ -181,12 +186,18 @@ const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
     { id: 'cheese', label: 'Cheese', kind: 'word',   color: SYMBOL_YELLOW, speech: 'cheese', mulberrySymbolId: 'mulberry_cheese_qsgfck', wordType: 'noun' },
     { id: 'apple',  label: 'Apple',  kind: 'word',   color: SYMBOL_RED,    speech: 'apple',  mulberrySymbolId: 'mulberry_apple_1ogqpa9',  wordType: 'noun' },
     { id: 'bread',  label: 'Bread',  kind: 'word',   color: SYMBOL_ORANGE, speech: 'bread',  mulberrySymbolId: 'mulberry_bread_t6g6ux',   wordType: 'noun' },
+    { id: 'banana', label: 'Banana', kind: 'word',   color: SYMBOL_YELLOW, speech: 'banana', mulberrySymbolId: 'mulberry_banana_rcoei',   wordType: 'noun' },
+    { id: 'milk',   label: 'Milk',   kind: 'word',   color: SYMBOL_BLUE,   speech: 'milk',   mulberrySymbolId: 'mulberry_milk_1pcjn1m',   wordType: 'noun' },
+    { id: 'water',  label: 'Water',  kind: 'word',   color: SYMBOL_BLUE,   speech: 'water',  mulberrySymbolId: 'mulberry_water_139tuvw',   wordType: 'noun' },
     { id: 'back-foods', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
   ],
   animals: [
     { id: 'cat',  label: 'Cat',  kind: 'word', color: SYMBOL_ORANGE, speech: 'cat',  mulberrySymbolId: 'mulberry_cat_1lz3nun',  wordType: 'noun' },
     { id: 'dog',  label: 'Dog',  kind: 'word', color: SYMBOL_GREEN,  speech: 'dog',  mulberrySymbolId: 'mulberry_dog_1bfmoh1',  wordType: 'noun' },
     { id: 'fish', label: 'Fish', kind: 'word', color: SYMBOL_BLUE,   speech: 'fish', mulberrySymbolId: 'mulberry_fish_1u95ovx', wordType: 'noun' },
+    { id: 'bird', label: 'Bird', kind: 'word', color: SYMBOL_BLUE,   speech: 'bird', mulberrySymbolId: 'mulberry_bird_13ztxas', wordType: 'noun' },
+    { id: 'rabbit', label: 'Rabbit', kind: 'word', color: SYMBOL_PURPLE, speech: 'rabbit', mulberrySymbolId: 'mulberry_rabbit_sjorvr', wordType: 'noun' },
+    { id: 'horse', label: 'Horse', kind: 'word', color: SYMBOL_ORANGE, speech: 'horse', mulberrySymbolId: 'mulberry_horse_c0o22y', wordType: 'noun' },
     { id: 'back-animals', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
   ],
   tools: [
@@ -203,6 +214,10 @@ const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
     { id: 'no',   label: 'No',   kind: 'word', color: SYMBOL_RED,   speech: 'no',   mulberryName: 'bad',  wordType: 'interjection' },
     { id: 'help', label: 'Help', kind: 'word', color: SYMBOL_BLUE,  speech: 'help', mulberrySymbolId: 'mulberry_help_1g1ppr', wordType: 'verb' },
     { id: 'stop', label: 'Stop', kind: 'word', color: SYMBOL_RED,   speech: 'stop', wordType: 'verb' },
+    { id: 'more', label: 'More', kind: 'word', color: SYMBOL_GREEN, speech: 'more', mulberrySymbolId: 'mulberry_more_1r3s2f0', wordType: 'adjective' },
+    { id: 'want', label: 'Want', kind: 'word', color: SYMBOL_BLUE,  speech: 'want', mulberrySymbolId: 'mulberry_want_16yheia', wordType: 'verb' },
+    { id: 'eat',  label: 'Eat',  kind: 'word', color: SYMBOL_ORANGE, speech: 'eat',  mulberrySymbolId: 'mulberry_eat_18rupbi',  wordType: 'verb' },
+    { id: 'drink',label: 'Drink',kind: 'word', color: SYMBOL_PURPLE, speech: 'drink', mulberrySymbolId: 'mulberry_drink_16zxzpv', wordType: 'verb' },
   ],
   settings: [
     { id: 'hide-nav',        label: 'Hide nav', kind: 'action', color: SYMBOL_PURPLE },
@@ -232,21 +247,19 @@ function BoardNavTile({ tile, size }: { tile: BoardTile; size: number }) {
 // the tile size, which keeps them comfortably below the label without
 // crowding. Returns null when the tile has no symbol assigned so existing
 // tiles (e.g. People, Places) stay clean until we curate one for them.
-function TileSymbol({ tile, size }: { tile: BoardTile; size: number }) {
-  if (!tile.mulberrySymbolId && !tile.mulberryName) return null;
+function TileSymbol({ tile, size, resolved }: { tile: BoardTile; size: number; resolved?: ResolvedSymbol }) {
+  const symbolId = tile.mulberrySymbolId ?? resolved?.symbol.id;
+  const symbolName = tile.mulberryName;
+  if (!symbolId && !symbolName) return null;
   const symbolSize = Math.round(size * 0.52);
   return (
     <View style={styles.symbolMount} pointerEvents="none">
-      <MulberrySymbol
-        symbolId={tile.mulberrySymbolId}
-        name={tile.mulberryName}
-        size={symbolSize}
-      />
+      <MulberrySymbol symbolId={symbolId} name={symbolName} size={symbolSize} />
     </View>
   );
 }
 
-function BoardFolderTile({ tile, size }: { tile: BoardTile; size: number }) {
+function BoardFolderTile({ tile, size, resolved }: { tile: BoardTile; size: number; resolved?: ResolvedSymbol }) {
   // Folder tiles render at the same square footprint as word tiles so the
   // grid reads as one rhythm regardless of `kind`.
   return (
@@ -259,12 +272,18 @@ function BoardFolderTile({ tile, size }: { tile: BoardTile; size: number }) {
       <Text style={styles.folderLabel} numberOfLines={1} adjustsFontSizeToFit>
         {tile.label}
       </Text>
-      <TileSymbol tile={tile} size={size} />
+      <TileSymbol tile={tile} size={size} resolved={resolved} />
     </View>
   );
 }
 
-function BoardWordTile({ tile, size }: { tile: BoardTile; size: number }) {
+function BoardWordTile({ tile, size, resolved }: { tile: BoardTile; size: number; resolved?: ResolvedSymbol }) {
+  const isFallback =
+    resolved != null &&
+    !tile.mulberrySymbolId &&
+    !tile.mulberryName &&
+    (resolved.tier === 'fuzzy' || resolved.tier === 'semantic' ||
+      resolved.tier === 'category' || resolved.tier === 'unknown');
   // Flat coloured fill at 30% opacity — replaces the previous baked PNG
   // backgrounds so the tile reads as a clean tinted chip. The label sits
   // above at full opacity for legibility; the Mulberry symbol sits below
@@ -277,10 +296,16 @@ function BoardWordTile({ tile, size }: { tile: BoardTile; size: number }) {
           { width: size, height: size, backgroundColor: tile.color, opacity: 0.3 },
         ]}
       />
+      {isFallback ? (
+        <View
+          style={[StyleSheet.absoluteFillObject, styles.wordTileFallbackBorder]}
+          pointerEvents="none"
+        />
+      ) : null}
       <Text style={styles.wordLabel} numberOfLines={1} adjustsFontSizeToFit>
-        {tile.label}
+        {isFallback ? '≈ ' : ''}{tile.label}
       </Text>
-      <TileSymbol tile={tile} size={size} />
+      <TileSymbol tile={tile} size={size} resolved={resolved} />
     </View>
   );
 }
@@ -419,6 +444,7 @@ interface BoardTileButtonProps {
   size: number;
   onPress: (rect: WindowRect | null) => void;
   onMeasuredPress?: () => void;
+  resolved?: ResolvedSymbol;
   // ── Drag + edit-mode plumbing ──
   editMode?: boolean;
   onLongPressEnterEdit?: () => void;
@@ -434,6 +460,7 @@ function BoardTileButton({
   size,
   onPress,
   onMeasuredPress,
+  resolved,
   editMode = false,
   onLongPressEnterEdit,
   onSwap,
@@ -580,9 +607,9 @@ function BoardTileButton({
       {tile.id === 'back' || tile.id === 'home' ? (
         <BoardNavTile tile={tile} size={size} />
       ) : tile.kind === 'folder' ? (
-        <BoardFolderTile tile={tile} size={size} />
+        <BoardFolderTile tile={tile} size={size} resolved={resolved} />
       ) : (
-        <BoardWordTile tile={tile} size={size} />
+        <BoardWordTile tile={tile} size={size} resolved={resolved} />
       )}
       {isDraggable && onHide ? (
         <Pressable
@@ -813,6 +840,7 @@ export default function TalkScreen() {
   const [previousMode, setPreviousMode] = useState<BoardMode | null>(null);
   const [activeTab, setActiveTab] = useState<TopTab>('taptalk');
   const [ghosts, setGhosts] = useState<GhostTile[]>([]);
+  const [resolvedSymbols, setResolvedSymbols] = useState<Map<string, ResolvedSymbol>>(new Map());
   const scrollRef = useRef<ScrollView>(null);
   const scrollPositions = useRef<Partial<Record<BoardMode, number>>>({});
   const reduceMotion = useReduceMotion();
@@ -860,6 +888,36 @@ export default function TalkScreen() {
     const y = scrollPositions.current[activeMode] ?? 0;
     scrollRef.current?.scrollTo({ y, animated: false });
   }, [activeMode]);
+
+  useEffect(() => {
+    // Resolve a Mulberry symbol for any tile that doesn't already carry a
+    // hardcoded one — including folders (People / Places / Actions), which
+    // previously stayed blank because the filter required kind === 'word'.
+    // Nav tiles ('back' / 'home') render via BoardNavTile and ignore the
+    // `resolved` prop, so they're unaffected even when present in the map.
+    const toResolve = tiles.filter(
+      t => !t.mulberrySymbolId && !t.mulberryName,
+    );
+    if (toResolve.length === 0) return;
+    let alive = true;
+    Promise.all(
+      toResolve.map(t =>
+        resolveSymbolForKeyword(t.speech ?? t.label).then(r => ({ id: t.id, r })),
+      ),
+    )
+      .then(results => {
+        if (!alive) return;
+        setResolvedSymbols(prev => {
+          const next = new Map(prev);
+          results.forEach(({ id, r }) => next.set(id, r));
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [tiles]);
   const chipTileLookup = useMemo(() => {
     const lookup = new Map<string, BoardTile>();
     Object.values(BOARD_TILES).flat().forEach(tile => {
@@ -1200,6 +1258,7 @@ export default function TalkScreen() {
               tile={tile}
               size={tileSize}
               onPress={rect => handleTilePress(tile, rect)}
+              resolved={resolvedSymbols.get(tile.id)}
             />
           ))}
           {activeMode !== 'home' ? (
@@ -1477,6 +1536,12 @@ const styles = StyleSheet.create({
   // Flat coloured fill behind the symbol/label. Rounded corners match the
   // optical weight of the folder PNGs so word and folder tiles share a
   // visual rhythm.
+  wordTileFallbackBorder: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#8A8F95',
+  },
   wordTileFill: {
     position: 'absolute',
     left: 0,

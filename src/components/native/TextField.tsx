@@ -18,9 +18,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { animation, colors, radii, spacing, typography } from '../../theme/tokens';
+import { animation, colors as staticColors, radii, spacing, typography } from '../../theme/tokens';
 import { springPop, timingFocus } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { useTheme } from '../../theme/useTheme';
 import { hapticError } from '../../utils/haptics';
 
 export interface TextFieldProps extends TextInputProps {
@@ -59,6 +60,7 @@ export const TextField = React.forwardRef<TextInput, TextFieldProps>(function Te
   ref,
 ) {
   const reduceMotion = useReduceMotion();
+  const t = useTheme();
   const [focused, setFocused] = useState(false);
 
   const focus   = useSharedValue(0);   // 0 → 1 focused
@@ -106,9 +108,9 @@ export const TextField = React.forwardRef<TextInput, TextFieldProps>(function Te
   // Design rule: filled inputs, no idle border, no focus glow. Border only
   // animates in on focus / error / success and there is no shadow.
   const containerStyle = useAnimatedStyle(() => {
-    const baseBorder = interpolateColor(focus.value, [0, 1], ['rgba(0,0,0,0)', colors.primary]);
-    const errBorder  = interpolateColor(errorV.value,   [0, 1], [baseBorder, colors.danger]);
-    const finalBorder = interpolateColor(successV.value, [0, 1], [errBorder, colors.success]);
+    const baseBorder = interpolateColor(focus.value, [0, 1], ['rgba(0,0,0,0)', t.colors.primary]);
+    const errBorder  = interpolateColor(errorV.value,   [0, 1], [baseBorder, t.colors.danger]);
+    const finalBorder = interpolateColor(successV.value, [0, 1], [errBorder, t.colors.success]);
     const borderWidth = focus.value * 2;
     return {
       borderColor: finalBorder,
@@ -137,24 +139,24 @@ export const TextField = React.forwardRef<TextInput, TextFieldProps>(function Te
         <TextInput
           ref={ref}
           accessibilityLabel={accessibilityLabel}
-          placeholderTextColor={colors.textTertiary}
+          placeholderTextColor={t.colors.textTertiary}
           onFocus={handleFocus}
           onBlur={handleBlur}
           {...rest}
-          style={[styles.input, style]}
+          style={[styles.input, { color: t.colors.text, fontSize: t.typography.body, backgroundColor: t.colors.input }, style]}
         />
         {success ? (
           <Animated.View style={[styles.checkSlot, checkStyle]} pointerEvents="none">
-            <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+            <Ionicons name="checkmark-circle" size={22} color={t.colors.success} />
           </Animated.View>
         ) : null}
       </Animated.View>
       {error ? (
-        <Text style={styles.errorText} accessibilityLiveRegion="polite">
+        <Text style={[styles.errorText, { color: t.colors.danger, fontSize: t.typography.callout }]} accessibilityLiveRegion="polite">
           {error}
         </Text>
       ) : helper ? (
-        <Text style={styles.helperText}>{helper}</Text>
+        <Text style={[styles.helperText, { color: t.colors.textTertiary, fontSize: t.typography.callout }]}>{helper}</Text>
       ) : null}
     </View>
   );
@@ -169,11 +171,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 48,
     borderRadius: radii.input,
-    backgroundColor: colors.input,
+    backgroundColor: staticColors.input,
   },
   input: {
     flex: 1,
-    color: colors.text,
+    color: staticColors.text,
     fontSize: typography.body,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -184,14 +186,14 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: spacing.xs + 2,
     marginLeft: spacing.sm,
-    color: colors.danger,
+    color: staticColors.danger,
     fontSize: typography.callout,
     fontWeight: typography.weightCaption,
   },
   helperText: {
     marginTop: spacing.xs + 2,
     marginLeft: spacing.sm,
-    color: colors.textTertiary,
+    color: staticColors.textTertiary,
     fontSize: typography.callout,
   },
 });

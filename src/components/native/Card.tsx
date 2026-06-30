@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleProp, StyleSheet, View, ViewProps, ViewStyle } from 'react-native';
-import { colors, radii, spacing } from '../../theme/tokens';
+import { radii, spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 interface CardProps extends ViewProps {
   children: React.ReactNode;
@@ -14,8 +15,9 @@ interface CardProps extends ViewProps {
  * the same shape regardless of which screen it lives on.
  */
 export function Card({ children, style, ...viewProps }: CardProps) {
+  const t = useTheme();
   return (
-    <View style={[styles.card, style]} {...viewProps}>
+    <View style={[styles.card, { backgroundColor: t.colors.surface }, style]} {...viewProps}>
       {children}
     </View>
   );
@@ -23,7 +25,6 @@ export function Card({ children, style, ...viewProps }: CardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
     borderRadius: radii.card,
     padding: spacing.lg,
   },

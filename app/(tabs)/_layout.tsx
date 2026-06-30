@@ -3,7 +3,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { BottomNavIcon, BottomNavIconName } from '../../src/components/icons/BottomNavIcon';
 import { PressableTabButton } from '../../src/components/native/PressableTabButton';
-import { colors } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 
 function icon(name: BottomNavIconName) {
   return ({ focused }: { focused: boolean }) => (
@@ -12,14 +12,22 @@ function icon(name: BottomNavIconName) {
 }
 
 export default function TabsLayout() {
+  const t = useTheme();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            backgroundColor: t.colors.surface,
+            borderTopColor: t.colors.border,
+          },
+        ],
+        tabBarActiveTintColor: t.colors.primary,
+        tabBarInactiveTintColor: t.colors.textMuted,
         tabBarItemStyle: styles.tabBarItem,
         tabBarButton: (props) => <PressableTabButton {...(props as Parameters<typeof PressableTabButton>[0])} />,
       }}
@@ -67,9 +75,7 @@ const styles = StyleSheet.create({
     height: 82,
     paddingTop: 12,
     paddingBottom: 22,
-    backgroundColor: colors.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
   },
   tabBarItem: {
     justifyContent: 'center',

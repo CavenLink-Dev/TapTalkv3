@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Href, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { useTheme } from '../../src/theme/useTheme';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
@@ -147,11 +148,12 @@ function SettingItem({ row, onPress }: { row: SettingRow; onPress?: () => void }
 
 export default function SettingsIndexScreen() {
   const { state } = useAppContext();
+  const t = useTheme();
   const isPremium = state.subscriptionComplete;
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -159,9 +161,9 @@ export default function SettingsIndexScreen() {
         alwaysBounceVertical
         overScrollMode="always"
       >
-        <Text style={styles.title} accessibilityRole="header">Settings</Text>
+        <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">Settings</Text>
 
-        <Text style={styles.sectionHeading}>APP</Text>
+        <Text style={[styles.sectionHeading, { color: t.colors.textTertiary }]}>APP</Text>
         <Card style={styles.section}>
           {APP_SETTINGS.map((row, i) => (
             <View key={row.id}>

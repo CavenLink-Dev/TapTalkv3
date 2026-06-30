@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { AppProvider } from '../src/context/AppContext';
 import { useTapTalkFonts } from '../src/theme/fonts';
+import { useTheme } from '../src/theme/useTheme';
 import { colors, typography } from '../src/theme/tokens';
 
 const DefaultText = Text as typeof Text & { defaultProps?: { style?: unknown } };
@@ -17,6 +18,16 @@ DefaultText.defaultProps.style = [{ fontFamily: typography.fontFamily }, Default
 
 DefaultTextInput.defaultProps = DefaultTextInput.defaultProps ?? {};
 DefaultTextInput.defaultProps.style = [{ fontFamily: typography.fontFamily }, DefaultTextInput.defaultProps.style];
+
+function ThemeShell() {
+  const t = useTheme();
+  return (
+    <>
+      <Stack screenOptions={{ headerShown: false }} />
+      <StatusBar style={t.isDark ? 'light' : 'dark'} />
+    </>
+  );
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useTapTalkFonts();
@@ -33,8 +44,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <SafeAreaProvider>
           <AppProvider>
-            <Stack screenOptions={{ headerShown: false }} />
-            <StatusBar style="dark" />
+            <ThemeShell />
           </AppProvider>
         </SafeAreaProvider>
       </ErrorBoundary>
