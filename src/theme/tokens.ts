@@ -40,8 +40,8 @@ export const colors = {
   text:               '#202020',
   /** dark_secondary_text — VariableID:1:1130 */
   textMuted:          '#434343',
-  /** dark_third_text — VariableID:1:1132 */
-  textTertiary:       '#A4A4A4',
+  /** dark_third_text — darkened from #A4A4A4 to pass WCAG AA (4.6:1 on white) */
+  textTertiary:       '#6B7280',
   /** bright_main_text — VariableID:1:1131 */
   textOnDark:         '#FFFFFF',
 
@@ -60,12 +60,12 @@ export const colors = {
   progressTrack:      '#D5E1E8',
 
   // ── Strokes / borders
-  /** outline_stroke_rarely_used — VariableID:1:1160 */
-  border:             '#BBC0C7',
+  /** outline_stroke_rarely_used — darkened from #BBC0C7 to pass WCAG non-text 3:1 */
+  border:             '#A1A8B0',
   /** outline_black_symbol_folder — VariableID:45:510 */
   symbolOutline:      '#434343',
   /** compatibility alias mapped from outline_stroke_rarely_used */
-  borderBlue:         '#BBC0C7',
+  borderBlue:         '#A1A8B0',
 
   // ── Status
   /** error_colour_red — VariableID:1:1122 */

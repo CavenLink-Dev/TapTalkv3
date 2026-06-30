@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityActionEvent,
   AccessibilityInfo,
   Alert,
   Animated as RNAnimated,
   Easing as RNEasing,
   Image,
+  LayoutChangeEvent,
   LayoutRectangle,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -16,13 +18,17 @@ import {
   View,
 } from 'react-native';
 import Reanimated, {
+  cancelAnimation,
   Easing as ReanimatedEasing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
   withSequence,
   withTiming,
+  SharedValue,
 } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
@@ -402,23 +408,51 @@ function GhostTileClone({
   );
 }
 
+// Rect in board-content coordinate space (relative to the ScrollView's
+// content container). Used purely for drag hit-testing inside the same
+// coordinate space — never crosses screens.
+type SlotRect = { x: number; y: number; width: number; height: number };
+type TileRectsRef = React.MutableRefObject<Record<string, SlotRect>>;
+
+interface BoardTileButtonProps {
+  tile: BoardTile;
+  size: number;
+  onPress: (rect: WindowRect | null) => void;
+  onMeasuredPress?: () => void;
+  // ── Drag + edit-mode plumbing ──
+  editMode?: boolean;
+  onLongPressEnterEdit?: () => void;
+  onSwap?: (fromId: string, toId: string) => void;
+  onHide?: (tile: BoardTile) => void;
+  onAccessibilityReorder?: (tileId: string, direction: 'forward' | 'back') => void;
+  tileRects?: TileRectsRef;
+  jiggle?: SharedValue<number>;
+}
+
 function BoardTileButton({
   tile,
   size,
   onPress,
   onMeasuredPress,
-}: {
-  tile: BoardTile;
-  size: number;
-  onPress: (rect: WindowRect | null) => void;
-  onMeasuredPress?: () => void;
-}) {
+  editMode = false,
+  onLongPressEnterEdit,
+  onSwap,
+  onHide,
+  onAccessibilityReorder,
+  tileRects,
+  jiggle,
+}: BoardTileButtonProps) {
   const pressableRef = useRef<View>(null);
   const scale = useRef(new RNAnimated.Value(1)).current;
   // Item 2 — RM: swap spring scale for an opacity dip so the tile
   // still acknowledges the press without moving (principle 18).
   const tileOpacity = useRef(new RNAnimated.Value(1)).current;
   const reduceMotion = useReduceMotion();
+
+  // ── Drag state (Reanimated SVs so the gesture runs on the UI thread)
+  const dragX = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  const lifted = useSharedValue(0);
 
   const animateTo = useCallback((toValue: number) => {
     if (reduceMotion) {
@@ -438,6 +472,7 @@ function BoardTileButton({
   }, [reduceMotion, scale, tileOpacity]);
 
   const isNav = tile.id === 'back' || tile.id === 'home';
+  const isDraggable = editMode && !isNav;
   // Every kind — folder, word, action, nav — renders as a square so the
   // grid is visually consistent. `size` is already clamped against the
   // available board width up the tree, so this also satisfies the 44pt
@@ -445,11 +480,12 @@ function BoardTileButton({
   const tileHeight = Math.round(size * TILE_HEIGHT_RATIO);
 
   const handlePress = useCallback(() => {
+    if (editMode) return; // taps do nothing in edit mode — long-press exits
     onMeasuredPress?.();
     pressableRef.current?.measureInWindow((x, y, width, height) => {
       onPress({ x, y, width, height });
     });
-  }, [onMeasuredPress, onPress]);
+  }, [editMode, onMeasuredPress, onPress]);
 
   // Item 7 — word-type hint for VoiceOver (principle 23: don't rely on
   // colour alone). Folder tiles already say "Open …" in the label.
@@ -457,28 +493,154 @@ function BoardTileButton({
     ? `Word type: ${tile.wordType}`
     : undefined;
 
-  return (
-    <RNAnimated.View style={{ width: size, height: tileHeight, transform: [{ scale }], opacity: tileOpacity }}>
-      <Pressable
-        ref={pressableRef}
-        accessibilityRole="button"
-        accessibilityLabel={isNav ? tile.label : tile.kind === 'folder' ? `Open ${tile.label}` : `Say ${tile.label}`}
-        accessibilityHint={a11yHint}
-        onPress={handlePress}
-        onPressIn={() => animateTo(0.94)}
-        onPressOut={() => animateTo(1)}
-        style={({ pressed }) => [styles.tilePressable, pressed && styles.tilePressed]}
-      >
-        {tile.id === 'back' || tile.id === 'home' ? (
-          <BoardNavTile tile={tile} size={size} />
-        ) : tile.kind === 'folder' ? (
-          <BoardFolderTile tile={tile} size={size} />
-        ) : (
-          <BoardWordTile tile={tile} size={size} />
-        )}
-      </Pressable>
-    </RNAnimated.View>
+  // ── Drag gesture — runs only when editMode is on and the tile isn't nav.
+  // Hit-tests against other tile rects on release and swaps the two IDs.
+  const pan = useMemo(() => Gesture.Pan()
+    .enabled(isDraggable)
+    .onStart(() => {
+      lifted.value = withTiming(1, { duration: 120 });
+    })
+    .onUpdate((e) => {
+      dragX.value = e.translationX;
+      dragY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      const myRect = tileRects?.current?.[tile.id];
+      const settle = () => {
+        dragX.value = withTiming(0, { duration: reduceMotion ? 0 : 220 });
+        dragY.value = withTiming(0, { duration: reduceMotion ? 0 : 220 });
+        lifted.value = withTiming(0, { duration: reduceMotion ? 0 : 120 });
+      };
+      if (!myRect || !tileRects) {
+        settle();
+        return;
+      }
+      const dropX = myRect.x + myRect.width / 2 + e.translationX;
+      const dropY = myRect.y + myRect.height / 2 + e.translationY;
+      let nearestId: string | null = null;
+      let nearestDist = Infinity;
+      const rects = tileRects.current;
+      for (const otherId in rects) {
+        if (otherId === tile.id) continue;
+        const r = rects[otherId];
+        const cx = r.x + r.width / 2;
+        const cy = r.y + r.height / 2;
+        const d = Math.hypot(cx - dropX, cy - dropY);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestId = otherId;
+        }
+      }
+      // Only commit a swap if the drop is well inside another slot's bounds
+      // (within ~70% of a tile width). Prevents accidental swaps on tiny
+      // pan-ends.
+      if (nearestId && nearestDist < myRect.width * 0.7 && onSwap) {
+        runOnJS(onSwap)(tile.id, nearestId);
+      }
+      settle();
+    }), [dragX, dragY, isDraggable, lifted, onSwap, reduceMotion, tile.id, tileRects]);
+
+  const animatedDragStyle = useAnimatedStyle(() => {
+    const jiggleDeg = isDraggable && jiggle && !reduceMotion ? jiggle.value : 0;
+    return {
+      transform: [
+        { translateX: dragX.value },
+        { translateY: dragY.value },
+        { scale: 1 + lifted.value * 0.06 },
+        { rotate: `${jiggleDeg}deg` },
+      ],
+      zIndex: lifted.value > 0 ? 100 : 1,
+    };
+  });
+
+  const handleLayout = useCallback((e: LayoutChangeEvent) => {
+    if (!tileRects) return;
+    const { x, y, width, height } = e.nativeEvent.layout;
+    tileRects.current[tile.id] = { x, y, width, height };
+  }, [tile.id, tileRects]);
+
+  const handleAccessibilityAction = useCallback((event: AccessibilityActionEvent) => {
+    if (!onAccessibilityReorder) return;
+    if (event.nativeEvent.actionName === 'increment') {
+      onAccessibilityReorder(tile.id, 'forward');
+    } else if (event.nativeEvent.actionName === 'decrement') {
+      onAccessibilityReorder(tile.id, 'back');
+    }
+  }, [onAccessibilityReorder, tile.id]);
+
+  const accessibilityActions = isDraggable
+    ? [
+        { name: 'increment' as const, label: 'Move forward' },
+        { name: 'decrement' as const, label: 'Move back' },
+      ]
+    : undefined;
+
+  const tileContent = (
+    <>
+      {tile.id === 'back' || tile.id === 'home' ? (
+        <BoardNavTile tile={tile} size={size} />
+      ) : tile.kind === 'folder' ? (
+        <BoardFolderTile tile={tile} size={size} />
+      ) : (
+        <BoardWordTile tile={tile} size={size} />
+      )}
+      {isDraggable && onHide ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${tile.label}`}
+          onPress={() => onHide(tile)}
+          hitSlop={10}
+          style={styles.deleteBadge}
+        >
+          <Ionicons name="close" size={16} color={colors.surface} />
+        </Pressable>
+      ) : null}
+    </>
   );
+
+  const inner = (
+    <Reanimated.View
+      onLayout={handleLayout}
+      style={[
+        { width: size, height: tileHeight },
+        animatedDragStyle,
+      ]}
+    >
+      <RNAnimated.View style={{ flex: 1, transform: [{ scale }], opacity: tileOpacity }}>
+        <Pressable
+          ref={pressableRef}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isNav
+              ? tile.label
+              : tile.kind === 'folder'
+                ? `Open ${tile.label}`
+                : `Say ${tile.label}`
+          }
+          accessibilityHint={a11yHint}
+          accessibilityActions={accessibilityActions}
+          onAccessibilityAction={handleAccessibilityAction}
+          onPress={handlePress}
+          onLongPress={!editMode && !isNav ? onLongPressEnterEdit : undefined}
+          delayLongPress={450}
+          onPressIn={() => !editMode && animateTo(0.94)}
+          onPressOut={() => !editMode && animateTo(1)}
+          style={({ pressed }) => [
+            styles.tilePressable,
+            pressed && !editMode && styles.tilePressed,
+            isDraggable && styles.tileEditOutline,
+          ]}
+        >
+          {tileContent}
+        </Pressable>
+      </RNAnimated.View>
+    </Reanimated.View>
+  );
+
+  if (isDraggable) {
+    return <GestureDetector gesture={pan}>{inner}</GestureDetector>;
+  }
+  return inner;
 }
 
 function TopNavTab({
@@ -514,7 +676,9 @@ function TopNavTab({
   });
   const scale = activeAnim.interpolate({
     inputRange:  [0, 1],
-    outputRange: [1, reduceMotion ? 1 : 1.05],
+    // 1.03 (down from 1.05) — less optical jump when the active tint
+    // crossfades in, so the icon doesn't read as "hovering".
+    outputRange: [1, reduceMotion ? 1 : 1.03],
   });
 
   return (
@@ -1207,10 +1371,12 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   // Coloured icon overlay sits exactly on top of the idle icon so the
-  // active tint can fade in without re-rendering layout.
+  // active tint can fade in without re-rendering layout. absoluteFillObject
+  // + flex-centering pins it to the SAME rect as the idle icon (previously
+  // `top: 0` left a vertical offset that made the active icon look like it
+  // was hovering above the idle one during the cross-fade).
   topTabIconOverlay: {
-    position: 'absolute',
-    top: 0,
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1232,16 +1398,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 4,
+    // All four corners rounded so the toggle reads as a clean chip
+    // instead of a square with notched bottom corners.
+    borderRadius: 10,
   },
   navToggleOpen: {
-    top: -1,
-    borderBottomLeftRadius: 3,
-    borderBottomRightRadius: 3,
+    // Slide 1pt down so the toggle's bottom edge tucks UNDER the panel's
+    // top edge rather than sitting beside it. Drop the bottom border in
+    // the same state so the toggle merges visually into the panel and
+    // there's no doubled stroke where they meet.
+    top: 1,
+    borderBottomWidth: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
   },
   navToggleClosed: {
-    top: -1,
-    borderBottomLeftRadius: 3,
-    borderBottomRightRadius: 3,
+    top: 1,
   },
   // Neutral idle look when closed and not being pressed — keeps the blue
   // strictly tied to pressed/active states without changing the open visuals.

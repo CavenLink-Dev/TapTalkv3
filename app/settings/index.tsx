@@ -120,11 +120,25 @@ function SettingItem({ row, onPress }: { row: SettingRow; onPress?: () => void }
       </View>
       {row.premium ? (
         <View style={styles.premiumBadge}>
-          <Ionicons name="lock-closed" size={12} color={colors.surface} />
-          <Text style={styles.premiumText}>PRO</Text>
+          <Ionicons
+            name="lock-closed"
+            size={12}
+            color={colors.surface}
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          />
+          <Text style={styles.premiumText} maxFontSizeMultiplier={1.2} numberOfLines={1}>
+            PRO
+          </Text>
         </View>
       ) : (
-        <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        <Ionicons
+          name="chevron-forward"
+          size={18}
+          color={colors.textTertiary}
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+        />
       )}
     </Pressable>
   );
@@ -163,8 +177,16 @@ export default function SettingsIndexScreen() {
           <Text style={styles.sectionHeading}>PREMIUM TOOLS</Text>
           {!isPremium && (
             <View style={styles.upgradePill}>
-              <Ionicons name="star" size={11} color="#FFD700" />
-              <Text style={styles.upgradeText}>Upgrade</Text>
+              <Ionicons
+                name="star"
+                size={11}
+                color="#FFD700"
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+              />
+              <Text style={styles.upgradeText} maxFontSizeMultiplier={1.2} numberOfLines={1}>
+                Upgrade
+              </Text>
             </View>
           )}
         </View>

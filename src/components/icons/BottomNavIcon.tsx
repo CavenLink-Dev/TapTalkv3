@@ -40,14 +40,32 @@ const ICONS: Record<BottomNavIconName, IconVariants> = {
   },
 };
 
-const ICON_SIZE = 34;
-// Activity SVG has a landscape aspect ratio (~1.26:1) so it appears shorter
-// than the other square/portrait icons at the same pixel size. Render it at
-// 56px so its constrained height (~44–47px) matches the visual weight of the
-// other icons (~44–48px). Applies equally to selected + unselected variants.
-const ICON_SIZES: Partial<Record<BottomNavIconName, number>> = {
-  activity: 40,
+// Bulky bottom-nav icons — user-explicit. Every icon renders at the same
+// VISUAL height (TARGET_H) regardless of (a) which tab it is or (b) whether
+// it's selected or unselected. Each SVG has a different viewBox and aspect
+// ratio (some include extra padding around the glyph for a shadow, some are
+// landscape, some are portrait), so a flat "all icons are 56×56" makes the
+// activity icon look short and the profile icon look narrow. We pre-compute
+// per-(name, state) display dimensions that scale each SVG to TARGET_H tall
+// and let width follow the SVG's own aspect ratio. The icon container is
+// sized to fit the widest variant so layout never shifts.
+const TARGET_H = 50;
+type DisplayDim = { w: number; h: number };
+function fitToHeight(w: number, h: number): DisplayDim {
+  return { w: Math.round((w / h) * TARGET_H), h: TARGET_H };
+}
+const ICON_DISPLAY: Record<BottomNavIconName, { selected: DisplayDim; unselected: DisplayDim }> = {
+  board:    { selected: fitToHeight(54, 53), unselected: fitToHeight(47, 47) },
+  activity: { selected: fitToHeight(61, 51), unselected: fitToHeight(49, 39) },
+  calendar: { selected: fitToHeight(57, 57), unselected: fitToHeight(50, 49) },
+  profile:  { selected: fitToHeight(51, 55), unselected: fitToHeight(46, 48) },
+  tools:    { selected: fitToHeight(42, 44), unselected: fitToHeight(43, 43) },
 };
+// Widest rendered icon across all (name, state) pairs — currently
+// activity-unselected at fitToHeight(49,39) ≈ 63pt wide. We pad to 68 so
+// no icon ever clips and every tab column is the same width.
+const CONTAINER_W = 68;
+const CONTAINER_H = TARGET_H + 4; // a touch of vertical breathing room
 const TRANSITION_MS = 200;
 const IDLE_TINT = '#4B555C';
 
@@ -112,30 +130,26 @@ export function BottomNavIcon({
     ]).start();
   }, [focused, reduceMotion, selectedOpacity, unselectedOpacity, scale]);
 
-  const iconSize = ICON_SIZES[name] ?? ICON_SIZE;
+  const dims = ICON_DISPLAY[name];
 
   if (!selectedUri || !unselectedUri) {
     // Reserve layout so the tab bar doesn't reflow on first paint.
-    return <View style={{ width: iconSize, height: iconSize }} />;
+    return <View style={{ width: CONTAINER_W, height: CONTAINER_H }} />;
   }
 
   return (
-    <Animated.View style={[{ width: iconSize, height: iconSize }, { transform: [{ scale }] }]}>
+    <Animated.View style={[{ width: CONTAINER_W, height: CONTAINER_H }, { transform: [{ scale }] }]}>
       <Animated.View style={[styles.layer, { opacity: unselectedOpacity }]}>
-        <SvgUri uri={unselectedUri} width={iconSize} height={iconSize} />
+        <SvgUri uri={unselectedUri} width={dims.unselected.w} height={dims.unselected.h} />
       </Animated.View>
       <Animated.View style={[styles.layer, { opacity: selectedOpacity }]}>
-        <SvgUri uri={selectedUri} width={iconSize} height={iconSize} />
+        <SvgUri uri={selectedUri} width={dims.selected.w} height={dims.selected.h} />
       </Animated.View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    width: ICON_SIZE,
-    height: ICON_SIZE,
-  },
   layer: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',

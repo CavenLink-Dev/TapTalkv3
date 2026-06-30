@@ -153,8 +153,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'flex-start',
     justifyContent: 'center',
   },
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   headerSpacer: {
-    width: 40,
+    width: 44,
   },
   content: {
     padding: spacing.lg,

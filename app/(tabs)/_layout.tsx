@@ -57,10 +57,12 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  // Taller bar gives the bigger icons room to breathe + a more forgiving
+  // tap zone for users with motor differences.
   tabBar: {
-    height: 78,
-    paddingTop: 6,
-    paddingBottom: 18,
+    height: 100,
+    paddingTop: 10,
+    paddingBottom: 22,
     backgroundColor: colors.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,

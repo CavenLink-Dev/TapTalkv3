@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -132,36 +132,34 @@ export default function DisplaySettingsScreen() {
 
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>ACCESSIBILITY</Text>
-          <Pressable
-            onPress={toggleHighContrast}
-            accessibilityRole="switch"
-            accessibilityLabel="High contrast mode"
-            accessibilityState={{ checked: highContrast }}
-            style={styles.toggleRow}
-          >
+          <View style={styles.toggleRow}>
             <View style={styles.toggleLeft}>
               <Text style={styles.toggleTitle}>High Contrast</Text>
               <Text style={styles.toggleDesc}>Increases contrast for easier reading.</Text>
             </View>
-            <View style={[styles.track, highContrast && styles.trackOn]}>
-              <View style={[styles.thumb, highContrast && styles.thumbOn]} />
-            </View>
-          </Pressable>
-          <Pressable
-            onPress={toggleHaptics}
-            accessibilityRole="switch"
-            accessibilityLabel="Haptic feedback"
-            accessibilityState={{ checked: hapticsEnabled }}
-            style={[styles.toggleRow, { marginTop: 12 }]}
-          >
+            <Switch
+              value={highContrast}
+              onValueChange={toggleHighContrast}
+              trackColor={{ false: colors.disabled, true: colors.primary }}
+              thumbColor={colors.surface}
+              ios_backgroundColor={colors.disabled}
+              accessibilityLabel="High contrast mode"
+            />
+          </View>
+          <View style={[styles.toggleRow, { marginTop: 12 }]}>
             <View style={styles.toggleLeft}>
               <Text style={styles.toggleTitle}>Haptic Feedback</Text>
               <Text style={styles.toggleDesc}>Vibrate on button and tile taps.</Text>
             </View>
-            <View style={[styles.track, hapticsEnabled && styles.trackOn]}>
-              <View style={[styles.thumb, hapticsEnabled && styles.thumbOn]} />
-            </View>
-          </Pressable>
+            <Switch
+              value={hapticsEnabled}
+              onValueChange={toggleHaptics}
+              trackColor={{ false: colors.disabled, true: colors.primary }}
+              thumbColor={colors.surface}
+              ios_backgroundColor={colors.disabled}
+              accessibilityLabel="Haptic feedback"
+            />
+          </View>
         </Card>
 
       </ScrollView>
@@ -184,8 +182,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'flex-start',
     justifyContent: 'center',
   },
@@ -198,7 +196,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   headerSpacer: {
-    width: 40,
+    width: 44,
   },
   content: {
     padding: spacing.lg,
@@ -291,26 +289,5 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: colors.textMuted,
     marginTop: 2,
-  },
-  track: {
-    width: 48,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.disabled,
-    paddingHorizontal: 3,
-    justifyContent: 'center',
-  },
-  trackOn: {
-    backgroundColor: colors.success,
-  },
-  thumb: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.surface,
-    alignSelf: 'flex-start',
-  },
-  thumbOn: {
-    alignSelf: 'flex-end',
   },
 });

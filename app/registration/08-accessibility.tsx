@@ -103,7 +103,7 @@ export default function RegStep8Accessibility() {
             accessibilityRole="button"
             accessibilityLabel="Skip accessibility setup for now"
             onPress={skip}
-            hitSlop={8}
+            hitSlop={16}
             style={styles.skipBtn}
           >
             <Text style={styles.skipLabel}>Skip for now</Text>
@@ -388,6 +388,8 @@ const styles = StyleSheet.create({
 
   skipBtn: {
     alignSelf: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
   },

@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
@@ -28,9 +28,9 @@ export default function MeScreen() {
   const [displayName, setDisplayName] = useState(state.user.displayName || state.user.nickname);
   const [caregiverLocked, setCaregiverLocked] = useState(state.parent.lockEnabled);
   const [pinPromptVisible, setPinPromptVisible] = useState(false);
-  const switchAnim = useRef(new Animated.Value(caregiverLocked ? 1 : 0)).current;
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
+  const [showPin, setShowPin] = useState(false);
 
   const saveProfile = () => {
     dispatch({
@@ -52,13 +52,8 @@ export default function MeScreen() {
     }
     const next = !caregiverLocked;
     setCaregiverLocked(next);
-    Animated.timing(switchAnim, {
-      toValue: next ? 1 : 0,
-      duration: 160,
-      useNativeDriver: false,
-    }).start();
     dispatch({ type: 'SET_PARENT', payload: { lockEnabled: next } });
-  }, [caregiverLocked, state.parent.pin, dispatch, switchAnim]);
+  }, [caregiverLocked, state.parent.pin, dispatch]);
 
   const confirmPinAndDisable = useCallback(async () => {
     if (!pinInput) return;
@@ -75,8 +70,21 @@ export default function MeScreen() {
   }, [pinInput, state.parent.pin, dispatch]);
 
   const signOut = () => {
-    dispatch({ type: 'SIGN_OUT' });
-    router.replace(splashRoute);
+    Alert.alert(
+      'Sign out?',
+      'You can sign back in any time with your email.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: () => {
+            dispatch({ type: 'SIGN_OUT' });
+            router.replace(splashRoute);
+          },
+        },
+      ],
+    );
   };
 
   const name = state.user.displayName || state.user.nickname || state.user.name || 'Guest';
@@ -129,7 +137,14 @@ export default function MeScreen() {
         <Text style={listStyles.sectionTitle}>Library & Guides</Text>
         {documents.map((doc) => (
           <View key={doc} style={styles.docRow}>
-            <Ionicons name="book-outline" size={20} color={colors.primary} style={styles.docIcon} />
+            <Ionicons
+              name="book-outline"
+              size={20}
+              color={colors.primary}
+              style={styles.docIcon}
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+            />
             <Text style={styles.docText}>{doc}</Text>
           </View>
         ))}
@@ -139,60 +154,71 @@ export default function MeScreen() {
           onPress={() => { hapticSelection(); router.push(attributionRoute); }}
           style={styles.docRow}
         >
-          <Ionicons name="information-circle-outline" size={20} color={colors.primary} style={styles.docIcon} />
+          <Ionicons
+            name="information-circle-outline"
+            size={20}
+            color={colors.primary}
+            style={styles.docIcon}
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          />
           <Text style={styles.docText}>Symbol Licences & Attribution</Text>
         </Pressable>
       </Card>
 
       <Card style={listStyles.section}>
         <Text style={listStyles.sectionTitle}>Caregiver Controls</Text>
-        <Pressable
-          accessibilityRole="switch"
-          accessibilityLabel="Caregiver lock"
-          accessibilityState={{ checked: caregiverLocked }}
-          onPress={toggleLock}
-          style={styles.settingRow}
-        >
-          <View>
+        <View style={styles.settingRow}>
+          <View style={styles.settingCopy}>
             <Text style={styles.settingTitle}>Caregiver Lock</Text>
             <Text style={styles.settingSubtitle}>Protect settings with a PIN.</Text>
           </View>
-          <Animated.View style={[
-              styles.switchTrack,
-              {
-                backgroundColor: switchAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [colors.disabled, colors.success],
-                }),
-              },
-            ]}>
-              <Animated.View style={[
-                styles.switchThumb,
-                {
-                  transform: [{
-                    translateX: switchAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 20],
-                    }),
-                  }],
-                },
-              ]} />
-            </Animated.View>
-        </Pressable>
+          <Switch
+            value={caregiverLocked}
+            onValueChange={toggleLock}
+            trackColor={{ false: colors.disabled, true: colors.success }}
+            thumbColor={colors.surface}
+            ios_backgroundColor={colors.disabled}
+            accessibilityLabel="Caregiver lock"
+          />
+        </View>
         {pinPromptVisible ? (
           <View style={styles.pinPrompt}>
             <Text style={styles.pinPromptLabel}>Enter your 6-digit PIN to disable lock</Text>
-            <TextField
-              accessibilityLabel="Enter PIN to disable lock"
-              placeholder="e.g. 123456"
-              secureTextEntry
-              keyboardType="number-pad"
-              maxLength={6}
-              value={pinInput}
-              onChangeText={setPinInput}
-              style={styles.pinInput}
-            />
-            {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
+            <View style={styles.pinInputRow}>
+              <TextField
+                accessibilityLabel="Enter PIN to disable lock"
+                placeholder="e.g. 123456"
+                secureTextEntry={!showPin}
+                keyboardType="number-pad"
+                maxLength={6}
+                value={pinInput}
+                onChangeText={setPinInput}
+                style={styles.pinInputField}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={showPin ? 'Hide PIN' : 'Show PIN'}
+                onPress={() => setShowPin((v) => !v)}
+                hitSlop={10}
+                style={styles.pinPeekBtn}
+              >
+                <Ionicons
+                  name={showPin ? 'eye-off-outline' : 'eye-outline'}
+                  size={22}
+                  color={colors.textMuted}
+                />
+              </Pressable>
+            </View>
+            {pinError ? (
+              <Text
+                style={styles.pinError}
+                accessibilityLiveRegion="polite"
+                accessibilityRole="alert"
+              >
+                {pinError}
+              </Text>
+            ) : null}
             <View style={styles.pinActions}>
               <PrimaryButton
                 accessibilityLabel="Confirm PIN"
@@ -220,7 +246,9 @@ export default function MeScreen() {
       </Card>
 
       <Card style={styles.mascotCard}>
-        <TapTalkMascot variant="business" style={styles.mascot} />
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <TapTalkMascot variant="business" style={styles.mascot} />
+        </View>
         <Text style={styles.mascotText}>Built with care for everyone who deserves to be heard.</Text>
       </Card>
 
@@ -327,6 +355,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginTop: spacing.md,
   },
+  settingCopy: {
+    flex: 1,
+  },
   settingSubtitle: {
     marginTop: 2,
     color: colors.textMuted,
@@ -336,19 +367,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: typography.callout,
     fontWeight: '800',
-  },
-  switchThumb: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.surface,
-  },
-  switchTrack: {
-    width: 48,
-    height: 28,
-    justifyContent: 'center',
-    borderRadius: 14,
-    paddingHorizontal: 3,
   },
   pinPrompt: {
     marginTop: spacing.md,
@@ -362,8 +380,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: spacing.sm,
   },
-  pinInput: {
+  pinInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginBottom: spacing.sm,
+  },
+  pinInputField: {
+    flex: 1,
+  },
+  pinPeekBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pinError: {
     color: colors.danger,

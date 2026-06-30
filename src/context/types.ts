@@ -52,6 +52,16 @@ export interface AppState {
   messageWords: AACWord[];
   currentBoard: string;
   keyboardText: string;
+  /**
+   * Per-board tile order. Keys are BoardMode strings ('home', 'foods', ...);
+   * values are arrays of tile IDs in display order. Tile IDs not listed fall
+   * to the end of the board so new tiles added in code releases don't break
+   * existing user layouts. Tile IDs no longer present in code are ignored.
+   * Empty arrays / missing keys mean "use the code default order".
+   */
+  boardLayouts: Record<string, string[]>;
+  /** IDs of tiles the user has hidden via the edit-mode delete badge. */
+  hiddenTileIds: string[];
 
   // Today — Tasks
   tasks: Task[];
@@ -161,6 +171,9 @@ export type Action =
   | { type: 'REMOVE_LAST_WORD' }
   | { type: 'REMOVE_WORD_AT_INDEX'; payload: number }
   | { type: 'SET_BOARD'; payload: string }
+  | { type: 'SET_BOARD_ORDER'; payload: { board: string; order: string[] } }
+  | { type: 'HIDE_TILE'; payload: string }
+  | { type: 'RESTORE_TILE'; payload: string }
   | { type: 'SET_KEYBOARD_TEXT'; payload: string }
   | { type: 'ADD_TASK'; payload: Task }
   | { type: 'TOGGLE_TASK'; payload: string }

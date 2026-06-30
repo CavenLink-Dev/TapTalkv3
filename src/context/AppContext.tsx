@@ -1,6 +1,7 @@
 import React, { createContext, useReducer, useEffect, useCallback, useRef, useState, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, Action } from './types';
+import { setHapticsEnabled } from '../utils/haptics';
 
 const STORAGE_KEY = '@TapTalk_state';
 const MAX_SAVE_RETRIES = 2;
@@ -42,6 +43,8 @@ export const initialState: AppState = {
   messageWords: [],
   currentBoard: 'main',
   keyboardText: '',
+  boardLayouts: {},
+  hiddenTileIds: [],
   tasks: [],
   lists: [],
   firstThen: { first: null, then: null },
@@ -67,6 +70,11 @@ function mergeStoredState(storedState: Partial<AppState>): AppState {
       ...initialState.accessibility,
       ...storedState.accessibility,
     },
+    boardLayouts: {
+      ...initialState.boardLayouts,
+      ...(storedState.boardLayouts ?? {}),
+    },
+    hiddenTileIds: storedState.hiddenTileIds ?? initialState.hiddenTileIds,
     firstThen: {
       ...initialState.firstThen,
       ...storedState.firstThen,
@@ -157,6 +165,23 @@ export function appReducer(state: AppState, action: Action): AppState {
       return { ...state, messageWords: state.messageWords.filter((_, i) => i !== action.payload) };
     case 'SET_BOARD':
       return { ...state, currentBoard: action.payload };
+    case 'SET_BOARD_ORDER':
+      return {
+        ...state,
+        boardLayouts: {
+          ...state.boardLayouts,
+          [action.payload.board]: action.payload.order,
+        },
+      };
+    case 'HIDE_TILE':
+      return state.hiddenTileIds.includes(action.payload)
+        ? state
+        : { ...state, hiddenTileIds: [...state.hiddenTileIds, action.payload] };
+    case 'RESTORE_TILE':
+      return {
+        ...state,
+        hiddenTileIds: state.hiddenTileIds.filter((id) => id !== action.payload),
+      };
     case 'SET_KEYBOARD_TEXT':
       return { ...state, keyboardText: action.payload };
     case 'ADD_TASK':
@@ -324,6 +349,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     saveState(0);
   }, [state, hydrated]);
+
+  // Sync the user's "Haptic Feedback" preference into the haptics helper so
+  // every hapticSelection/hapticLight/etc call respects it without each
+  // caller having to read context.
+  useEffect(() => {
+    setHapticsEnabled(state.accessibility.hapticsEnabled);
+  }, [state.accessibility.hapticsEnabled]);
 
   return (
     <AppContext.Provider value={{ state, dispatch, hydrated, hydrationError, clearHydrationError }}>
