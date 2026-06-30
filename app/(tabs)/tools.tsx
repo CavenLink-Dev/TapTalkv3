@@ -88,7 +88,7 @@ const TOOLS: Tool[] = [
 ];
 
 const TOOL_BY_ID = new Map<ToolId, Tool>(TOOLS.map(t => [t.id, t]));
-const CARD_GAP = spacing.sm;
+const CARD_GAP = spacing.lg;
 const CARD_HEIGHT = 214;
 
 // Six evenly-spaced angles for the star burst particles.

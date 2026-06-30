@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { BackspaceIcon } from '../../components/icons/FigmaIcons';
 import { useAppContext } from '../../hooks/useAppContext';
 import { useTheme } from '../../theme/useTheme';
@@ -15,8 +16,8 @@ import { hapticError, hapticSelection } from '../../utils/haptics';
 import type { ImageSourcePropType } from 'react-native';
 
 const MESSAGE_HEIGHT = 104;
-const MESSAGE_CHIP_SIZE = 40;
-const MESSAGE_SLOT_COUNT = 6;
+const MESSAGE_CHIP_SIZE = 48;
+const MESSAGE_SLOT_COUNT = 5;
 
 export type MessageStripTile = {
   id: string;
@@ -37,6 +38,8 @@ type TalkMessageStripProps = {
   onClearAll: () => void;
   onRemoveWord: (index: number, label: string) => void;
   hapticsEnabled: boolean;
+  navVisible: boolean;
+  onToggleNav: () => void;
 };
 
 function MessageChip({
@@ -94,6 +97,8 @@ export const TalkMessageStrip = React.memo(function TalkMessageStrip({
   onClearAll,
   onRemoveWord,
   hapticsEnabled,
+  navVisible,
+  onToggleNav,
 }: TalkMessageStripProps) {
   const t = useTheme();
   const { state } = useAppContext();
@@ -142,6 +147,7 @@ export const TalkMessageStrip = React.memo(function TalkMessageStrip({
         {
           backgroundColor: t.colors.surface,
           borderBottomColor: t.colors.border,
+          borderBottomWidth: 1.4,
         },
       ]}
     >
@@ -209,7 +215,38 @@ export const TalkMessageStrip = React.memo(function TalkMessageStrip({
         delayLongPress={500}
         style={styles.backspace}
       >
-        <BackspaceIcon size={56} />
+        <BackspaceIcon size={40} />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={navVisible ? 'Hide board navigation' : 'Show board navigation'}
+        accessibilityHint="Opens the TapTalk, Quick, Edit, and Clear controls"
+        accessibilityState={{ expanded: navVisible }}
+        onPress={onToggleNav}
+        hitSlop={{ top: 10, bottom: 10, left: 18, right: 18 }}
+        style={({ pressed }) => [
+          styles.navDropdownHandle,
+          {
+            backgroundColor: t.colors.surface,
+            borderColor: t.colors.border,
+          },
+          navVisible && [
+            styles.navDropdownHandleOpen,
+            {
+              borderColor: t.colors.primary,
+              backgroundColor: t.isDark ? t.colors.inputBgWhite : t.colors.surface,
+            },
+          ],
+          pressed && styles.navDropdownHandlePressed,
+        ]}
+      >
+        <Ionicons
+          name={navVisible ? 'chevron-up' : 'chevron-down'}
+          size={20}
+          style={{ marginTop: -4 }}
+          thickness={5}
+          color={navVisible ? t.colors.primaryDark : t.colors.textMuted}
+        />
       </Pressable>
     </View>
   );
@@ -220,11 +257,10 @@ const styles = StyleSheet.create({
     height: MESSAGE_HEIGHT,
     paddingLeft: 21,
     paddingRight: 17,
-    paddingTop: 20,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingBottom: 18,
-    borderBottomWidth: 1.4,
+    paddingBottom: 15,
+    // borderBottomWidth is applied inline (conditional on navVisible)
   },
   messageButton: {
     flex: 1,
@@ -243,7 +279,7 @@ const styles = StyleSheet.create({
   messageSlotRow: {
     position: 'absolute',
     left: 0,
-    top: 4,
+    top: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -267,16 +303,38 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   messageChipLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '800',
     paddingHorizontal: 2,
     textAlign: 'center',
   },
   backspace: {
     width: 56,
-    height: 56,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: spacing.sm,
+  },
+  navDropdownHandle: {
+    position: 'absolute',
+    left: '50%',
+    bottom: -15,
+    width: 66,
+    height: 14,
+    marginLeft: -33,
+    borderWidth: 1.5,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 5,
+    borderBottomRightRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    zIndex: 5,
+  },
+  navDropdownHandleOpen: {
+    borderWidth: 2,
+    borderTopWidth: 0,
+  },
+  navDropdownHandlePressed: {
+    opacity: 0.78,
   },
 });

@@ -5,7 +5,6 @@ import {
   Alert,
   Animated as RNAnimated,
   Easing as RNEasing,
-  Image,
   LayoutChangeEvent,
   LayoutRectangle,
   NativeScrollEvent,
@@ -30,7 +29,6 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Polyline } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, useRouter } from 'expo-router';
 import { BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
@@ -88,7 +86,6 @@ type GhostTile = {
 const FIGMA_WIDTH = 393;
 const MESSAGE_HEIGHT = 104;
 const TOP_NAV_HEIGHT = 76;
-const COLLAPSED_TOGGLE_HEIGHT = 17;
 const BOARD_COLUMNS = 4;
 // +1pt of breathing room between every tile — picks up the request to
 // loosen the grid without dropping a column. Drives both the horizontal
@@ -100,7 +97,7 @@ const TILE_GAP = 4;
 // side margin was still reading as wasted space — the freed width below
 // goes straight into the tiles via the `tileSize` row maths.
 const TILE_LEFT_PADDING = 4;
-const BOARD_TOP_GAP = 18;
+const BOARD_TOP_GAP = 36;
 // Soft cap on tile size. Actual size is `min(TILE_SIZE, fit-to-row)`, so
 // on a standard 390-393pt iPhone the row maths drives the tile to ~94pt
 // (up from 91 at 8pt gutter). On wider devices (Plus / Pro Max / iPad)
@@ -113,14 +110,12 @@ const TILE_SIZE = 104;
 // bigger than Actions" in QA. Keeping a constant lets us swap to a
 // different square multiplier if needed without re-threading the ratio
 // through every render path.
-const TILE_HEIGHT_RATIO = 1;
+const TILE_HEIGHT_RATIO = 1.25;
 const MESSAGE_CHIP_SIZE = 40;
 const MESSAGE_SLOT_COUNT = 6;
 const MESSAGE_SLOT_GAP = 5;
-
+    
 const TILE_ASSETS = {
-  folder: require('../../assets/aac/board_tiles/folder-cyan.png'),
-  folderExample: require('../../assets/aac/board_tiles/folder-example.png'),
   loud: require('../../assets/aac/board_tiles/symbol-loud.png'),
   straw: require('../../assets/aac/board_tiles/symbol-straw.png'),
   green: require('../../assets/aac/board_tiles/symbol-green.png'),
@@ -173,10 +168,10 @@ const HOME_TILES: BoardTile[] = [
   // at a glance, not just the label: People → family, Places → house,
   // Actions → run, Foods → food. These are intentional, hand-picked IDs;
   // any folder left without one still falls back to the resolver.
-  { id: 'people', label: 'People', kind: 'folder', target: 'quick',   color: '#1DCDFF', background: 'folderExample', mulberrySymbolId: 'mulberry_family_excv0f' },
-  { id: 'foods',  label: 'Foods',  kind: 'folder', target: 'foods',   color: '#1DCDFF', background: 'folderExample', mulberrySymbolId: 'mulberry_food_atkyaz' },
-  { id: 'places', label: 'Places', kind: 'folder', target: 'animals', color: '#1DCDFF', background: 'folderExample', mulberrySymbolId: 'mulberry_house_1ice1xp' },
-  { id: 'actions',label: 'Actions',kind: 'folder', target: 'tools',   color: '#1DCDFF', background: 'folderExample', mulberrySymbolId: 'mulberry_run_1l6fpg7' },
+  { id: 'people', label: 'People', kind: 'folder', target: 'quick',   color: '#1DCDFF', mulberrySymbolId: 'mulberry_family_excv0f' },
+  { id: 'foods',  label: 'Foods',  kind: 'folder', target: 'foods',   color: '#1DCDFF', mulberrySymbolId: 'mulberry_food_atkyaz' },
+  { id: 'places', label: 'Places', kind: 'folder', target: 'animals', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
+  { id: 'actions',label: 'Actions',kind: 'folder', target: 'tools',   color: '#1DCDFF', mulberrySymbolId: 'mulberry_run_1l6fpg7' },
 ];
 
 const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
@@ -270,14 +265,36 @@ function TileSymbol({ tile, size, resolved }: { tile: BoardTile; size: number; r
 
 function BoardFolderTile({ tile, size, resolved }: { tile: BoardTile; size: number; resolved?: ResolvedSymbol }) {
   const t = useTheme();
+  const edgeColor = t.isDark ? t.colors.border : t.colors.primary;
+  const tabWidth = Math.round(size * 0.48);
+  const tabHeight = Math.round(size * 0.17);
+  const faceTop = Math.round(size * 0.08);
   // Folder tiles render at the same square footprint as word tiles so the
   // grid reads as one rhythm regardless of `kind`.
   return (
     <View style={[styles.tileShell, { width: size, height: size }]}>
-      <Image
-        source={TILE_ASSETS[tile.background ?? 'folder']}
-        resizeMode="stretch"
-        style={[styles.tileBackground, { width: size, height: size }]}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.folderTab,
+          {
+            width: tabWidth,
+            height: tabHeight,
+            backgroundColor: tile.color,
+            borderColor: edgeColor,
+          },
+        ]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.folderFace,
+          {
+            top: faceTop,
+            backgroundColor: tile.color,
+            borderColor: edgeColor,
+          },
+        ]}
       />
       <Text
         style={[styles.folderLabel, { color: t.colors.text }]}
@@ -627,9 +644,8 @@ function BoardTileButton({
           delayLongPress={450}
           onPressIn={() => !editMode && animateTo(0.94)}
           onPressOut={() => !editMode && animateTo(1)}
-          style={({ pressed }) => [
+          style={({ pressed: _pressed }) => [
             styles.tilePressable,
-            pressed && !editMode && styles.tilePressed,
             isDraggable && [styles.tileEditOutline, { borderColor: t.colors.primary }],
           ]}
         >
@@ -730,16 +746,8 @@ function TopNavTab({
         <Ionicons
           name={meta.icon}
           size={28}
-          // Animated.Color can't pass directly into Ionicons' color prop, so
-          // we let the parent View tint via animated text-style trick.
-          color={idleColor}
-          // Replace the static icon with an absolute-positioned overlay that
-          // fades in the active tint on top.
+          color={active ? activeColor : idleColor}
         />
-        {/* Active-coloured overlay icon — opacity tracks activeAnim. */}
-        <RNAnimated.View style={[styles.topTabIconOverlay, { opacity: activeAnim }]}>
-          <Ionicons name={meta.icon} size={28} color={activeColor} />
-        </RNAnimated.View>
         <RNAnimated.Text style={[styles.topTabLabel, { color: tintColor }]}>
           {meta.label}
         </RNAnimated.Text>
@@ -748,37 +756,14 @@ function TopNavTab({
   );
 }
 
-function ToggleChevron({ open, active }: { open: boolean; active: boolean }) {
-  // Arrow darkens (rather than lights blue) when the nav is open or pressed,
-  // so the chevron lives in the same neutral family as the top-tab icons.
-  const t = useTheme();
-  const stroke = active
-    ? t.colors.symbolOutline
-    : t.isDark ? t.colors.textTertiary : '#9A9A9A';
-  return (
-    <Svg width={36} height={16} viewBox="0 0 36 16">
-      <Polyline
-        points={open ? '9,10 18,4 27,10' : '9,5 18,11 27,5'}
-        fill="none"
-        stroke={stroke}
-        strokeWidth={3}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 function TopNav({
   visible,
   activeTab,
   onTabPress,
-  onToggle,
 }: {
   visible: boolean;
   activeTab: TopTab;
   onTabPress: (tab: TopTab) => void;
-  onToggle: () => void;
 }) {
   // Item 3 — RM: collapse/expand at duration 0 (principle 18).
   const reduceMotion = useReduceMotion();
@@ -796,7 +781,7 @@ function TopNav({
 
   const slotHeight = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [COLLAPSED_TOGGLE_HEIGHT, TOP_NAV_HEIGHT],
+    outputRange: [0, TOP_NAV_HEIGHT],
   });
   const panelOpacity = anim.interpolate({
     inputRange: [0, 0.5, 1],
@@ -807,7 +792,7 @@ function TopNav({
     <RNAnimated.View
       style={[
         styles.topNavSlot,
-        { height: slotHeight, backgroundColor: t.colors.background },
+        { height: slotHeight, backgroundColor: t.colors.surface },
       ]}
     >
       <RNAnimated.View
@@ -817,7 +802,6 @@ function TopNav({
           {
             opacity: panelOpacity,
             backgroundColor: t.isDark ? t.colors.navBackground : '#FFFFFF',
-            borderColor: t.isDark ? t.colors.border : '#9A9A9A',
           },
         ]}
       >
@@ -830,28 +814,13 @@ function TopNav({
           />
         ))}
       </RNAnimated.View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={visible ? 'Hide top navigation' : 'Show top navigation'}
-        onPress={onToggle}
-        style={({ pressed }) => [
-          styles.navToggle,
-          {
-            backgroundColor: t.isDark ? t.colors.input : t.colors.softBlue,
-            borderColor: t.isDark ? t.colors.border : t.colors.primaryDark,
-          },
-          visible ? styles.navToggleOpen : styles.navToggleClosed,
-          !(visible || pressed) && [
-            styles.navToggleIdle,
-            {
-              backgroundColor: t.isDark ? t.colors.navBackground : '#FFFFFF',
-              borderColor: t.isDark ? t.colors.border : '#9A9A9A',
-            },
-          ],
+      <RNAnimated.View
+        pointerEvents="none"
+        style={[
+          styles.topNavBottomBorder,
+          { backgroundColor: t.colors.border, opacity: panelOpacity },
         ]}
-      >
-        {({ pressed }) => <ToggleChevron open={visible} active={visible || pressed} />}
-      </Pressable>
+      />
     </RNAnimated.View>
   );
 }
@@ -994,7 +963,7 @@ export default function TalkScreen() {
     announce(`Removed ${label}`);
   }, [announce, dispatch, hapticIfEnabled]);
 
-  const appendWord = useCallback((tile: BoardTile) => {
+  const appendWord = useCallback((tile: BoardTile, silent = false) => {
     const label = tile.speech ?? tile.label;
     dispatch({
       type: 'APPEND_WORD',
@@ -1005,9 +974,13 @@ export default function TalkScreen() {
         source: 'board',
       },
     });
-    speak(label, { rate: state.accessibility.speechRate, pitch: state.accessibility.speechPitch });
+    // When silent=true the caller already called speak() immediately on press;
+    // don't call it again here or the word would be said twice (and late).
+    if (!silent) {
+      speak(label, { rate: state.accessibility.speechRate, pitch: state.accessibility.speechPitch });
+    }
     announce(`Added ${label}`);
-  }, [announce, dispatch, speak]);
+  }, [announce, dispatch, speak, state.accessibility.speechRate, state.accessibility.speechPitch]);
 
   const addGhost = useCallback((ghost: GhostTile) => {
     ghostsRef.current = [...ghostsRef.current, ghost];
@@ -1020,7 +993,9 @@ export default function TalkScreen() {
     setGhosts(ghostsRef.current);
 
     if (!ghost) return;
-    appendWord(ghost.tile);
+    // Pass silent=true — speech was already triggered immediately on tile press
+    // so we only need to add the word to the strip now.
+    appendWord(ghost.tile, true);
     hapticIfEnabled();
   }, [appendWord, hapticIfEnabled]);
 
@@ -1042,8 +1017,15 @@ export default function TalkScreen() {
   }, [announce, dispatch]);
 
   const startGhostToMessage = useCallback((tile: BoardTile, fromRect: WindowRect | null) => {
+    // Speak immediately on press — don't wait for the 430ms ghost animation
+    // to complete. This eliminates the perceived delay between tapping and hearing.
+    speak(tile.speech ?? tile.label, {
+      rate: state.accessibility.speechRate,
+      pitch: state.accessibility.speechPitch,
+    });
+
     if (!fromRect) {
-      appendWord(tile);
+      appendWord(tile, true); // silent — already spoken above
       return;
     }
 
@@ -1054,7 +1036,7 @@ export default function TalkScreen() {
     const targetRef = messageSlotRefs.current[targetIndex];
 
     if (!targetRef || !rootRef.current) {
-      appendWord(tile);
+      appendWord(tile, true); // silent — already spoken above
       return;
     }
 
@@ -1079,7 +1061,7 @@ export default function TalkScreen() {
         });
       });
     });
-  }, [addGhost, appendWord, tileSize]);
+  }, [addGhost, appendWord, speak, state.accessibility.speechPitch, state.accessibility.speechRate, tileSize]);
 
   useEffect(() => {
     prewarmMulberryAssets({
@@ -1208,16 +1190,17 @@ export default function TalkScreen() {
           onClearAll={clearMessage}
           onRemoveWord={handleStripRemoveWord}
           hapticsEnabled={state.accessibility.hapticsEnabled !== false}
+          navVisible={showTopNav}
+          onToggleNav={() => {
+            hapticIfEnabled();
+            setShowTopNav(value => !value);
+          }}
         />
 
         <TopNav
           visible={showTopNav}
           activeTab={activeTab}
           onTabPress={handleTopTab}
-          onToggle={() => {
-            hapticIfEnabled();
-            setShowTopNav(value => !value);
-          }}
         />
 
         <ScrollView
@@ -1372,22 +1355,26 @@ const styles = StyleSheet.create({
   topNavSlot: {
     position: 'relative',
     zIndex: 2,
+    overflow: 'hidden',
   },
   topNavPanel: {
-    marginHorizontal: 9.5,
+    marginHorizontal: 0,
     height: TOP_NAV_HEIGHT,
-    borderLeftWidth: 1.6,
-    borderRightWidth: 1.6,
-    borderBottomWidth: 1.6,
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingTop: 10,
+    paddingTop: 12,
     paddingBottom: 9,
-    paddingHorizontal: 10,
+    paddingHorizontal: 14,
+  },
+  // Full-width bottom border of the top nav. Rendered as a view rather than
+  // a border so it isn't clipped by the animated slot's overflow:hidden.
+  topNavBottomBorder: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 1.2,
   },
   topTab: {
     width: 72,
@@ -1395,25 +1382,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Slight opacity dip on touch — Pressable feedback while the scale/colour
-  // animation handles the active state.
+  // Very subtle opacity dip — colour + scale animation already handles the active state.
   topTabPressed: {
-    opacity: 0.85,
+    opacity: 0.95,
   },
   topTabContent: {
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
-  },
-  // Coloured icon overlay sits exactly on top of the idle icon so the
-  // active tint can fade in without re-rendering layout. absoluteFillObject
-  // + flex-centering pins it to the SAME rect as the idle icon (previously
-  // `top: 0` left a vertical offset that made the active icon look like it
-  // was hovering above the idle one during the cross-fade).
-  topTabIconOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   topTabLabel: {
     marginTop: 4,
@@ -1421,36 +1397,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.6,
   },
-  navToggle: {
-    position: 'absolute',
-    left: '50%',
-    marginLeft: -31,
-    width: 62,
-    height: 18,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 4,
-    // All four corners rounded so the toggle reads as a clean chip
-    // instead of a square with notched bottom corners.
-    borderRadius: 10,
-  },
-  navToggleOpen: {
-    // Slide 1pt down so the toggle's bottom edge tucks UNDER the panel's
-    // top edge rather than sitting beside it. Drop the bottom border in
-    // the same state so the toggle merges visually into the panel and
-    // there's no doubled stroke where they meet.
-    top: 1,
-    borderBottomWidth: 0,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-  },
-  navToggleClosed: {
-    top: 1,
-  },
-  // Neutral idle look when closed and not being pressed — keeps the blue
-  // strictly tied to pressed/active states without changing the open visuals.
-  navToggleIdle: {},
   board: {
     flex: 1,
   },
@@ -1466,9 +1412,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  tilePressed: {
-    opacity: 0.82,
-  },
+  // tilePressed removed — spring scale on onPressIn/Out is the sole press feedback
   deleteBadge: {
     position: 'absolute',
     top: -6,
@@ -1488,10 +1432,22 @@ const styles = StyleSheet.create({
   tileShell: {
     position: 'relative',
   },
-  tileBackground: {
+  folderTab: {
     position: 'absolute',
     left: 0,
     top: 0,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+  },
+  folderFace: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 10,
+    borderWidth: 1.5,
   },
   folderLabel: {
     position: 'absolute',

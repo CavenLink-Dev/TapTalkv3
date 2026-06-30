@@ -40,34 +40,65 @@ const ICONS: Record<BottomNavIconName, IconVariants> = {
   },
 };
 
-// Bulky bottom-nav icons — user-explicit. Every icon renders at the same
-// VISUAL height (TARGET_H) regardless of (a) which tab it is or (b) whether
-// it's selected or unselected. Each SVG has a different viewBox and aspect
-// ratio (some include extra padding around the glyph for a shadow, some are
-// landscape, some are portrait), so a flat "all icons are 56×56" makes the
-// activity icon look short and the profile icon look narrow. We pre-compute
-// per-(name, state) display dimensions that scale each SVG to TARGET_H tall
-// and let width follow the SVG's own aspect ratio. The icon container is
-// sized to fit the widest variant so layout never shifts.
-const TARGET_H = 50;
+// Optical icon sizing — every icon's VISIBLE GLYPH appears at ~50pt height
+// regardless of which tab or state (selected/unselected).
+//
+// Why a flat "all icons the same height" doesn't work:
+//   • Selected icons embed a drop-shadow filter (dy=4, blur=2) inside their
+//     SVG viewBox, consuming ~6pt of vertical space below the glyph. At equal
+//     render heights their visible glyph is shorter than an unselected icon
+//     with no shadow.
+//   • The tools icon has NO shadow in either state, so at the same render
+//     height its glyph appears 12–15% taller — making it look out of place.
+//   • activity-unselected (49×39 viewBox) is very landscape; a fitToHeight
+//     approach makes it disproportionately wide.
+//
+// Solution: pre-compute display dimensions so each glyph ≈ 50pt optical height.
+//   selected   → display_h = viewBox_h × (50 / glyph_h)  [glyph_h ≈ viewBox_h - 6]
+//   unselected → scale viewBox to place glyph at 50pt (no shadow to compensate)
+//   tools      → no shadow in either state; shown at 50pt so glyph matches others
+//
 type DisplayDim = { w: number; h: number };
-function fitToHeight(w: number, h: number): DisplayDim {
-  return { w: Math.round((w / h) * TARGET_H), h: TARGET_H };
-}
+const rr = (n: number) => Math.round(n);
+
 const ICON_DISPLAY: Record<BottomNavIconName, { selected: DisplayDim; unselected: DisplayDim }> = {
-  board:    { selected: fitToHeight(54, 53), unselected: fitToHeight(47, 47) },
-  activity: { selected: fitToHeight(61, 51), unselected: fitToHeight(49, 39) },
-  calendar: { selected: fitToHeight(57, 57), unselected: fitToHeight(50, 49) },
-  profile:  { selected: fitToHeight(51, 55), unselected: fitToHeight(46, 48) },
-  tools:    { selected: fitToHeight(42, 44), unselected: fitToHeight(43, 43) },
+  // board-selected  54×53: shadow ≈6pt → glyph ≈47pt
+  // board-unselected 47×47: glyph ≈46pt (minimal margin)
+  board: {
+    selected:   { w: rr(54 * 50 / 47), h: rr(53 * 50 / 47) },  // 57×56
+    unselected: { w: rr(47 * 50 / 46), h: rr(47 * 50 / 46) },  // 51×51
+  },
+  // activity-selected  61×51: shadow ≈6pt → glyph ≈45pt. Wide icon by design.
+  // activity-unselected 49×39: no shadow, glyph ≈37pt. Inherently landscape.
+  activity: {
+    selected:   { w: rr(61 * 50 / 45), h: rr(51 * 50 / 45) },  // 68×57
+    unselected: { w: rr(49 * 50 / 37), h: rr(39 * 50 / 37) },  // 66×53
+  },
+  // calendar-selected  57×57: tick marks at top + shadow; glyph span ≈51pt
+  // calendar-unselected 50×49: ticks + body ≈46pt glyph
+  calendar: {
+    selected:   { w: rr(57 * 50 / 51), h: rr(57 * 50 / 51) },  // 56×56
+    unselected: { w: rr(50 * 50 / 46), h: rr(49 * 50 / 46) },  // 54×53
+  },
+  // profile-selected  51×55: shadow ≈6pt → glyph ≈49pt
+  // profile-unselected 46×48: no shadow, glyph ≈46pt
+  profile: {
+    selected:   { w: rr(51 * 50 / 49), h: rr(55 * 50 / 49) },  // 52×56
+    unselected: { w: rr(46 * 50 / 46), h: rr(48 * 50 / 46) },  // 50×52
+  },
+  // tools: NO shadow in either state → show at exactly 50pt so glyph matches
+  // the shadow-compensated selected icons rather than appearing taller.
+  tools: {
+    selected:   { w: rr(42 * 50 / 44), h: 50 },  // 48×50
+    unselected: { w: 50, h: 50 },                 // 50×50
+  },
 };
-// Widest rendered icon across all (name, state) pairs — currently
-// activity-unselected at fitToHeight(49,39) ≈ 63pt wide. We pad to 68 so
-// no icon ever clips and every tab column is the same width.
-const CONTAINER_W = 68;
-const CONTAINER_H = TARGET_H + 4; // a touch of vertical breathing room
+
+// Container sized to the widest icon (activity-unselected ≈ 66pt) + margin.
+const CONTAINER_W = 74;
+// Tallest icon (activity-selected ≈ 57pt) + breathing room.
+const CONTAINER_H = 62;
 const TRANSITION_MS = 200;
-const IDLE_TINT = '#4B555C';
 
 export function BottomNavIcon({
   name,

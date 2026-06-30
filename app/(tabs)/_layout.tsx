@@ -69,12 +69,13 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  // Taller bar gives the bigger icons room to breathe + a more forgiving
-  // tap zone for users with motor differences.
+  // Bulky tab bar — substantially taller to give the big icons plenty of
+  // room and to make the tap zone very generous for motor-impaired users.
+  // paddingBottom is above the automatic home-indicator safe-area inset.
   tabBar: {
-    height: 82,
+    height: 100,
     paddingTop: 12,
-    paddingBottom: 22,
+    paddingBottom: 28,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   tabBarItem: {

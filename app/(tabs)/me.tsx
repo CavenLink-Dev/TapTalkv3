@@ -1,19 +1,18 @@
 /**
  * Me / Profile tab — iOS Settings-style grouped list.
  *
- * Replaces the old open dashboard (user card + zero-stats + inline edit form +
- * flat guide list) with a calm, compact, progressively-disclosed settings
- * screen. Structure: Header → User Card → Profile → Settings → Accessibility →
- * Privacy & Data → Tour of TapTalk → About → Sign Out.
+ * Groups:
+ *   1. User Card (always visible — not collapsible)
+ *   2. User Profile & Settings  (Profile + Settings + Accessibility)
+ *   3. Privacy & Data
+ *   4. About Us & Guide         (Tour + About + mascot tagline)
+ *   5. Sign Out button (centred, horizontally compact)
  *
- * Design laws applied: 1 (simple first), 3 (expandable sections), 5 (deeper
- * pages on demand), 12 (separate risky actions), 13/14/16 (clear results,
- * spring/soft motion), 18 (reduce motion), 19 (haptics), 20 (44pt targets),
- * 21–23 (a11y labels, dynamic type, no colour-only), 27 (sections), 30 (calm).
- *
- * Most advanced settings are structural for now: rows that have a real
- * destination navigate there; rows whose feature is not built yet give calm
- * "coming soon" feedback so there are never dead ends.
+ * Design principles applied: 1 (simple first), 3 (expandable sections),
+ * 5 (deeper pages on demand), 12 (separate risky actions), 13/14/16
+ * (clear results, spring/soft motion), 18 (reduce motion), 19 (haptics),
+ * 20 (44pt targets), 21–23 (a11y labels, dynamic type, no colour-only),
+ * 27 (sections), 30 (calm).
  */
 
 import React, { useCallback, useRef, useState } from 'react';
@@ -40,7 +39,6 @@ import { Card } from '../../src/components/native/Card';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { Screen } from '../../src/components/native/Screen';
 import { TextField } from '../../src/components/native/TextField';
-import { TapTalkMascot } from '../../src/components/TapTalkMascot';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { splitAppState } from '../../src/context/persistence';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
@@ -61,6 +59,8 @@ const displayRoute = '/settings/display' as Href;
 const attributionRoute = '/symbol-attribution' as Href;
 const tourRoute = '/onboarding/tour' as Href;
 const splashRoute = '/onboarding/splash' as Href;
+
+const MASCOT_HAPPY = require('../../assets/mascot_happy_looking_up.png');
 
 const USER_TYPE_LABELS: Record<string, string> = {
   myself: 'AAC user',
@@ -89,6 +89,23 @@ const BUTTON_SIZE_LABELS: Record<string, string> = {
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
+// ── Sub-section label (inside merged group) ──────────────────────────────────
+
+function SubSectionLabel({ label }: { label: string }) {
+  const t = useTheme();
+  return (
+    <View style={[styles.subSectionLabelWrap, { borderTopColor: t.colors.input }]}>
+      <Text
+        style={[styles.subSectionLabel, { color: t.colors.textTertiary }]}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      >
+        {label.toUpperCase()}
+      </Text>
+    </View>
+  );
+}
+
 // ── Row ──────────────────────────────────────────────────────────────────────
 
 interface RowProps {
@@ -96,16 +113,11 @@ interface RowProps {
   iconColor?: string;
   iconBg?: string;
   label: string;
-  /** Right-aligned grey value, e.g. current selection. */
   value?: string;
-  /** Spoken hint appended after the label. */
   hint?: string;
   onPress?: () => void;
-  /** When provided, renders a Switch instead of a chevron. */
   toggle?: { value: boolean; onValueChange: () => void };
-  /** Calm destructive styling (tinted label, no aggressive red fill). */
   destructive?: boolean;
-  /** Static info row — no chevron, not pressable. */
   info?: boolean;
   showDivider?: boolean;
 }
@@ -185,7 +197,7 @@ function SettingsRow({
           }}
           style={({ pressed }) => [
             styles.row,
-            pressed && { backgroundColor: t.colors.background },
+            pressed && { opacity: 0.75 },
           ]}
         >
           {body}
@@ -216,10 +228,10 @@ function SettingsRow({
           hapticSelection();
           onPress();
         }}
-          style={({ pressed }) => [
-            styles.row,
-            pressed && { backgroundColor: t.colors.background },
-          ]}
+        style={({ pressed }) => [
+          styles.row,
+          pressed && { opacity: 0.75 },
+        ]}
       >
         {body}
       </Pressable>
@@ -232,13 +244,21 @@ function SettingsRow({
 
 interface SectionProps {
   title: string;
+  eyebrow?: string;
   expanded: boolean;
   onToggle: () => void;
   reduceMotion: boolean;
   children: React.ReactNode;
 }
 
-function CollapsibleSection({ title, expanded, onToggle, reduceMotion, children }: SectionProps) {
+function CollapsibleSection({
+  title,
+  eyebrow,
+  expanded,
+  onToggle,
+  reduceMotion,
+  children,
+}: SectionProps) {
   const t = useTheme();
   const chevron = useRef(new Animated.Value(expanded ? 1 : 0)).current;
 
@@ -270,18 +290,18 @@ function CollapsibleSection({ title, expanded, onToggle, reduceMotion, children 
         accessibilityElementsHidden
         importantForAccessibility="no"
       >
-        {title.toUpperCase()}
+        {(eyebrow ?? title).toUpperCase()}
       </Text>
       <Card style={styles.sectionCard}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={title}
           accessibilityState={{ expanded }}
-          accessibilityHint={expanded ? 'Collapses this section' : 'Expands this section'}
+          accessibilityHint={expanded ? `Collapses the ${title} section` : `Expands the ${title} section`}
           onPress={handle}
           style={({ pressed }) => [
             styles.sectionHeader,
-            pressed && { backgroundColor: t.colors.background },
+            pressed && { opacity: 0.75 },
           ]}
         >
           <Text style={[styles.sectionHeaderTitle, { color: t.colors.text }]}>{title}</Text>
@@ -304,12 +324,11 @@ export default function MeScreen() {
   const { state, dispatch } = useAppContext();
   const t = useTheme();
 
+  // Three logical groups — User Profile & Settings defaults open so users
+  // immediately see their identity and key controls.
   const [open, setOpen] = useState({
-    profile: true,
-    settings: false,
-    accessibility: false,
+    userSettings: true,
     privacy: false,
-    tour: false,
     about: false,
   });
   const [nameModalVisible, setNameModalVisible] = useState(false);
@@ -318,7 +337,7 @@ export default function MeScreen() {
   const toggleSection = (key: keyof typeof open) =>
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  // Caregiver lock (preserved from previous screen) ──
+  // Caregiver lock ──
   const [caregiverLocked, setCaregiverLocked] = useState(state.parent.lockEnabled);
   const [pinPromptVisible, setPinPromptVisible] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -366,7 +385,7 @@ export default function MeScreen() {
     ]);
   }, []);
 
-  // Profile picture action sheet ──
+  // Profile picture ──
   const onProfilePicture = useCallback(() => {
     hapticSelection();
     const options = [
@@ -469,7 +488,7 @@ export default function MeScreen() {
     }
   }, [dispatch, state.user.role, showSaveNotice]);
 
-  // Caregiver lock handlers ──
+  // Caregiver lock ──
   const toggleLock = useCallback(() => {
     hapticSelection();
     if (caregiverLocked && state.parent.pin) {
@@ -575,7 +594,7 @@ export default function MeScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      {/* 2 · User Card — always visible; opens the Profile section. */}
+      {/* Save notice */}
       {saveNotice ? (
         <Text
           style={[styles.saveNotice, { color: t.colors.success }]}
@@ -585,15 +604,17 @@ export default function MeScreen() {
           {saveNotice}
         </Text>
       ) : null}
+
+      {/* ── 1 · User Card — always visible ── */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${name}. Voice and AAC profile ready.`}
         accessibilityHint="Opens your profile details"
         onPress={() => {
           hapticSelection();
-          setOpen((prev) => ({ ...prev, profile: true }));
+          setOpen((prev) => ({ ...prev, userSettings: true }));
         }}
-        style={({ pressed }) => [pressed && styles.userCardPressed]}
+        style={({ pressed }) => [pressed && { opacity: 0.7 }]}
       >
         <Card style={styles.userCard}>
           <View style={[styles.avatar, { backgroundColor: t.colors.primary }]}>
@@ -625,53 +646,52 @@ export default function MeScreen() {
         </Card>
       </Pressable>
 
-      {/* 3 · Profile */}
+      {/* ── 2 · User Profile & Settings ── */}
       <CollapsibleSection
-        title="Profile"
-        expanded={open.profile}
-        onToggle={() => toggleSection('profile')}
+        title="User Profile & Settings"
+        eyebrow="User Profile & Settings"
+        expanded={open.userSettings}
+        onToggle={() => toggleSection('userSettings')}
         reduceMotion={reduceMotion}
       >
+        {/* Profile sub-section */}
+        <SubSectionLabel label="Profile" />
         <SettingsRow
           icon="image-outline"
           label="Profile Picture"
           value={hasPhoto ? 'Set' : 'Avatar'}
-          hint="Choose an avatar, symbol, or photo"
+          hint="Choose an avatar, symbol, or photo for your profile"
           onPress={onProfilePicture}
         />
         <SettingsRow
           icon="person-outline"
           label="Display Name"
           value={name === 'Guest' ? 'Not set' : name}
+          hint="The name shown on your profile"
           onPress={onEditDisplayName}
         />
         <SettingsRow
           icon="mic-outline"
           label="Voice Name"
           value={voiceLabel}
-          hint="Choose the speaking voice"
+          hint="Choose the speaking voice and speed"
           onPress={() => router.push(voiceRoute)}
         />
         <SettingsRow
           icon="people-outline"
           label="User Type"
           value={userType}
+          hint="Who is using TapTalk on this device"
           onPress={onEditUserType}
           showDivider={false}
         />
-      </CollapsibleSection>
 
-      {/* 5 · Settings */}
-      <CollapsibleSection
-        title="Settings"
-        expanded={open.settings}
-        onToggle={() => toggleSection('settings')}
-        reduceMotion={reduceMotion}
-      >
+        {/* Settings sub-section */}
+        <SubSectionLabel label="Settings" />
         <SettingsRow
           icon="volume-high-outline"
           label="Voice & Speech"
-          hint="Voice, speed, and pitch"
+          hint="Adjust voice, speed, and pitch"
           onPress={() => router.push(voiceRoute)}
         />
         <SettingsRow
@@ -679,6 +699,7 @@ export default function MeScreen() {
           iconColor="#FF9500"
           iconBg="#FFF4E0"
           label="Sounds & Haptics"
+          hint="Control sound effects and vibration feedback"
           onPress={() => comingSoon('Sounds & Haptics')}
         />
         <SettingsRow
@@ -686,6 +707,7 @@ export default function MeScreen() {
           iconColor="#5CD65C"
           iconBg="#E8FAE8"
           label="Board Appearance"
+          hint="Change how the AAC board looks"
           onPress={() => router.push(displayRoute)}
         />
         <SettingsRow
@@ -694,6 +716,7 @@ export default function MeScreen() {
           iconBg="#F3EAFF"
           label="Language"
           value="English (AU)"
+          hint="The language used for voice and labels"
           onPress={() =>
             Alert.alert(
               'Language',
@@ -703,18 +726,11 @@ export default function MeScreen() {
           }
           showDivider={false}
         />
-      </CollapsibleSection>
 
-      {/* 6 · Accessibility */}
-      <CollapsibleSection
-        title="Accessibility"
-        expanded={open.accessibility}
-        onToggle={() => toggleSection('accessibility')}
-        reduceMotion={reduceMotion}
-      >
+        {/* Accessibility sub-section */}
+        <SubSectionLabel label="Accessibility Controls" />
         <Text style={[styles.sectionNote, { color: t.colors.textMuted }]}>
-          Set up TapTalk for AAC users, families, and support workers. Most options live in
-          Display — open it to change text, buttons, and theme.
+          Most options live in Display — open it to change text, buttons, and theme.
         </Text>
         <SettingsRow
           icon="text-outline"
@@ -752,21 +768,21 @@ export default function MeScreen() {
           iconColor="#BD73FF"
           iconBg="#F3EAFF"
           label="High Contrast"
-          hint="Stronger borders and text in TapTalk"
+          hint="Enables stronger borders and text in TapTalk"
           toggle={{ value: state.accessibility.highContrast, onValueChange: toggleHighContrast }}
         />
         <SettingsRow
           icon="color-palette-outline"
           label="Theme"
           value={themeLabel}
-          hint="Opens Display to choose light, dark, or system"
+          hint="Opens Display to choose light, dark, or system theme"
           onPress={() => router.push(displayRoute)}
         />
         <SettingsRow
           icon="eye-outline"
           label="VoiceOver"
           value="Built in"
-          hint="Screen reader labels on every control"
+          hint="Every control has a VoiceOver label and hint"
           onPress={() =>
             Alert.alert(
               'VoiceOver',
@@ -778,7 +794,7 @@ export default function MeScreen() {
         />
       </CollapsibleSection>
 
-      {/* 7 · Privacy & Data */}
+      {/* ── 3 · Privacy & Data ── */}
       <CollapsibleSection
         title="Privacy & Data"
         expanded={open.privacy}
@@ -787,15 +803,13 @@ export default function MeScreen() {
       >
         <Text style={[styles.sectionNote, { color: t.colors.textMuted }]}>
           TapTalk stores your profile and AAC choices on this device using local storage. Nothing
-          is sent to a cloud server by default. Voice and labels use Australian English (en-AU).
-          Photos are only used when you choose them.
+          is sent to a cloud server by default.
         </Text>
 
-        {/* Caregiver lock — PIN protects settings on shared devices. */}
         <SettingsRow
           icon="lock-closed-outline"
           label="Caregiver Lock"
-          hint="Requires a PIN before changing settings on a shared iPad or iPhone"
+          hint="Requires a PIN before changing settings on a shared device"
           toggle={{ value: caregiverLocked, onValueChange: toggleLock }}
         />
         {pinPromptVisible ? (
@@ -861,6 +875,7 @@ export default function MeScreen() {
           iconColor="#5CD65C"
           iconBg="#E8FAE8"
           label="Camera Access"
+          hint="TapTalk only uses the camera when you choose to take a profile photo"
           onPress={() =>
             Alert.alert(
               'Camera Access',
@@ -874,6 +889,7 @@ export default function MeScreen() {
           iconColor="#BD73FF"
           iconBg="#F3EAFF"
           label="Photo Access"
+          hint="TapTalk only reads photos when you pick one for your profile"
           onPress={() =>
             Alert.alert(
               'Photo Access',
@@ -886,7 +902,7 @@ export default function MeScreen() {
           icon="phone-portrait-outline"
           label="Local Data"
           value="On this device"
-          hint="How TapTalk stores your data locally"
+          hint="How TapTalk stores your data locally on this iPhone or iPad"
           onPress={() =>
             Alert.alert(
               'Local data storage',
@@ -915,37 +931,33 @@ export default function MeScreen() {
           iconBg="#FDECEC"
           label="Delete Profile Data"
           destructive
-          hint="Removes profile data from this device after confirmation"
+          hint="Removes profile data from this device. Cannot be undone."
           onPress={deleteProfileData}
           showDivider={false}
         />
       </CollapsibleSection>
 
-      {/* 8 · Tour of TapTalk */}
+      {/* ── 4 · About Us & Guide ── */}
       <CollapsibleSection
-        title="Tour of TapTalk"
-        expanded={open.tour}
-        onToggle={() => toggleSection('tour')}
-        reduceMotion={reduceMotion}
-      >
-        <SettingsRow
-          icon="compass-outline"
-          iconColor="#199AEE"
-          iconBg="#E6F4FD"
-          label="Replay the tour"
-          hint="Walk through Talk, Activity, Tools, and Profile"
-          onPress={() => router.push(tourRoute)}
-          showDivider={false}
-        />
-      </CollapsibleSection>
-
-      {/* 9 · About */}
-      <CollapsibleSection
-        title="About"
+        title="About Us & Guide"
         expanded={open.about}
         onToggle={() => toggleSection('about')}
         reduceMotion={reduceMotion}
       >
+        {/* Guide sub-section */}
+        <SubSectionLabel label="Guide" />
+        <SettingsRow
+          icon="compass-outline"
+          iconColor="#199AEE"
+          iconBg="#E6F4FD"
+          label="Replay the Tour"
+          hint="Walk through Talk, Activity, Tools, and Profile again"
+          onPress={() => router.push(tourRoute)}
+          showDivider={false}
+        />
+
+        {/* About sub-section */}
+        <SubSectionLabel label="About" />
         <Text style={[styles.sectionNote, { color: t.colors.textMuted }]}>
           TapTalk is an AAC app that helps everyone build and speak messages with symbols,
           routines, and calm tools — built with care in Adelaide, South Australia.
@@ -954,26 +966,42 @@ export default function MeScreen() {
         <SettingsRow
           icon="ribbon-outline"
           label="Mulberry Symbols"
-          hint="Licences and attribution"
+          hint="Licences and attribution for AAC symbols"
           onPress={() => router.push(attributionRoute)}
           showDivider={false}
         />
       </CollapsibleSection>
 
-      <View style={styles.mascotRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <TapTalkMascot variant="business" style={styles.mascot} />
+      {/* ── Mascot & tagline ── */}
+      <View
+        style={styles.mascotRow}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Image
+          source={MASCOT_HAPPY}
+          style={styles.mascotImage}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
         <Text style={[styles.mascotText, { color: t.colors.textMuted }]}>
-          Built with care for everyone who deserves to be heard.
+          Built with care for those who deserve to be heard.
         </Text>
       </View>
 
-      <PrimaryButton
-        accessibilityLabel="Sign out"
-        label="Sign Out"
-        onPress={signOut}
-        variant="danger"
-      />
+      {/* ── 5 · Sign Out ── */}
+      <View style={styles.signOutContainer}>
+        <PrimaryButton
+          accessibilityLabel="Sign out of TapTalk"
+          accessibilityHint="You can sign back in any time with your email"
+          label="Sign Out"
+          onPress={signOut}
+          variant="danger"
+          style={styles.signOutButton}
+        />
+      </View>
 
+      {/* Display name modal */}
       <Modal
         visible={nameModalVisible}
         transparent
@@ -1028,7 +1056,7 @@ export default function MeScreen() {
 }
 
 const styles = StyleSheet.create({
-  // User card ──
+  // ── User card ──
   userCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1040,9 +1068,6 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     textAlign: 'center',
     marginBottom: spacing.sm,
-  },
-  userCardPressed: {
-    opacity: 0.7,
   },
   avatar: {
     width: 56,
@@ -1072,7 +1097,7 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
   },
 
-  // Section ──
+  // ── Section ──
   sectionWrap: {
     marginBottom: spacing.lg,
   },
@@ -1111,7 +1136,20 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
 
-  // Row ──
+  // ── Sub-section label ──
+  subSectionLabelWrap: {
+    borderTopWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: 4,
+  },
+  subSectionLabel: {
+    fontFamily: fonts.bodyHeavy,
+    fontSize: 11,
+    letterSpacing: 0.7,
+  },
+
+  // ── Row ──
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1141,23 +1179,34 @@ const styles = StyleSheet.create({
     marginLeft: 34 + spacing.md + spacing.md,
   },
 
-  // Mascot ──
+  // ── Mascot ──
   mascotRow: {
     alignItems: 'center',
     gap: spacing.sm,
     marginVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
   },
-  mascot: {
-    width: 64,
-    height: 64,
+  mascotImage: {
+    width: 88,
+    height: 88,
   },
   mascotText: {
     fontFamily: fonts.body,
     fontSize: typography.caption,
     textAlign: 'center',
+    lineHeight: 18,
   },
 
-  // PIN prompt ──
+  // ── Sign Out ──
+  signOutContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  signOutButton: {
+    width: 240,
+  },
+
+  // ── PIN prompt ──
   pinPrompt: {
     marginHorizontal: spacing.md,
     marginBottom: spacing.sm,
@@ -1197,6 +1246,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  // ── Modal ──
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',

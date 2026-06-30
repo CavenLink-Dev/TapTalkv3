@@ -69,7 +69,7 @@ const ACTIVITIES: Activity[] = [
 
 const CARD_HEIGHT = 214;
 const HERO_HEIGHT = 112;
-const CARD_GAP    = spacing.sm;
+const CARD_GAP    = spacing.lg;
 
 const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300] as const;
 
