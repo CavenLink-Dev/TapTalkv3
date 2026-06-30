@@ -15,7 +15,9 @@ export function Screen({ title, subtitle, children, scroll = true }: ScreenProps
     <>
       {title ? (
         <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.title} accessibilityRole="header">
+            {title}
+          </Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
       ) : null}
@@ -63,13 +65,14 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 4,
     color: colors.textMuted,
+    fontFamily: typography.fontFamily,
     fontSize: typography.callout,
     lineHeight: 21,
   },
   title: {
     color: colors.text,
+    fontFamily: typography.fontFamilyDisplay,
     fontSize: typography.heading,
-    fontWeight: '800',
     letterSpacing: -0.4,
   },
 });

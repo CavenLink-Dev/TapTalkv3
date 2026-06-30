@@ -13,6 +13,7 @@ interface TabButtonProps {
   onPress?: (e: GestureResponderEvent) => void;
   onLongPress?: (e: GestureResponderEvent) => void;
   style?: StyleProp<ViewStyle>;
+  accessibilityHint?: string;
   accessibilityLabel?: string;
   accessibilityRole?: 'button' | 'tab' | 'link' | 'menuitem' | 'none';
   accessibilityState?: { selected?: boolean; disabled?: boolean };
@@ -23,6 +24,7 @@ export function PressableTabButton({
   onPress,
   onLongPress,
   style,
+  accessibilityHint,
   accessibilityLabel,
   accessibilityRole,
   accessibilityState,
@@ -60,10 +62,11 @@ export function PressableTabButton({
       onLongPress={onLongPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      accessibilityHint={accessibilityHint}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole ?? 'button'}
       accessibilityState={accessibilityState}
-      style={[style, { flex: 1, alignItems: 'center', justifyContent: 'center' }]}
+      style={[style, styles.hitTarget]}
     >
       <Animated.View style={{ transform: [{ scale }] }}>
         {children}
@@ -71,3 +74,13 @@ export function PressableTabButton({
     </Pressable>
   );
 }
+
+const styles = {
+  hitTarget: {
+    flex: 1,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  } satisfies ViewStyle,
+};

@@ -3,7 +3,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { BottomNavIcon, BottomNavIconName } from '../../src/components/icons/BottomNavIcon';
 import { PressableTabButton } from '../../src/components/native/PressableTabButton';
-import { colors } from '../../src/theme/tokens';
+import { colors, typography } from '../../src/theme/tokens';
 
 function icon(name: BottomNavIconName) {
   return ({ focused }: { focused: boolean }) => (
@@ -16,10 +16,12 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
+        tabBarLabelPosition: 'below-icon',
+        tabBarLabelStyle: styles.tabBarLabel,
         tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: '#4B555C',
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarItemStyle: styles.tabBarItem,
         tabBarButton: (props) => <PressableTabButton {...(props as Parameters<typeof PressableTabButton>[0])} />,
       }}
@@ -27,7 +29,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="talk"
         options={{
-          title: 'Board',
+          title: 'Talk',
+          tabBarAccessibilityLabel: 'Talk tab',
           tabBarIcon: icon('board'),
         }}
       />
@@ -35,6 +38,7 @@ export default function TabsLayout() {
         name="activities"
         options={{
           title: 'Activities',
+          tabBarAccessibilityLabel: 'Activities tab',
           tabBarIcon: icon('activity'),
         }}
       />
@@ -42,13 +46,15 @@ export default function TabsLayout() {
         name="tools"
         options={{
           title: 'Tools',
+          tabBarAccessibilityLabel: 'Tools tab',
           tabBarIcon: icon('tools'),
         }}
       />
       <Tabs.Screen
         name="me"
         options={{
-          title: 'Profile',
+          title: 'Me',
+          tabBarAccessibilityLabel: 'Me tab',
           tabBarIcon: icon('profile'),
         }}
       />
@@ -70,5 +76,11 @@ const styles = StyleSheet.create({
   tabBarItem: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  tabBarLabel: {
+    fontFamily: typography.fontFamily,
+    fontSize: typography.tab,
+    lineHeight: 12,
+    marginTop: 2,
   },
 });

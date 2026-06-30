@@ -138,7 +138,11 @@ export function BottomNavIcon({
   }
 
   return (
-    <Animated.View style={[{ width: CONTAINER_W, height: CONTAINER_H }, { transform: [{ scale }] }]}>
+    <Animated.View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[{ width: CONTAINER_W, height: CONTAINER_H }, { transform: [{ scale }] }]}
+    >
       <Animated.View style={[styles.layer, { opacity: unselectedOpacity }]}>
         <SvgUri uri={unselectedUri} width={dims.unselected.w} height={dims.unselected.h} />
       </Animated.View>
