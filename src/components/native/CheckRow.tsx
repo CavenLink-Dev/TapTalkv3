@@ -8,9 +8,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { animation, colors, spacing, typography } from '../../theme/tokens';
+import { animation, spacing, typography } from '../../theme/tokens';
 import { springPop, timingFast, timingFocus } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { useTheme } from '../../theme/useTheme';
 import { hapticSelection } from '../../utils/haptics';
 import { fonts } from '../../theme/fonts';
 
@@ -32,6 +33,7 @@ interface CheckRowProps {
  */
 export function CheckRow({ label, value, onChange, accessibilityLabel }: CheckRowProps) {
   const reduceMotion = useReduceMotion();
+  const t = useTheme();
   const v = useSharedValue(value ? 1 : 0);
   const pressed = useSharedValue(0);
 
@@ -46,11 +48,11 @@ export function CheckRow({ label, value, onChange, accessibilityLabel }: CheckRo
   }, [value, v, reduceMotion]);
 
   const boxStyle = useAnimatedStyle(() => {
-    const background = interpolateColor(v.value, [0, 1], [colors.surface, colors.primary]);
-    const border = interpolateColor(v.value, [0, 1], [colors.border, colors.primary]);
+    const background = interpolateColor(v.value, [0, 1], [t.colors.surface, t.colors.primary]);
+    const border = interpolateColor(v.value, [0, 1], [t.colors.border, t.colors.primary]);
     const scale = reduceMotion ? 1 : 1 - pressed.value * 0.06;
     return { backgroundColor: background, borderColor: border, transform: [{ scale }] };
-  });
+  }, [t.colors.surface, t.colors.primary, t.colors.border, reduceMotion]);
 
   const checkStyle = useAnimatedStyle(() => ({
     opacity: v.value,
@@ -77,10 +79,10 @@ export function CheckRow({ label, value, onChange, accessibilityLabel }: CheckRo
     >
       <Animated.View style={[styles.box, boxStyle]}>
         <Animated.View style={checkStyle}>
-          <Ionicons name="checkmark" size={16} color={colors.surface} />
+          <Ionicons name="checkmark" size={16} color={t.colors.surface} />
         </Animated.View>
       </Animated.View>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: t.colors.text }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -103,6 +105,5 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.text,
   },
 });

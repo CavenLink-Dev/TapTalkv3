@@ -14,7 +14,9 @@ import Animated, {
 import { DevSkip } from '../../src/components/DevSkip';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { useAppContext } from '../../src/hooks/useAppContext';
-import { colors, typography } from '../../src/theme/tokens';
+import { isWarmSession, markSessionWarm } from '../../src/utils/sessionFlags';
+import { typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -83,9 +85,11 @@ const TARGET_ROUTES = {
  */
 export default function Splash() {
   const router = useRouter();
+  const t = useTheme();
   const reduceMotion = useReduceMotion();
   const { state, hydrated } = useAppContext();
-  const [navReady, setNavReady] = useState(false);
+  const warmResume = isWarmSession();
+  const [navReady, setNavReady] = useState(warmResume);
 
   // ── Shared values ──
   // Open
@@ -128,8 +132,17 @@ export default function Splash() {
     routeRef.current = decideRoute();
   }, [decideRoute]);
 
+  // Warm resume — skip the full splash when the JS runtime is still alive.
+  useEffect(() => {
+    if (!warmResume || !hydrated) return;
+    markSessionWarm();
+    router.replace(routeRef.current);
+  }, [warmResume, hydrated, router]);
+
   // ── Animation orchestration (runs once on mount) ──
   useEffect(() => {
+    if (warmResume) return;
+
     const easeOut = Easing.out(Easing.cubic);
     const easeInOut = Easing.bezier(0.65, 0, 0.35, 1);
     const easeSine  = Easing.inOut(Easing.sin);
@@ -160,8 +173,8 @@ export default function Splash() {
       revealScale.value    = withDelay(swallowAt, withTiming(1, { duration: T.rm.fadeOut + 60 }));
       wordmarkOpacity.value = withDelay(swallowAt + 100, withTiming(1, { duration: 320 }));
 
-      const t = setTimeout(() => setNavReady(true), T.rm.navAt);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setNavReady(true), T.rm.navAt);
+      return () => clearTimeout(timer);
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -259,8 +272,8 @@ export default function Splash() {
     // BLINK — flip the nav switch a beat after the disc has settled. The
     // actual route swap is gated below on hydration so we never navigate
     // with stale state.
-    const t = setTimeout(() => setNavReady(true), T.navAt);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setNavReady(true), T.navAt);
+    return () => clearTimeout(timer);
   // We deliberately want this to run exactly once. The route is decided later
   // from a ref, so omitting it here is correct.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -272,6 +285,7 @@ export default function Splash() {
   // very cold start.
   useEffect(() => {
     if (navReady && hydrated) {
+      markSessionWarm();
       router.replace(routeRef.current);
     }
   }, [navReady, hydrated, router]);
@@ -320,8 +334,12 @@ export default function Splash() {
     transform: [{ scale: wordmarkScale.value }],
   }));
 
+  if (warmResume) {
+    return null;
+  }
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.background }]} edges={['top', 'bottom']}>
       {/* Logo + motto sit together as a centered stack. The motto reads
           directly beneath the logo so the brand mark anchors the page and
           the supporting line breathes with it. */}
@@ -332,7 +350,7 @@ export default function Splash() {
           resizeMode="contain"
           accessibilityLabel="TapTalk"
         />
-        <Animated.Text style={[styles.motto, mottoStyle]}>
+        <Animated.Text style={[styles.motto, { color: t.colors.textMuted }, mottoStyle]}>
           Tap To Talk
         </Animated.Text>
       </Animated.View>
@@ -340,15 +358,18 @@ export default function Splash() {
       {/* Loader — three dots bouncing in sequence, pinned to the bottom of
           the safe area. Stops naturally when foregroundFade hits 0. */}
       <Animated.View style={[styles.loaderWrap, loaderStyle]} pointerEvents="none">
-        <Animated.View style={[styles.dot, dot1Style]} />
-        <Animated.View style={[styles.dot, dot2Style]} />
-        <Animated.View style={[styles.dot, dot3Style]} />
+        <Animated.View style={[styles.dot, { backgroundColor: t.colors.primary }, dot1Style]} />
+        <Animated.View style={[styles.dot, { backgroundColor: t.colors.primary }, dot2Style]} />
+        <Animated.View style={[styles.dot, { backgroundColor: t.colors.primary }, dot3Style]} />
       </Animated.View>
 
       {/* SWALLOW disc + brand wordmark — sit above everything else */}
-      <Animated.View pointerEvents="none" style={[styles.reveal, revealStyle]} />
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.reveal, { backgroundColor: t.colors.primary }, revealStyle]}
+      />
       <Animated.View pointerEvents="none" style={[styles.wordmarkWrap, wordmarkStyle]}>
-        <Animated.Text style={styles.wordmark}>TapTalk</Animated.Text>
+        <Animated.Text style={[styles.wordmark, { color: t.colors.surface }]}>TapTalk</Animated.Text>
       </Animated.View>
 
       <DevSkip next="/onboarding/get-started" />
@@ -365,7 +386,6 @@ const REVEAL_SEED_Y = SCREEN_H * 0.5;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   // Logo centered both axes — the brand mark is the anchor of the screen.
   // Motto stacks directly beneath via flex order so it reads as one
@@ -388,7 +408,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: fonts.bodyMedium,
     fontSize: typography.body,
-    color: colors.textMuted,
     letterSpacing: 0.1,
   },
   // Loader sits at the bottom safe area, holding the three-dot bounce.
@@ -409,7 +428,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.primary,
   },
   // Reveal disc — seeded under the logo. Scales 0 → 1 to swallow the screen.
   reveal: {
@@ -417,7 +435,6 @@ const styles = StyleSheet.create({
     width: REVEAL_SIZE,
     height: REVEAL_SIZE,
     borderRadius: REVEAL_SIZE / 2,
-    backgroundColor: colors.primary,
     top: REVEAL_SEED_Y - REVEAL_SIZE / 2,
     left: SCREEN_W / 2 - REVEAL_SIZE / 2,
   },
@@ -434,6 +451,5 @@ const styles = StyleSheet.create({
     fontFamily: fonts.displayBlack,
     fontSize: 60,
     letterSpacing: -2.2,
-    color: colors.surface,
   },
 });

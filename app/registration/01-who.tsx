@@ -6,7 +6,8 @@ import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { RegistrationScaffold } from '../../src/components/registration/RegistrationScaffold';
 import { SelectableCard } from '../../src/components/registration/SelectableCard';
 import { useRegistration } from '../../src/context/RegistrationContext';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 import { Text } from 'react-native';
 
@@ -14,6 +15,7 @@ const nextRoute = '/registration/02-aac-user' as Href;
 
 export default function RegStep1Who() {
   const router = useRouter();
+  const t = useTheme();
   const { data, update } = useRegistration();
 
   return (
@@ -50,8 +52,8 @@ export default function RegStep1Who() {
       </View>
 
       <View style={styles.note}>
-        <Ionicons name="information-circle-outline" size={18} color={colors.textTertiary} />
-        <Text style={styles.noteText}>
+        <Ionicons name="information-circle-outline" size={18} color={t.colors.textTertiary} />
+        <Text style={[styles.noteText, { color: t.colors.textTertiary }]}>
           A guardian must set up the account for users under 15. You'll be
           asked for guardian details on the next screens if that applies.
         </Text>
@@ -74,6 +76,5 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: typography.caption,
     lineHeight: 18,
-    color: colors.textTertiary,
   },
 });

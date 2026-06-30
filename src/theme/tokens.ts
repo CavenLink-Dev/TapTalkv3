@@ -82,6 +82,9 @@ export const colorsLight = {
   folderFlap:         'rgba(255,255,255,0.81)',
   /** folder_flap_secondary_main — VariableID:45:523 */
   folderFlapSecondary:'#FFFED7',
+
+  /** selected option / pill background */
+  selectionBg:        '#EAF6FE',
 } as const;
 
 export type ColorTokens = Record<keyof typeof colorsLight, string>;
@@ -139,6 +142,9 @@ export const colorsDark: ColorTokens = {
   folderBg:           '#EDE070',
   folderFlap:         'rgba(255,255,255,0.81)',
   folderFlapSecondary:'#FFFED7',
+
+  // Selection states
+  selectionBg:        '#1A3A5F',
 } as const;
 
 export const colors = colorsLight;

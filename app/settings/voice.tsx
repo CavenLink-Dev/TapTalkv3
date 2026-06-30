@@ -7,7 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { useAppContext } from '../../src/hooks/useAppContext';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
+import { radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
 
@@ -28,6 +29,7 @@ const SAMPLE_PHRASE = 'Hello, I use TapTalk to communicate.';
 export default function VoiceSettingsScreen() {
   const router = useRouter();
   const { state, dispatch } = useAppContext();
+  const t = useTheme();
   const { speechRate, speechPitch } = state.accessibility;
 
   const setRate = useCallback((value: number) => {
@@ -46,17 +48,17 @@ export default function VoiceSettingsScreen() {
   }, [speechRate, speechPitch]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
+      <View style={[styles.header, { backgroundColor: t.colors.surface, borderBottomColor: t.colors.border }]}>
         <Pressable
           onPress={() => { hapticSelection(); router.back(); }}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           style={styles.backButton}
         >
-          <Ionicons name="chevron-back" size={26} color={colors.primary} />
+          <Ionicons name="chevron-back" size={26} color={t.colors.primary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Voice and Speech</Text>
+        <Text style={[styles.headerTitle, { color: t.colors.text }]}>Voice and Speech</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -69,8 +71,8 @@ export default function VoiceSettingsScreen() {
       >
 
         <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>SPEECH RATE</Text>
-          <Text style={styles.sectionDesc}>How fast TapTalk speaks your message.</Text>
+          <Text style={[styles.sectionTitle, { color: t.colors.textTertiary }]}>SPEECH RATE</Text>
+          <Text style={[styles.sectionDesc, { color: t.colors.textMuted }]}>How fast TapTalk speaks your message.</Text>
           <View style={styles.optionGroup}>
             {RATE_OPTIONS.map((opt) => {
               const selected = Math.abs(speechRate - opt.value) < 0.05;
@@ -81,16 +83,16 @@ export default function VoiceSettingsScreen() {
                   accessibilityRole="radio"
                   accessibilityState={{ checked: selected }}
                   accessibilityLabel={`${opt.label} rate. ${opt.description}`}
-                  style={[styles.option, selected && styles.optionSelected]}
+                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: '#EAF6FE' }]}
                 >
                   <View style={styles.optionLeft}>
-                    <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
+                    <Text style={[styles.optionLabel, { color: t.colors.text }, selected && { color: t.colors.primary }]}>
                       {opt.label}
                     </Text>
-                    <Text style={styles.optionDesc}>{opt.description}</Text>
+                    <Text style={[styles.optionDesc, { color: t.colors.textMuted }]}>{opt.description}</Text>
                   </View>
                   {selected && (
-                    <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+                    <Ionicons name="checkmark-circle" size={22} color={t.colors.primary} />
                   )}
                 </Pressable>
               );
@@ -99,8 +101,8 @@ export default function VoiceSettingsScreen() {
         </Card>
 
         <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>PITCH</Text>
-          <Text style={styles.sectionDesc}>The tone of the voice.</Text>
+          <Text style={[styles.sectionTitle, { color: t.colors.textTertiary }]}>PITCH</Text>
+          <Text style={[styles.sectionDesc, { color: t.colors.textMuted }]}>The tone of the voice.</Text>
           <View style={styles.optionGroup}>
             {PITCH_OPTIONS.map((opt) => {
               const selected = Math.abs(speechPitch - opt.value) < 0.05;
@@ -111,16 +113,16 @@ export default function VoiceSettingsScreen() {
                   accessibilityRole="radio"
                   accessibilityState={{ checked: selected }}
                   accessibilityLabel={`${opt.label} pitch. ${opt.description}`}
-                  style={[styles.option, selected && styles.optionSelected]}
+                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: '#EAF6FE' }]}
                 >
                   <View style={styles.optionLeft}>
-                    <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
+                    <Text style={[styles.optionLabel, { color: t.colors.text }, selected && { color: t.colors.primary }]}>
                       {opt.label}
                     </Text>
-                    <Text style={styles.optionDesc}>{opt.description}</Text>
+                    <Text style={[styles.optionDesc, { color: t.colors.textMuted }]}>{opt.description}</Text>
                   </View>
                   {selected && (
-                    <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+                    <Ionicons name="checkmark-circle" size={22} color={t.colors.primary} />
                   )}
                 </Pressable>
               );
@@ -141,86 +143,55 @@ export default function VoiceSettingsScreen() {
 
 const styles = StyleSheet.create({
   safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
+    borderBottomWidth: 1},
   backButton: {
     width: 44,
     height: 44,
     alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     flex: 1,
     textAlign: 'center',
     fontFamily: fonts.displayHeavy,
     fontSize: typography.body,
-    color: colors.text,
-    letterSpacing: -0.2,
-  },
+    letterSpacing: -0.2},
   headerSpacer: {
-    width: 44,
-  },
+    width: 44},
   content: {
     padding: spacing.lg,
     gap: spacing.lg,
-    paddingBottom: 36,
-  },
+    paddingBottom: 36},
   section: {
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   sectionTitle: {
     fontFamily: fonts.bodyHeavy,
     fontSize: typography.caption,
-    color: colors.textTertiary,
-    letterSpacing: 1.0,
-  },
+    letterSpacing: 1.0},
   sectionDesc: {
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-  },
+    marginBottom: spacing.sm},
   optionGroup: {
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,
     borderRadius: radii.card,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  optionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: '#EAF6FE',
-  },
+    borderWidth: 2},
   optionLeft: {
-    flex: 1,
-  },
+    flex: 1},
   optionLabel: {
     fontFamily: fonts.displayBold,
-    fontSize: typography.callout,
-    color: colors.text,
-  },
-  optionLabelSelected: {
-    color: colors.primary,
-  },
+    fontSize: typography.callout},
   optionDesc: {
     fontFamily: fonts.body,
     fontSize: typography.caption,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
+    marginTop: 2},
 });

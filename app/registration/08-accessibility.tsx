@@ -16,6 +16,7 @@ import { RegistrationScaffold } from '../../src/components/registration/Registra
 import { useRegistration } from '../../src/context/RegistrationContext';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
 
@@ -47,6 +48,7 @@ const SCHEME_PREVIEW = {
 
 export default function RegStep8Accessibility() {
   const router = useRouter();
+  const t = useTheme();
   const { data, updateAccessibility } = useRegistration();
   const { dispatch } = useAppContext();
   const a11y = data.accessibility;
@@ -73,7 +75,7 @@ export default function RegStep8Accessibility() {
     dispatch({ type: 'SET_ACCESSIBILITY', payload: a11y });
   }, [a11y, dispatch]);
 
-  const textScale = TEXT_SIZES.find((t) => t.id === a11y.textSize)?.scale ?? 1;
+  const textScale = TEXT_SIZES.find((s) => s.id === a11y.textSize)?.scale ?? 1;
   const buttonHeight = BUTTON_SIZES.find((b) => b.id === a11y.buttonSize)?.height ?? 56;
   const isDark =
     a11y.theme === 'dark' || (a11y.theme === 'system' && false /* live system check would go here */);
@@ -90,7 +92,7 @@ export default function RegStep8Accessibility() {
     <RegistrationScaffold
       step={8}
       title="Make it yours"
-      subtitle="Tune text, buttons, and colour. You can change all of this any time in Settings."
+      subtitle="Set text, buttons, and colour for AAC use. You can change these any time in Profile → Accessibility → Display."
       scroll
       footer={
         <>
@@ -106,7 +108,7 @@ export default function RegStep8Accessibility() {
             hitSlop={16}
             style={styles.skipBtn}
           >
-            <Text style={styles.skipLabel}>Skip for now</Text>
+            <Text style={[styles.skipLabel, { color: t.colors.textMuted }]}>Skip for now</Text>
           </Pressable>
         </>
       }
@@ -165,9 +167,9 @@ export default function RegStep8Accessibility() {
         {/* ── VoiceOver banner ── */}
         {voiceOverOn ? (
           <Animated.View entering={FadeInDown.duration(220)} style={styles.banner}>
-            <Ionicons name="ear" size={22} color={colors.primaryDark} />
-            <Text style={styles.bannerText}>
-              VoiceOver detected. TapTalk is optimised for screen readers.
+            <Ionicons name="ear" size={22} color={t.colors.primaryDark} />
+            <Text style={[styles.bannerText, { color: t.colors.text }]}>
+              VoiceOver is on. TapTalk labels every button and tile for screen readers.
             </Text>
           </Animated.View>
         ) : null}
@@ -175,16 +177,16 @@ export default function RegStep8Accessibility() {
         {/* ── Text size ── */}
         <Section label="Text size">
           <View style={styles.pillRow}>
-            {TEXT_SIZES.map((t) => (
+            {TEXT_SIZES.map((s) => (
               <Pill
-                key={t.id}
-                label={t.label}
-                selected={a11y.textSize === t.id}
+                key={s.id}
+                label={s.label}
+                selected={a11y.textSize === s.id}
                 onPress={() => {
                   hapticSelection();
-                  updateAccessibility({ textSize: t.id });
+                  updateAccessibility({ textSize: s.id });
                 }}
-                accessibilityLabel={`${t.label} text size`}
+                accessibilityLabel={`${s.label} text size`}
               />
             ))}
           </View>
@@ -209,29 +211,34 @@ export default function RegStep8Accessibility() {
         </Section>
 
         {/* ── Theme ── */}
-        <Section label="Theme">
+        <StaticSection label="Theme">
           <View style={styles.pillRow}>
-            {THEMES.map((t) => (
+            {THEMES.map((theme) => (
               <Pill
-                key={t.id}
-                label={t.label}
-                selected={a11y.theme === t.id}
+                key={theme.id}
+                label={theme.label}
+                selected={a11y.theme === theme.id}
                 onPress={() => {
                   hapticSelection();
-                  updateAccessibility({ theme: t.id });
+                  updateAccessibility({ theme: theme.id });
                 }}
-                accessibilityLabel={`${t.label} theme`}
+                accessibilityLabel={`${theme.label} theme`}
               />
             ))}
           </View>
-        </Section>
+        </StaticSection>
 
         {/* ── High contrast ── */}
-        <View style={styles.toggleRow}>
+        <View
+          style={[
+            styles.toggleRow,
+            { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+          ]}
+        >
           <View style={styles.flex}>
-            <Text style={styles.toggleTitle}>High contrast</Text>
-            <Text style={styles.toggleBody}>
-              Heavier borders and stronger text colour for clearer separation.
+            <Text style={[styles.toggleTitle, { color: t.colors.text }]}>High contrast</Text>
+            <Text style={[styles.toggleBody, { color: t.colors.textMuted }]}>
+              Heavier borders and stronger text colour — helpful on shared iPads and in bright light.
             </Text>
           </View>
           <Switch
@@ -240,14 +247,14 @@ export default function RegStep8Accessibility() {
               hapticSelection();
               updateAccessibility({ highContrast: v });
             }}
-            trackColor={{ false: colors.progressTrack, true: colors.primary }}
-            thumbColor={colors.surface}
+            trackColor={{ false: t.colors.progressTrack, true: t.colors.primary }}
+            thumbColor={t.colors.surface}
             accessibilityLabel="High contrast mode"
           />
         </View>
 
         {/* ── Colour scheme ── */}
-        <Section label="Symbol colour scheme">
+        <StaticSection label="Symbol colour scheme">
           <View style={styles.schemeRow}>
             <Pill
               label="Fitzgerald Key"
@@ -268,20 +275,31 @@ export default function RegStep8Accessibility() {
               accessibilityLabel="Colour-vision-deficiency safe scheme"
             />
           </View>
-          <Text style={styles.schemeNote}>
+          <Text style={[styles.schemeNote, { color: colors.textTertiary }]}>
             CVD-safe remaps the categories for protanopia, deuteranopia, and
             tritanopia.
           </Text>
-        </Section>
+        </StaticSection>
       </View>
     </RegistrationScaffold>
   );
 }
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  const t = useTheme();
+
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionLabel}>{label}</Text>
+      <Text style={[styles.sectionLabel, { color: t.colors.text }]}>{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+function StaticSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionLabel, { color: colors.text }]}>{label}</Text>
       {children}
     </View>
   );
@@ -342,7 +360,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.text,
     lineHeight: 20,
   },
 
@@ -350,7 +367,6 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontFamily: fonts.displayBold,
     fontSize: typography.subheading,
-    color: colors.text,
     letterSpacing: typography.trackSubhead,
   },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -358,7 +374,6 @@ const styles = StyleSheet.create({
   schemeNote: {
     fontFamily: fonts.body,
     fontSize: typography.caption,
-    color: colors.textTertiary,
     lineHeight: 18,
     marginTop: 4,
   },
@@ -369,20 +384,16 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.lg,
     borderRadius: radii.card,
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
   },
   toggleTitle: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.body,
-    color: colors.text,
   },
   toggleBody: {
     marginTop: 2,
     fontFamily: fonts.body,
     fontSize: typography.caption,
-    color: colors.textMuted,
     lineHeight: 18,
   },
 
@@ -396,6 +407,5 @@ const styles = StyleSheet.create({
   skipLabel: {
     fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    color: colors.textMuted,
   },
 });

@@ -18,13 +18,14 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   UIManager,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radii, spacing, typography } from '../../theme/tokens';
+import { radii, spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 import { hapticSelection } from '../../utils/haptics';
+import { ThemedText } from './ThemedText';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -55,6 +56,7 @@ export function DisclosureRow({
   onToggle,
   children,
 }: DisclosureRowProps) {
+  const t = useTheme();
   // Chevron rotation animation — gentle, spring-out for "give".
   const chevronAnim = useRef(new Animated.Value(expanded ? 1 : 0)).current;
 
@@ -85,26 +87,33 @@ export function DisclosureRow({
   };
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { backgroundColor: t.colors.surface }]}>
       <Pressable
         onPress={handlePress}
         accessibilityRole="button"
         accessibilityLabel={`${title}${summary ? ', ' + summary : ''}`}
         accessibilityState={{ expanded }}
-        style={({ pressed }) => [styles.header, pressed && styles.headerPressed]}
+        style={({ pressed }) => [
+          styles.header,
+          pressed && { backgroundColor: t.colors.background, opacity: 0.92 },
+        ]}
       >
         {icon ? (
-          <View style={styles.iconChip}>
-            <Ionicons name={icon} size={20} color={colors.primary} />
+          <View style={[styles.iconChip, { backgroundColor: t.colors.selectionBg }]}>
+            <Ionicons name={icon} size={20} color={t.colors.primary} />
           </View>
         ) : null}
         <View style={styles.copy}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          <ThemedText variant="body" style={styles.title}>{title}</ThemedText>
+          {subtitle ? (
+            <ThemedText variant="caption" color={t.colors.textMuted}>{subtitle}</ThemedText>
+          ) : null}
         </View>
-        {summary ? <Text style={styles.summary}>{summary}</Text> : null}
+        {summary ? (
+          <ThemedText variant="callout" color={t.colors.textMuted} style={styles.summary}>{summary}</ThemedText>
+        ) : null}
         <Animated.View style={{ transform: [{ rotate }] }}>
-          <Ionicons name="chevron-down" size={20} color={colors.textTertiary} />
+          <Ionicons name="chevron-down" size={20} color={t.colors.textTertiary} />
         </Animated.View>
       </Pressable>
 
@@ -115,7 +124,6 @@ export function DisclosureRow({
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: colors.surface,
     borderRadius: radii.card,
     overflow: 'hidden',
   },
@@ -127,32 +135,19 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     minHeight: 60,
   },
-  headerPressed: {
-    backgroundColor: '#F5F7FA',
-  },
   iconChip: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#E6F4FD',
     alignItems: 'center',
     justifyContent: 'center',
   },
   copy: { flex: 1 },
   title: {
-    fontSize: typography.body,
     fontWeight: '700',
-    color: colors.text,
     letterSpacing: -0.1,
   },
-  subtitle: {
-    fontSize: typography.caption,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
   summary: {
-    fontSize: typography.callout,
-    color: colors.textMuted,
     fontWeight: '600',
   },
   body: {

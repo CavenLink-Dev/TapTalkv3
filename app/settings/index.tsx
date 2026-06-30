@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,9 +13,10 @@ import { Href, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useTheme } from '../../src/theme/useTheme';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
+import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 
 // Preserved from the previous "tools" tab so the existing voice/display
 // sub-routes remain reachable now that the bottom tab is the Daily Planner.
@@ -33,7 +35,7 @@ const APP_SETTINGS: SettingRow[] = [
   {
     id: 'voice',
     icon: 'volume-high-outline',
-    iconColor: colors.primary,
+    iconColor: '#199AEE',
     iconBg: '#E6F4FD',
     label: 'Voice and Speech',
     subtitle: 'Choose voice, speed, and pitch',
@@ -70,7 +72,7 @@ const PREMIUM_TOOLS: SettingRow[] = [
   {
     id: 'first-then',
     icon: 'git-compare-outline',
-    iconColor: colors.primary,
+    iconColor: '#199AEE',
     iconBg: '#E6F4FD',
     label: 'First & Then',
     subtitle: 'Visual step-by-step task guide',
@@ -106,30 +108,34 @@ const PREMIUM_TOOLS: SettingRow[] = [
 ];
 
 function SettingItem({ row, onPress }: { row: SettingRow; onPress?: () => void }) {
+  const t = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={row.label}
       onPress={() => { hapticSelection(); onPress?.(); }}
-      style={({ pressed }) => [styles.settingRow, pressed && styles.settingRowPressed]}
+      style={({ pressed }) => [
+        styles.settingRow,
+        pressed && [styles.settingRowPressed, { backgroundColor: t.colors.background, opacity: 0.92 }],
+      ]}
     >
       <View style={[styles.settingIcon, { backgroundColor: row.iconBg }]}>
         <Ionicons name={row.icon} size={22} color={row.iconColor} />
       </View>
       <View style={styles.settingCopy}>
-        <Text style={styles.settingLabel}>{row.label}</Text>
-        <Text style={styles.settingSubtitle}>{row.subtitle}</Text>
+        <Text style={[styles.settingLabel, { color: t.colors.text }]}>{row.label}</Text>
+        <Text style={[styles.settingSubtitle, { color: t.colors.textMuted }]}>{row.subtitle}</Text>
       </View>
       {row.premium ? (
-        <View style={styles.premiumBadge}>
+        <View style={[styles.premiumBadge, { backgroundColor: t.colors.primaryDark }]}>
           <Ionicons
             name="lock-closed"
             size={12}
-            color={colors.surface}
+            color={t.colors.surface}
             accessibilityElementsHidden
             importantForAccessibility="no"
           />
-          <Text style={styles.premiumText} maxFontSizeMultiplier={1.2} numberOfLines={1}>
+          <Text style={[styles.premiumText, { color: t.colors.surface }]} maxFontSizeMultiplier={1.2} numberOfLines={1}>
             PRO
           </Text>
         </View>
@@ -137,7 +143,7 @@ function SettingItem({ row, onPress }: { row: SettingRow; onPress?: () => void }
         <Ionicons
           name="chevron-forward"
           size={18}
-          color={colors.textTertiary}
+          color={t.colors.textTertiary}
           accessibilityElementsHidden
           importantForAccessibility="no"
         />
@@ -151,6 +157,7 @@ export default function SettingsIndexScreen() {
   const t = useTheme();
   const isPremium = state.subscriptionComplete;
   const router = useRouter();
+  const { refreshing, onRefresh } = usePullRefresh();
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
@@ -160,6 +167,14 @@ export default function SettingsIndexScreen() {
         bounces
         alwaysBounceVertical
         overScrollMode="always"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={t.colors.primary}
+            colors={[t.colors.primary]}
+          />
+        }
       >
         <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">Settings</Text>
 
@@ -177,9 +192,9 @@ export default function SettingsIndexScreen() {
         </Card>
 
         <View style={styles.premiumHeader}>
-          <Text style={styles.sectionHeading}>PREMIUM TOOLS</Text>
+          <Text style={[styles.sectionHeading, { color: t.colors.textTertiary }]}>PREMIUM TOOLS</Text>
           {!isPremium && (
-            <View style={styles.upgradePill}>
+            <View style={[styles.upgradePill, { backgroundColor: t.colors.primary }]}>
               <Ionicons
                 name="star"
                 size={11}
@@ -187,7 +202,7 @@ export default function SettingsIndexScreen() {
                 accessibilityElementsHidden
                 importantForAccessibility="no"
               />
-              <Text style={styles.upgradeText} maxFontSizeMultiplier={1.2} numberOfLines={1}>
+              <Text style={[styles.upgradeText, { color: t.colors.surface }]} maxFontSizeMultiplier={1.2} numberOfLines={1}>
                 Upgrade
               </Text>
             </View>
@@ -196,9 +211,9 @@ export default function SettingsIndexScreen() {
 
         {!isPremium && (
           <Card style={styles.upgradeCard}>
-            <Ionicons name="star-outline" size={28} color={colors.primary} />
-            <Text style={styles.upgradeTitle}>Unlock All Tools</Text>
-            <Text style={styles.upgradeDesc}>
+            <Ionicons name="star-outline" size={28} color={t.colors.primary} />
+            <Text style={[styles.upgradeTitle, { color: t.colors.text }]}>Unlock All Tools</Text>
+            <Text style={[styles.upgradeDesc, { color: t.colors.textMuted }]}>
               First &amp; Then, Daily Planner, Visual Timers, and more — designed with OT therapy principles for meaningful daily support.
             </Text>
           </Card>
@@ -218,117 +233,97 @@ export default function SettingsIndexScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1},
   content: { padding: spacing.lg, paddingBottom: 40, gap: spacing.lg },
 
   title: {
     fontFamily: fonts.displayBlack,
     fontSize: typography.title,
-    color: colors.text,
+
     letterSpacing: -0.5,
-    marginBottom: spacing.xs,
-  },
+    marginBottom: spacing.xs},
 
   sectionHeading: {
     fontFamily: fonts.bodyHeavy,
     fontSize: typography.caption,
-    color: colors.textTertiary,
+
     letterSpacing: 0.8,
-    marginBottom: spacing.xs,
-  },
+    marginBottom: spacing.xs},
 
   section: {
     padding: 0,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
 
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   settingRowPressed: {
-    backgroundColor: colors.background,
+
   },
   settingIcon: {
     width: 40,
     height: 40,
     borderRadius: radii.button,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   settingCopy: { flex: 1 },
   settingLabel: {
     fontFamily: fonts.displayBold,
-    fontSize: typography.callout,
-    color: colors.text,
-  },
+    fontSize: typography.callout},
   settingSubtitle: {
     fontFamily: fonts.body,
     marginTop: 2,
-    fontSize: typography.caption,
-    color: colors.textMuted,
-  },
+    fontSize: typography.caption},
   premiumBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: colors.primaryDark,
+
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   premiumText: {
     fontFamily: fonts.displayBlack,
     fontSize: 10,
-    color: colors.surface,
-    letterSpacing: 0.4,
-  },
+
+    letterSpacing: 0.4},
 
   divider: {
     height: 1,
     backgroundColor: '#EEF2F6',
-    marginLeft: 56 + spacing.md,
-  },
+    marginLeft: 56 + spacing.md},
 
   premiumHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   upgradePill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: colors.primary,
+
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   upgradeText: {
     fontFamily: fonts.displayHeavy,
-    fontSize: typography.caption,
-    color: colors.surface,
-  },
+    fontSize: typography.caption},
 
   upgradeCard: {
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.xl,
-    backgroundColor: '#F0F8FF',
-  },
+    backgroundColor: '#F0F8FF'},
   upgradeTitle: {
     fontFamily: fonts.displayBlack,
-    fontSize: typography.subheading,
-    color: colors.text,
-  },
+    fontSize: typography.subheading},
   upgradeDesc: {
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.textMuted,
+
     textAlign: 'center',
-    lineHeight: 22,
-  },
+    lineHeight: 22},
 });

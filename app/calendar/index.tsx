@@ -17,6 +17,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,7 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, Stack, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
 import {
@@ -36,6 +37,8 @@ import {
   usePlanCountsByDate,
   usePlansForDate,
 } from '../../src/features/calendar/store';
+import { useTheme } from '../../src/theme/useTheme';
+import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
 const MONTHS_LONG = [
@@ -83,6 +86,7 @@ function MonthGrid({
   onSelect: (date: Date) => void;
   onShiftMonth: (delta: number) => void;
 }) {
+  const t = useTheme();
   const cells = useMemo(() => buildMonthGrid(anchor), [anchor]);
   const monthIdx = anchor.getMonth();
 
@@ -96,9 +100,9 @@ function MonthGrid({
           accessibilityRole="button"
           style={styles.monthNavBtn}
         >
-          <Ionicons name="chevron-back" size={22} color={colors.primary} />
+          <Ionicons name="chevron-back" size={22} color={t.colors.primary} />
         </Pressable>
-        <Text style={styles.monthLabel}>
+        <Text style={[styles.monthLabel, { color: t.colors.text }]}>
           {MONTHS_LONG[monthIdx]} {anchor.getFullYear()}
         </Text>
         <Pressable
@@ -108,13 +112,13 @@ function MonthGrid({
           accessibilityRole="button"
           style={styles.monthNavBtn}
         >
-          <Ionicons name="chevron-forward" size={22} color={colors.primary} />
+          <Ionicons name="chevron-forward" size={22} color={t.colors.primary} />
         </Pressable>
       </View>
 
       <View style={styles.weekdayRow}>
         {WEEKDAYS.map((d, i) => (
-          <Text key={`${d}-${i}`} style={styles.weekdayLabel}>{d}</Text>
+          <Text key={`${d}-${i}`} style={[styles.weekdayLabel, { color: t.colors.textMuted }]}>{d}</Text>
         ))}
       </View>
 
@@ -177,6 +181,7 @@ function MonthGrid({
 // ─── Plan card ─────────────────────────────────────────────────────────────
 
 function PlanRowCard({ plan, onOpen }: { plan: Plan; onOpen: () => void }) {
+  const t = useTheme();
   const total = plan.steps.length;
   const done = plan.steps.filter(s => s.done).length;
   const pct = total ? done / total : 0;
@@ -196,14 +201,14 @@ function PlanRowCard({ plan, onOpen }: { plan: Plan; onOpen: () => void }) {
           />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.planName}>{plan.name}</Text>
-          <Text style={styles.planMeta}>
+          <Text style={[styles.planName, { color: t.colors.text }]}>{plan.name}</Text>
+          <Text style={[styles.planMeta, { color: t.colors.textMuted }]}>
             {total} step{total === 1 ? '' : 's'}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={22} color={colors.textTertiary} />
+        <Ionicons name="chevron-forward" size={22} color={t.colors.textTertiary} />
       </View>
-      <View style={styles.progressTrack}>
+      <View style={[styles.progressTrack, { backgroundColor: t.colors.progressTrack }]}>
         <View
           style={[
             styles.progressFill,
@@ -211,7 +216,7 @@ function PlanRowCard({ plan, onOpen }: { plan: Plan; onOpen: () => void }) {
           ]}
         />
       </View>
-      <Text style={styles.progressText}>{done}/{total} done</Text>
+      <Text style={[styles.progressText, { color: t.colors.textMuted }]}>{done}/{total} done</Text>
     </Pressable>
   );
 }
@@ -227,9 +232,10 @@ function hexAlpha(hex: string, a: number): string {
 // ─── Empty plan card ───────────────────────────────────────────────────────
 
 function CreatePlanCard({ onCreate, isToday }: { onCreate: () => void; isToday: boolean }) {
+  const t = useTheme();
   return (
-    <View style={styles.emptyCard}>
-      <Text style={styles.emptyHeading}>
+    <View style={[styles.emptyCard, { backgroundColor: t.colors.surface }]}>
+      <Text style={[styles.emptyHeading, { color: t.colors.text }]}>
         {isToday ? 'Create a Plan' : 'No plans for this day'}
       </Text>
       <Pressable
@@ -238,9 +244,9 @@ function CreatePlanCard({ onCreate, isToday }: { onCreate: () => void; isToday: 
         accessibilityLabel="Create a new plan"
         style={({ pressed }) => [styles.createBubble, pressed && { opacity: 0.85 }]}
       >
-        <Ionicons name="add" size={36} color={colors.surface} />
+        <Ionicons name="add" size={36} color={t.colors.surface} />
       </Pressable>
-      <Text style={styles.emptySub}>
+      <Text style={[styles.emptySub, { color: t.colors.textMuted }]}>
         Plan steps with pictures and timers — start with a name, then add steps in order.
       </Text>
     </View>
@@ -250,6 +256,7 @@ function CreatePlanCard({ onCreate, isToday }: { onCreate: () => void; isToday: 
 // ─── Screen ────────────────────────────────────────────────────────────────
 
 export default function CalendarScreen() {
+  const t = useTheme();
   const router = useRouter();
   const [anchor, setAnchor] = useState<Date>(() => startOfMonth(new Date()));
   const [selectedKey, setSelectedKey] = useState<string>(todayKey);
@@ -257,6 +264,7 @@ export default function CalendarScreen() {
   const plansForSelected = usePlansForDate(selectedKey);
   const isSelectedToday = selectedKey === todayKey;
   const selectedDate = useMemo(() => parseDateKey(selectedKey), [selectedKey]);
+  const { refreshing, onRefresh } = usePullRefresh();
 
   const openDay = (key: string) => {
     hapticSelection();
@@ -269,7 +277,7 @@ export default function CalendarScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
@@ -280,17 +288,17 @@ export default function CalendarScreen() {
           accessibilityLabel="Back to Tools"
           accessibilityRole="button"
         >
-          <Ionicons name="chevron-back" size={28} color={colors.primary} />
+          <Ionicons name="chevron-back" size={28} color={t.colors.primary} />
         </Pressable>
-        <Text style={styles.title} accessibilityRole="header">Today</Text>
+        <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">Today</Text>
         <Pressable
           onPress={openCreate}
           accessibilityRole="button"
           accessibilityLabel="Create a new plan"
           style={({ pressed }) => [styles.newPlanPill, pressed && { opacity: 0.85 }]}
         >
-          <Ionicons name="add" size={18} color={colors.surface} />
-          <Text style={styles.newPlanText}>New Plan</Text>
+          <Ionicons name="add" size={18} color={t.colors.surface} />
+          <Text style={[styles.newPlanText, { color: t.colors.surface }]}>New Plan</Text>
         </Pressable>
       </View>
 
@@ -300,6 +308,14 @@ export default function CalendarScreen() {
         bounces
         alwaysBounceVertical
         overScrollMode="always"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={t.colors.primary}
+            colors={[t.colors.primary]}
+          />
+        }
       >
         <MonthGrid
           anchor={anchor}
@@ -316,7 +332,7 @@ export default function CalendarScreen() {
           onShiftMonth={(delta) => setAnchor(prev => addMonths(prev, delta))}
         />
 
-        <Text style={styles.sectionTitle}>
+        <Text style={[styles.sectionTitle, { color: t.colors.text }]}>
           {isSelectedToday
             ? "Today's Plan"
             : `${MONTHS_LONG[selectedDate.getMonth()]} ${selectedDate.getDate()} Plan`}
@@ -335,8 +351,8 @@ export default function CalendarScreen() {
               accessibilityLabel="Add another plan to this day"
               style={({ pressed }) => [styles.addMore, pressed && { opacity: 0.85 }]}
             >
-              <Ionicons name="add" size={20} color={colors.primary} />
-              <Text style={styles.addMoreText}>Add another plan</Text>
+              <Ionicons name="add" size={20} color={t.colors.primary} />
+              <Text style={[styles.addMoreText, { color: t.colors.primary }]}>Add another plan</Text>
             </Pressable>
           </View>
         )}
@@ -348,173 +364,145 @@ export default function CalendarScreen() {
 // ─── Styles ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1},
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    gap: spacing.md,
-  },
-  headerIconBtn: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
+    gap: spacing.md},
+  headerIconBtn: { minWidth: 44, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: {
     fontFamily: fonts.displayBlack,
     flex: 1,
     fontSize: typography.title,
-    color: colors.text,
-    letterSpacing: typography.trackTitle,
-  },
+
+    letterSpacing: typography.trackTitle},
   newPlanPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.primary,
+
     paddingHorizontal: spacing.lg,
     paddingVertical: 9,
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
   newPlanText: {
     fontFamily: fonts.displayHeavy,
-    color: colors.surface,
-    fontSize: typography.callout,
-  },
+
+    fontSize: typography.callout},
 
   scroll: {
     padding: spacing.lg,
     paddingBottom: 60,
-    gap: spacing.lg,
-  },
+    gap: spacing.lg},
 
   // Month grid
   gridCard: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-  },
+    paddingBottom: spacing.md},
   monthHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
+    marginBottom: spacing.sm},
   monthNavBtn: {
     width: 36,
     height: 36,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   monthLabel: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.subheading,
-    color: colors.text,
-    letterSpacing: typography.trackSubhead,
-  },
+
+    letterSpacing: typography.trackSubhead},
   weekdayRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 2,
-    marginBottom: spacing.xs,
-  },
+    marginBottom: spacing.xs},
   weekdayLabel: {
     fontFamily: fonts.displayBold,
     flex: 1,
     textAlign: 'center',
     fontSize: typography.caption,
-    color: colors.textMuted,
-    letterSpacing: 0.6,
-  },
+
+    letterSpacing: 0.6},
   gridRows: { gap: 2 },
   gridRow: { flexDirection: 'row' },
   cellHit: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 4,
-    gap: 4,
-  },
+    gap: 4},
   cellInner: {
     width: 36,
     height: 36,
     borderRadius: 18,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   cellSelected: {
-    backgroundColor: colors.primary,
+
   },
   cellToday: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-  },
+    borderWidth: 1.5},
   cellText: {
     fontFamily: fonts.displayBold,
-    fontSize: typography.callout,
-    color: colors.text,
-  },
-  cellTextMuted: { color: colors.textTertiary },
-  cellTextToday: { fontFamily: fonts.displayBlack, color: colors.primary },
+    fontSize: typography.callout},
+  cellTextMuted: { },
+  cellTextToday: { fontFamily: fonts.displayBlack},
   cellTextSelected: { fontFamily: fonts.displayBlack, color: '#FFFFFF' },
   cellDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'transparent',
-  },
-  cellDotActive: { backgroundColor: colors.primary },
+    backgroundColor: 'transparent'},
+  cellDotActive: { },
 
   // Day plans
   sectionTitle: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.subheading,
-    color: colors.text,
-    letterSpacing: typography.trackSubhead,
-  },
+
+    letterSpacing: typography.trackSubhead},
   plansList: {
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   planCard: {
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
     padding: spacing.lg,
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   planHead: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   planIconChip: {
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   planName: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.subheading,
-    color: colors.text,
-    letterSpacing: typography.trackSubhead,
-  },
+
+    letterSpacing: typography.trackSubhead},
   planMeta: {
     fontFamily: fonts.body,
     fontSize: typography.caption,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
+
+    marginTop: 2},
   progressTrack: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.progressTrack,
-    overflow: 'hidden',
-  },
+
+    overflow: 'hidden'},
   progressFill: { height: '100%', borderRadius: 4 },
   progressText: {
     fontFamily: fonts.displayBold,
     alignSelf: 'flex-end',
-    fontSize: typography.caption,
-    color: colors.textMuted,
-  },
+    fontSize: typography.caption},
   addMore: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -522,43 +510,36 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 14,
     borderRadius: radii.pill,
-    backgroundColor: '#E6F4FD',
-  },
+    backgroundColor: '#E6F4FD'},
   addMoreText: {
     fontFamily: fonts.displayBold,
-    fontSize: typography.callout,
-    color: colors.primary,
-  },
+    fontSize: typography.callout},
 
   // Empty / create card
   emptyCard: {
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
     paddingVertical: spacing.xxl,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   emptyHeading: {
     fontFamily: fonts.displayBlack,
     fontSize: typography.heading,
-    color: colors.text,
-    letterSpacing: typography.trackHeading,
-  },
+
+    letterSpacing: typography.trackHeading},
   createBubble: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: colors.primary,
+
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   emptySub: {
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.textMuted,
+
     textAlign: 'center',
     lineHeight: 22,
-    paddingHorizontal: spacing.lg,
-  },
+    paddingHorizontal: spacing.lg},
 });

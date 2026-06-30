@@ -8,7 +8,7 @@ import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { AppProvider } from '../src/context/AppContext';
 import { useTapTalkFonts } from '../src/theme/fonts';
 import { useTheme } from '../src/theme/useTheme';
-import { colors, typography } from '../src/theme/tokens';
+import { colorsLight, typography } from '../src/theme/tokens';
 
 const DefaultText = Text as typeof Text & { defaultProps?: { style?: unknown } };
 const DefaultTextInput = TextInput as typeof TextInput & { defaultProps?: { style?: unknown } };
@@ -39,7 +39,7 @@ export default function RootLayout() {
   // the very first frame would draw with the system fallback and snap to the
   // custom face a tick later — a flash everyone notices.
   if (!fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+    return <View style={{ flex: 1, backgroundColor: colorsLight.background }} />;
   }
 
   return (

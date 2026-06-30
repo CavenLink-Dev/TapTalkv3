@@ -22,7 +22,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Href, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/native/Screen';
-import { animation as anim, colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { animation as anim, radii, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 import {
   hapticLight,
   hapticMedium,
@@ -34,7 +35,9 @@ import {
   useFavouriteTools,
 } from '../../src/features/tools/favourites-store';
 import { setToolOrder, useToolOrder } from '../../src/features/tools/order-store';
+import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
+import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -57,7 +60,7 @@ const TOOLS: Tool[] = [
     title: 'Calendar',
     subtitle: 'Plan your day, step by step.',
     tag: 'Plan',
-    accent: colors.primary,
+    accent: '#199AEE',
     accentBg: '#E6F4FD',
     image: require('../../assets/tools/calendar.png'),
     route: '/calendar' as Href,
@@ -226,6 +229,7 @@ function ToolCard({
   onDragMove: (gesture: PanResponderGestureState) => void;
   onDragEnd: () => void;
 }) {
+  const t = useTheme();
   const reduceMotion = useReduceMotion();
   const suppressOpenAfterLongPress = useRef(false);
 
@@ -508,7 +512,7 @@ function ToolCard({
           hapticSelection();
           onOpen();
         }}
-        style={styles.card}
+        style={[styles.card, { backgroundColor: t.colors.surface }]}
       >
         {/* Hero image + shimmer */}
         <View style={[styles.cardHero, { backgroundColor: tool.accentBg }]}>
@@ -557,15 +561,15 @@ function ToolCard({
                   <Ionicons
                     name="menu"
                     size={25}
-                    color={dragging ? tool.accent : colors.textMuted}
+                    color={dragging ? tool.accent : t.colors.textMuted}
                   />
                 </Pressable>
               </Animated.View>
             ) : null}
 
             <View style={styles.copy}>
-              <Text style={styles.name}>{tool.title}</Text>
-              <Text style={styles.description} numberOfLines={2}>
+              <Text style={[styles.name, { color: t.colors.text }]}>{tool.title}</Text>
+              <Text style={[styles.description, { color: t.colors.textMuted }]} numberOfLines={2}>
                 {tool.subtitle}
               </Text>
             </View>
@@ -600,7 +604,7 @@ function ToolCard({
                   <Ionicons
                     name={favourite ? 'star' : 'star-outline'}
                     size={24}
-                    color={favourite ? '#F5B400' : colors.textTertiary}
+                    color={favourite ? '#F5B400' : t.colors.textTertiary}
                   />
                 </Animated.View>
                 <StarParticles trigger={particleTrigger} />
@@ -650,6 +654,7 @@ function SectionHeader({
   entryDelay?: number;
   isFavourites?: boolean;
 }) {
+  const t = useTheme();
   const reduceMotion  = useReduceMotion();
   const mountProgress = useRef(new Animated.Value(0)).current;
 
@@ -683,6 +688,7 @@ function SectionHeader({
       <Text
         style={[
           styles.sectionTitle,
+          { color: t.colors.textMuted },
           isFavourites && styles.sectionTitleFavourites,
         ]}
       >
@@ -695,8 +701,10 @@ function SectionHeader({
 // ─── ToolsScreen ───────────────────────────────────────────────────────────────
 
 export default function ToolsScreen() {
+  const t = useTheme();
   const router     = useRouter();
   const favs       = useFavouriteTools();
+  const { refreshing, onRefresh } = usePullRefresh();
   const savedOrder = useToolOrder();
 
   const [showDragHandles, setShowDragHandles] = useState(false);
@@ -765,6 +773,8 @@ export default function ToolsScreen() {
     <Screen
       title="Tools"
       subtitle="Tap a tool to open it. Hold a tool to organise."
+      refreshing={refreshing}
+      onRefresh={onRefresh}
     >
       {/* Reorder mode banner — Law #25: edit mode with a clear exit */}
       {showDragHandles ? (
@@ -772,12 +782,12 @@ export default function ToolsScreen() {
           onPress={() => { hapticLight(); setShowDragHandles(false); }}
           accessibilityRole="button"
           accessibilityLabel="Done reordering tools"
-          style={styles.doneBar}
+          style={[styles.doneBar, { backgroundColor: t.colors.surface, borderColor: t.colors.primary + '33' }]}
         >
-          <Ionicons name="reorder-three" size={18} color={colors.primary} />
-          <Text style={styles.doneBarText}>Hold ≡ then drag to reorder</Text>
-          <View style={styles.doneChip}>
-            <Text style={styles.doneChipText}>Done</Text>
+          <Ionicons name="reorder-three" size={18} color={t.colors.primary} />
+          <Text style={[styles.doneBarText, { color: t.colors.textMuted }]}>Hold ≡ then drag to reorder</Text>
+          <View style={[styles.doneChip, { backgroundColor: t.colors.primary }]}>
+            <Text style={[styles.doneChipText, { color: t.colors.textOnDark }]}>Done</Text>
           </View>
         </Pressable>
       ) : null}
@@ -842,26 +852,22 @@ export default function ToolsScreen() {
 
 const styles = StyleSheet.create({
   list: {
-    gap: CARD_GAP,
-  },
+    gap: CARD_GAP},
   card: {
     height: CARD_HEIGHT,
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   // overflow:hidden clips both the counter-zoomed hero and the shimmer stripe
   cardHero: {
     height: 112,
     width: '100%',
     overflow: 'hidden',
     borderTopLeftRadius: radii.card,
-    borderTopRightRadius: radii.card,
-  },
+    borderTopRightRadius: radii.card},
   cardHeroImage: {
     borderTopLeftRadius: radii.card,
-    borderTopRightRadius: radii.card,
-  },
+    borderTopRightRadius: radii.card},
   // Static rotation lives here; translateX is animated on the native thread
   shimmerStripe: {
     position: 'absolute',
@@ -870,52 +876,42 @@ const styles = StyleSheet.create({
     width: 54,
     height: 200,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    transform: [{ rotate: '18deg' }],
-  },
+    transform: [{ rotate: '18deg' }]},
   cardBody: {
     padding: spacing.md,
-    gap: 4,
-  },
+    gap: 4},
   cardContentRow: {
     minHeight: 62,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   copy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   tag: {
     alignSelf: 'flex-start',
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   tagText: {
+    fontFamily: fonts.displayHeavy,
     fontSize: typography.eyebrow,
-    fontWeight: '800',
     letterSpacing: 0.4,
   },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-  },
+    gap: spacing.xs},
   // All icon buttons meet Law #20: 44pt minimum touch target
   iconButton: {
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   dragHandle: {
-    borderRadius: 22,
-    backgroundColor: colors.inputBg,
-  },
+    borderRadius: 22},
   starButton: {
-    borderRadius: 22,
-  },
+    borderRadius: 22},
   playButton: {
     width:          38,
     height:         38,
@@ -926,70 +922,59 @@ const styles = StyleSheet.create({
     shadowOffset:   { width: 0, height: 2 },
     shadowOpacity:  0.18,
     shadowRadius:   3,
-    elevation:      3,
-  },
+    elevation:      3},
   playIcon: {
-    marginLeft: 2,
-  },
+    marginLeft: 2},
   // Golden halo — only visible (opacity > 0) when card is favourited
   starGlow: {
     position: 'absolute',
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#FFF0B3',
-  },
+    backgroundColor: '#FFF0B3'},
   section: {
     gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
+    marginBottom: spacing.lg},
   // Favourites section gets a warm golden tint strip — visually separates it
   favouritesSection: {
     backgroundColor: 'rgba(245, 180, 0, 0.06)',
     borderRadius: radii.card,
     padding: spacing.sm,
     marginHorizontal: -spacing.sm,
-    paddingBottom: spacing.md,
-  },
+    paddingBottom: spacing.md},
   sectionHeader: {
     minHeight: 24,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: spacing.xs,
-  },
+    paddingHorizontal: spacing.xs},
   sectionTitle: {
+    fontFamily: fonts.displayHeavy,
     fontSize: typography.caption,
-    fontWeight: '800',
-    color: colors.textMuted,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   // Favourites section title uses the star gold — pops without being loud
   sectionTitleFavourites: {
-    color: '#C68A00',
-  },
+    color: '#C68A00'},
   // Reorder mode banner — Law #25: clear edit-mode entry/exit
   doneBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.surface,
+
     borderRadius: radii.button,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.md,
-    borderWidth: 1.5,
-    borderColor: colors.primary + '33',
-  },
+    borderWidth: 1.5},
   doneBarText: {
     flex: 1,
+    fontFamily: fonts.body,
     fontSize: typography.caption,
     fontWeight: '600',
-    color: colors.textMuted,
   },
   doneChip: {
-    backgroundColor: colors.primary,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
@@ -998,20 +983,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   doneChipText: {
+    fontFamily: fonts.displayBold,
     fontSize: typography.caption,
-    fontWeight: '700',
-    color: colors.textOnDark,
     letterSpacing: 0.2,
   },
   name: {
+    fontFamily: fonts.displayHeavy,
     fontSize: typography.body,
-    fontWeight: '800',
-    color: colors.text,
     letterSpacing: -0.2,
   },
   description: {
+    fontFamily: fonts.body,
     fontSize: typography.caption,
-    color: colors.textMuted,
     lineHeight: 17,
   },
 });

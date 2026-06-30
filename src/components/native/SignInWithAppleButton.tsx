@@ -7,9 +7,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { animation, colors, radii, typography } from '../../theme/tokens';
+import { animation, radii, typography } from '../../theme/tokens';
 import { springPop, timingFast } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { useTheme } from '../../theme/useTheme';
 import { hapticSelection } from '../../utils/haptics';
 import { fonts } from '../../theme/fonts';
 
@@ -41,6 +42,7 @@ export function SignInWithAppleButton({
   loading = false,
 }: SignInWithAppleButtonProps) {
   const reduceMotion = useReduceMotion();
+  const t = useTheme();
   const pressed = useSharedValue(0);
 
   const containerStyle = useAnimatedStyle(() => {
@@ -77,8 +79,8 @@ export function SignInWithAppleButton({
         style={styles.button}
       >
         <View style={styles.row}>
-          <Ionicons name="logo-apple" size={20} color={colors.surface} style={styles.logo} />
-          <Text style={styles.label}>{label}</Text>
+          <Ionicons name="logo-apple" size={20} color={t.colors.surface} style={styles.logo} />
+          <Text style={[styles.label, { color: t.colors.surface }]}>{label}</Text>
         </View>
       </Pressable>
     </Animated.View>
@@ -109,6 +111,5 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemibold,
     fontSize: typography.body,
     letterSpacing: -0.2,
-    color: colors.surface,
   },
 });

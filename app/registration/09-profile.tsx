@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,8 +10,9 @@ import {
   useRegistration,
 } from '../../src/context/RegistrationContext';
 import { useAppContext } from '../../src/hooks/useAppContext';
-import { authFormStyles } from '../../src/styles/authFormStyles';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { createAuthFormStyles } from '../../src/styles/authFormStyles';
+import { radii, spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection, hapticSuccess } from '../../src/utils/haptics';
 
@@ -19,6 +20,8 @@ const talkRoute = '/(tabs)/talk' as Href;
 
 export default function RegStep9Profile() {
   const router = useRouter();
+  const t = useTheme();
+  const authFormStyles = useMemo(() => createAuthFormStyles(t), [t]);
   const { data, update } = useRegistration();
   const { dispatch } = useAppContext();
   const [submitting, setSubmitting] = useState(false);
@@ -93,7 +96,7 @@ export default function RegStep9Profile() {
             hitSlop={8}
             style={styles.skipBtn}
           >
-            <Text style={styles.skipLabel}>Skip for now</Text>
+            <Text style={[styles.skipLabel, { color: t.colors.textMuted }]}>Skip for now</Text>
           </Pressable>
         </>
       }
@@ -101,8 +104,8 @@ export default function RegStep9Profile() {
       <View style={styles.body}>
         {/* ── Avatar ── */}
         <View style={styles.avatarBlock}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarInitial} accessibilityElementsHidden>
+          <View style={[styles.avatar, { borderColor: t.colors.primary }]}>
+            <Text style={[styles.avatarInitial, { color: t.colors.primaryDark }]} accessibilityElementsHidden>
               {initial}
             </Text>
           </View>
@@ -111,10 +114,13 @@ export default function RegStep9Profile() {
             accessibilityLabel="Add a profile photo"
             onPress={pickPhoto}
             hitSlop={8}
-            style={styles.photoBtn}
+            style={[
+              styles.photoBtn,
+              { borderColor: t.colors.primary, backgroundColor: t.colors.surface },
+            ]}
           >
-            <Ionicons name="camera-outline" size={18} color={colors.primary} />
-            <Text style={styles.photoBtnLabel}>Add photo</Text>
+            <Ionicons name="camera-outline" size={18} color={t.colors.primary} />
+            <Text style={[styles.photoBtnLabel, { color: t.colors.primary }]}>Add photo</Text>
           </Pressable>
         </View>
 
@@ -150,12 +156,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: colors.primary,
   },
   avatarInitial: {
     fontFamily: fonts.displayBlack,
     fontSize: 48,
-    color: colors.primaryDark,
     letterSpacing: -1,
   },
   photoBtn: {
@@ -166,13 +170,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.surface,
   },
   photoBtnLabel: {
     fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    color: colors.primary,
   },
   skipBtn: {
     alignSelf: 'center',
@@ -182,6 +183,5 @@ const styles = StyleSheet.create({
   skipLabel: {
     fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    color: colors.textMuted,
   },
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { colors } from '../theme/tokens';
 import { useReduceMotion } from '../hooks/useReduceMotion';
+import { useTheme } from '../theme/useTheme';
 
 type Variant = 'standalone' | 'onPrimary' | 'inline';
 
@@ -31,9 +31,10 @@ export function LoadingDots({
   accessibilityLabel = 'Loading',
 }: LoadingDotsProps) {
   const reduceMotion = useReduceMotion();
+  const t = useTheme();
 
   const dotSize = size ?? defaultSize(variant);
-  const dotColor = color ?? defaultColor(variant);
+  const dotColor = color ?? defaultColor(variant, t.colors);
 
   // ── Reduce Motion: single dot, gentle breathing ────────────────────────────
   const single = useRef(new Animated.Value(0.5)).current;
@@ -79,7 +80,7 @@ export function LoadingDots({
     };
   }, [reduceMotion, dot1, dot2, dot3]);
 
-  const wrapStyle = capsule(variant, dotSize);
+  const wrapStyle = capsule(variant, dotSize, t.colors);
   const gap = dotSize * 0.66;
 
   if (reduceMotion) {
@@ -134,7 +135,10 @@ function defaultSize(variant: Variant): number {
   }
 }
 
-function defaultColor(variant: Variant): string {
+function defaultColor(
+  variant: Variant,
+  colors: ReturnType<typeof useTheme>['colors'],
+): string {
   switch (variant) {
     case 'onPrimary': return colors.surface;
     case 'inline':    return colors.textMuted;
@@ -142,7 +146,11 @@ function defaultColor(variant: Variant): string {
   }
 }
 
-function capsule(variant: Variant, dotSize: number) {
+function capsule(
+  variant: Variant,
+  dotSize: number,
+  colors: ReturnType<typeof useTheme>['colors'],
+) {
   if (variant === 'standalone') {
     return [
       styles.row,

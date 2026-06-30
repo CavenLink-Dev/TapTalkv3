@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { colors, radii, shadows, spacing, typography } from '../theme/tokens';
+import { radii, shadows, spacing, typography } from '../theme/tokens';
+import { useTheme } from '../theme/useTheme';
 
 interface SpeechBubbleProps {
   text: string;
@@ -15,6 +16,7 @@ interface SpeechBubbleProps {
  * typewriter reveal, as if Clo is speaking the text aloud.
  */
 export function SpeechBubble({ text, animationKey, speed = 38, onDone }: SpeechBubbleProps) {
+  const t = useTheme();
   const [shown, setShown] = useState('');
   const popAnim = useRef(new Animated.Value(0)).current;
   const caretAnim = useRef(new Animated.Value(0)).current;
@@ -66,23 +68,24 @@ export function SpeechBubble({ text, animationKey, speed = 38, onDone }: SpeechB
         ],
       }}
     >
-      <View style={styles.bubble}>
-        <Text style={styles.text}>
+      <View style={[styles.bubble, { backgroundColor: t.colors.surface }]}>
+        <Text style={[styles.text, { color: t.colors.text }]}>
           {shown}
           {typing ? (
-            <Animated.Text style={[styles.caret, { opacity: caretAnim }]}>|</Animated.Text>
+            <Animated.Text style={[styles.caret, { color: t.colors.primary, opacity: caretAnim }]}>
+              |
+            </Animated.Text>
           ) : null}
         </Text>
       </View>
       <View style={styles.tailOuter} />
-      <View style={styles.tailInner} />
+      <View style={[styles.tailInner, { borderTopColor: t.colors.surface }]} />
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   bubble: {
-    backgroundColor: colors.surface,
     borderColor: 'rgba(17,17,17,0.05)',
     borderRadius: radii.button, // 10
     borderWidth: 1,
@@ -91,7 +94,6 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   caret: {
-    color: colors.primary,
     fontWeight: '900',
   },
   tailInner: {
@@ -105,7 +107,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 10,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: colors.surface,
   },
   tailOuter: {
     position: 'absolute',
@@ -121,7 +122,6 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(17,17,17,0.05)',
   },
   text: {
-    color: colors.text,
     fontSize: typography.body,
     fontWeight: '600',
     lineHeight: 26,

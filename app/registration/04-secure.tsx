@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -7,8 +7,9 @@ import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { TextField } from '../../src/components/native/TextField';
 import { RegistrationScaffold } from '../../src/components/registration/RegistrationScaffold';
 import { useRegistration } from '../../src/context/RegistrationContext';
-import { authFormStyles } from '../../src/styles/authFormStyles';
-import { colors, radii, shadows, spacing, typography } from '../../src/theme/tokens';
+import { createAuthFormStyles } from '../../src/styles/authFormStyles';
+import { radii, shadows, spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection, hapticSuccess } from '../../src/utils/haptics';
 
@@ -22,6 +23,8 @@ type Mode = 'idle' | 'passkey' | 'password';
 
 export default function RegStep4Secure() {
   const router = useRouter();
+  const t = useTheme();
+  const authFormStyles = useMemo(() => createAuthFormStyles(t), [t]);
   const { data, update } = useRegistration();
 
   const [mode, setMode] = useState<Mode>(data.secureMethod ?? 'idle');
@@ -52,7 +55,7 @@ export default function RegStep4Secure() {
 
   const strength = [lengthOk, numberOk, specialOk].filter(Boolean).length;
   const strengthLabels  = ['', 'Weak', 'Fair', 'Strong'];
-  const strengthColors  = [colors.progressTrack, colors.danger, colors.warning, colors.success];
+  const strengthColors  = [t.colors.progressTrack, t.colors.danger, t.colors.warning, t.colors.success];
 
   const ready = mode === 'passkey' || (mode === 'password' && confirmOk);
 
@@ -84,22 +87,23 @@ export default function RegStep4Secure() {
           onPress={createPasskey}
           style={({ pressed }) => [
             styles.passkeyCard,
-            mode === 'passkey' && styles.passkeyCardDone,
+            { borderColor: t.colors.primary },
+            mode === 'passkey' && [styles.passkeyCardDone, { backgroundColor: t.colors.primary, borderColor: t.colors.primary }],
             pressed && styles.passkeyCardPressed,
           ]}
         >
-          <View style={styles.passkeyIconWrap}>
+          <View style={[styles.passkeyIconWrap, { backgroundColor: t.colors.surface }]}>
             <Ionicons
               name={mode === 'passkey' ? 'checkmark-circle' : 'finger-print'}
               size={28}
-              color={mode === 'passkey' ? colors.surface : colors.primary}
+              color={mode === 'passkey' ? t.colors.surface : t.colors.primary}
             />
           </View>
           <View style={styles.flex}>
-            <Text style={styles.passkeyTitle}>
+            <Text style={[styles.passkeyTitle, { color: t.colors.text }]}>
               {mode === 'passkey' ? 'Passkey created' : 'Create a passkey'}
             </Text>
-            <Text style={styles.passkeyBody}>
+            <Text style={[styles.passkeyBody, { color: t.colors.textMuted }]}>
               {mode === 'passkey'
                 ? "You're set — Face ID or Touch ID will sign you in next time."
                 : 'One tap. Uses your device biometrics. Recommended.'}
@@ -116,7 +120,7 @@ export default function RegStep4Secure() {
             hitSlop={6}
             style={styles.altLinkWrap}
           >
-            <Text style={styles.altLink}>
+            <Text style={[styles.altLink, { color: t.colors.primary }]}>
               {mode === 'passkey' ? 'Use a password as well' : 'Use email and password instead'}
             </Text>
           </Pressable>
@@ -144,7 +148,7 @@ export default function RegStep4Secure() {
                     key={i}
                     style={[
                       styles.meterSegment,
-                      { backgroundColor: i < strength ? strengthColors[strength] : colors.progressTrack },
+                      { backgroundColor: i < strength ? strengthColors[strength] : t.colors.progressTrack },
                     ]}
                   />
                 ))}
@@ -186,10 +190,16 @@ export default function RegStep4Secure() {
 
         {/* ── Biometrics opt-in ── */}
         {ready ? (
-          <Animated.View entering={FadeInDown.duration(260)} style={styles.bioCard}>
+          <Animated.View
+            entering={FadeInDown.duration(260)}
+            style={[
+              styles.bioCard,
+              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+            ]}
+          >
             <View style={styles.flex}>
-              <Text style={styles.bioTitle}>Enable Face ID for quick access</Text>
-              <Text style={styles.bioBody}>
+              <Text style={[styles.bioTitle, { color: t.colors.text }]}>Enable Face ID for quick access</Text>
+              <Text style={[styles.bioBody, { color: t.colors.textMuted }]}>
                 Sign back in with one glance — no typing.
               </Text>
             </View>
@@ -199,8 +209,8 @@ export default function RegStep4Secure() {
                 hapticSelection();
                 setBiometricsOn(v);
               }}
-              trackColor={{ false: colors.progressTrack, true: colors.primary }}
-              thumbColor={colors.surface}
+              trackColor={{ false: t.colors.progressTrack, true: t.colors.primary }}
+              thumbColor={t.colors.surface}
               accessibilityLabel="Enable Face ID quick access"
             />
           </Animated.View>
@@ -211,14 +221,16 @@ export default function RegStep4Secure() {
 }
 
 function Requirement({ met, label }: { met: boolean; label: string }) {
+  const t = useTheme();
+
   return (
     <View style={styles.reqRow}>
       <Ionicons
         name={met ? 'checkmark-circle' : 'ellipse-outline'}
         size={18}
-        color={met ? colors.success : colors.textTertiary}
+        color={met ? t.colors.success : t.colors.textTertiary}
       />
-      <Text style={[styles.reqText, met && styles.reqTextMet]}>{label}</Text>
+      <Text style={[styles.reqText, { color: met ? t.colors.textMuted : t.colors.textTertiary }]}>{label}</Text>
     </View>
   );
 }
@@ -234,35 +246,28 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderRadius: radii.card,
     borderWidth: 1.5,
-    borderColor: colors.primary,
     backgroundColor: '#EAF5FE',
     ...shadows.card,
   },
   passkeyCardPressed: {
     transform: [{ scale: 0.985 }],
   },
-  passkeyCardDone: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
+  passkeyCardDone: {},
   passkeyIconWrap: {
     width: 48,
     height: 48,
     borderRadius: 16,
-    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   passkeyTitle: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.body,
-    color: colors.text,
   },
   passkeyBody: {
     marginTop: 2,
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.textMuted,
     lineHeight: 20,
   },
 
@@ -270,7 +275,6 @@ const styles = StyleSheet.create({
   altLink: {
     fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    color: colors.primary,
   },
 
   passwordBlock: { gap: spacing.lg },
@@ -286,9 +290,7 @@ const styles = StyleSheet.create({
   reqText: {
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.textTertiary,
   },
-  reqTextMet: { color: colors.textMuted },
 
   bioCard: {
     flexDirection: 'row',
@@ -297,19 +299,15 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderRadius: radii.card,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
   },
   bioTitle: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.body,
-    color: colors.text,
   },
   bioBody: {
     marginTop: 2,
     fontFamily: fonts.body,
     fontSize: typography.caption,
-    color: colors.textMuted,
     lineHeight: 18,
   },
 });

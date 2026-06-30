@@ -14,8 +14,9 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { SegmentedProgressBar } from '../native/SegmentedProgressBar';
 import { REGISTRATION_TOTAL_STEPS } from '../../context/RegistrationContext';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { spacing, typography } from '../../theme/tokens';
 import { fonts } from '../../theme/fonts';
+import { useTheme } from '../../theme/useTheme';
 import { hapticSelection } from '../../utils/haptics';
 
 interface RegistrationScaffoldProps {
@@ -50,6 +51,7 @@ export function RegistrationScaffold({
   hideProgress = false,
 }: RegistrationScaffoldProps) {
   const router = useRouter();
+  const t = useTheme();
   const canGoBack = step > 1;
 
   const handleBack = () => {
@@ -59,16 +61,21 @@ export function RegistrationScaffold({
 
   const body = (
     <Animated.View style={styles.body} entering={FadeInDown.duration(320)}>
-      <Text style={styles.title} accessibilityRole="header">
+      <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">
         {title}
       </Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      {subtitle ? (
+        <Text style={[styles.subtitle, { color: t.colors.textMuted }]}>{subtitle}</Text>
+      ) : null}
       <View style={styles.content}>{children}</View>
     </Animated.View>
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: t.colors.background }]}
+      edges={['top', 'bottom']}
+    >
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -79,9 +86,12 @@ export function RegistrationScaffold({
               accessibilityRole="button"
               accessibilityLabel="Go back to the previous step"
               onPress={handleBack}
-              style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
+              style={({ pressed }) => [
+                styles.backBtn,
+                pressed && { backgroundColor: t.colors.inputBg },
+              ]}
             >
-              <Ionicons name="chevron-back" size={24} color={colors.text} />
+              <Ionicons name="chevron-back" size={24} color={t.colors.text} />
             </Pressable>
           ) : null}
           {hideProgress ? <View style={styles.progressSpacer} /> : (
@@ -113,7 +123,6 @@ export function RegistrationScaffold({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   flex: {
     flex: 1,
@@ -134,9 +143,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 22,
   },
-  backBtnPressed: {
-    backgroundColor: colors.inputBg,
-  },
   progressSpacer: {
     flex: 1,
   },
@@ -151,7 +157,6 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.title,
-    color: colors.text,
     letterSpacing: typography.trackTitle,
     lineHeight: 34,
   },
@@ -159,7 +164,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     fontFamily: fonts.body,
     fontSize: typography.body,
-    color: colors.textMuted,
     lineHeight: 23,
   },
   content: {

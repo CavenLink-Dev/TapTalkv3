@@ -24,6 +24,7 @@ import {
   Easing,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -35,7 +36,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Href, Stack, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { DisclosureRow } from '../../src/components/native/DisclosureRow';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { radii, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
 import {
   FirstThenItem,
@@ -48,6 +50,8 @@ import {
   useFirstThenItems,
   useSequenceSettings,
 } from '../../src/features/first-then/store';
+import { useTheme } from '../../src/theme/useTheme';
+import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 
 const addStepRoute = '/first-then/add-step' as Href;
 
@@ -94,12 +98,13 @@ function StepRow({
   onDelete: () => void;
   onEdit: () => void;
 }) {
+  const t = useTheme();
   return (
     <View>
       <View style={styles.row}>
         <View style={styles.wordPillCol}>
-          <View style={styles.wordPill}>
-            <Text style={styles.wordPillText}>{positionWord}</Text>
+          <View style={[styles.wordPill, { backgroundColor: t.colors.primary }]}>
+            <Text style={[styles.wordPillText, { color: t.colors.surface }]}>{positionWord}</Text>
           </View>
         </View>
 
@@ -119,10 +124,10 @@ function StepRow({
             />
           </View>
           <View style={styles.stepInfo}>
-            <Text style={styles.stepName} numberOfLines={2}>{item.name}</Text>
+            <Text style={[styles.stepName, { color: t.colors.text }]} numberOfLines={2}>{item.name}</Text>
             <View style={styles.timerRow}>
-              <Ionicons name="time-outline" size={14} color={colors.primary} />
-              <Text style={styles.timerText}>{formatHMS(item)}</Text>
+              <Ionicons name="time-outline" size={14} color={t.colors.primary} />
+              <Text style={[styles.timerText, { color: t.colors.primary }]}>{formatHMS(item)}</Text>
             </View>
           </View>
           <Pressable
@@ -132,7 +137,7 @@ function StepRow({
             accessibilityRole="button"
             style={styles.burgerHit}
           >
-            <Ionicons name="reorder-three" size={26} color={colors.textTertiary} />
+            <Ionicons name="reorder-three" size={26} color={t.colors.textTertiary} />
           </Pressable>
         </Pressable>
       </View>
@@ -150,8 +155,8 @@ function StepRow({
               pressed && index !== 0 && { opacity: 0.85 },
             ]}
           >
-            <Ionicons name="arrow-up" size={18} color={index === 0 ? colors.textTertiary : colors.primary} />
-            <Text style={[styles.editBtnText, index === 0 && { color: colors.textTertiary }]}>Up</Text>
+            <Ionicons name="arrow-up" size={18} color={index === 0 ? t.colors.textTertiary : t.colors.primary} />
+            <Text style={[styles.editBtnText, index === 0 && { color: t.colors.textTertiary }]}>Up</Text>
           </Pressable>
           <Pressable
             onPress={() => onMove('down')}
@@ -164,8 +169,8 @@ function StepRow({
               pressed && index !== total - 1 && { opacity: 0.85 },
             ]}
           >
-            <Ionicons name="arrow-down" size={18} color={index === total - 1 ? colors.textTertiary : colors.primary} />
-            <Text style={[styles.editBtnText, index === total - 1 && { color: colors.textTertiary }]}>Down</Text>
+            <Ionicons name="arrow-down" size={18} color={index === total - 1 ? t.colors.textTertiary : t.colors.primary} />
+            <Text style={[styles.editBtnText, index === total - 1 && { color: t.colors.textTertiary }]}>Down</Text>
           </Pressable>
           <Pressable
             onPress={onEdit}
@@ -173,8 +178,8 @@ function StepRow({
             accessibilityRole="button"
             style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.85 }]}
           >
-            <Ionicons name="create-outline" size={18} color={colors.primary} />
-            <Text style={styles.editBtnText}>Edit</Text>
+            <Ionicons name="create-outline" size={18} color={t.colors.primary} />
+            <Text style={[styles.editBtnText, { color: t.colors.primary }]}>Edit</Text>
           </Pressable>
           <Pressable
             onPress={onDelete}
@@ -182,15 +187,15 @@ function StepRow({
             accessibilityRole="button"
             style={({ pressed }) => [styles.editBtn, styles.editBtnDanger, pressed && { opacity: 0.85 }]}
           >
-            <Ionicons name="trash-outline" size={18} color={colors.danger} />
-            <Text style={[styles.editBtnText, { color: colors.danger }]}>Delete</Text>
+            <Ionicons name="trash-outline" size={18} color={t.colors.danger} />
+            <Text style={[styles.editBtnText, { color: t.colors.danger }]}>Delete</Text>
           </Pressable>
         </View>
       ) : null}
 
       {index < total - 1 ? (
         <View style={styles.connector} accessibilityElementsHidden>
-          <Ionicons name="arrow-down" size={22} color={colors.primary} />
+          <Ionicons name="arrow-down" size={22} color={t.colors.primary} />
         </View>
       ) : null}
     </View>
@@ -274,6 +279,7 @@ function SequenceRunner({
   autoAdvance: boolean;
   onClose: () => void;
 }) {
+  const t = useTheme();
   const [index, setIndex] = useState(0);
   const [remaining, setRemaining] = useState(0);
   const [done, setDone] = useState(false);
@@ -337,7 +343,7 @@ function SequenceRunner({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.runnerSafe} edges={['top']}>
+      <SafeAreaView style={[styles.runnerSafe, { backgroundColor: t.colors.background }]} edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.runnerHeader}>
           <Pressable
@@ -346,9 +352,9 @@ function SequenceRunner({
             accessibilityLabel="Close sequence"
             style={styles.runnerBack}
           >
-            <Ionicons name="chevron-back" size={26} color={colors.primary} />
+            <Ionicons name="chevron-back" size={26} color={t.colors.primary} />
           </Pressable>
-          <Text style={styles.runnerTitle}>{done ? 'Done' : `Step ${index + 1} of ${total}`}</Text>
+          <Text style={[styles.runnerTitle, { color: t.colors.text }]}>{done ? 'Done' : `Step ${index + 1} of ${total}`}</Text>
           <View style={{ width: 26 }} />
         </View>
 
@@ -375,14 +381,14 @@ function SequenceRunner({
               <View style={styles.runnerDoneBadge}>
                 <Ionicons name="checkmark" size={56} color="#FFFFFF" />
               </View>
-              <Text style={styles.runnerDoneTitle}>Great job!</Text>
-              <Text style={styles.runnerDoneSub}>You finished every step.</Text>
+              <Text style={[styles.runnerDoneTitle, { color: t.colors.text }]}>Great job!</Text>
+              <Text style={[styles.runnerDoneSub, { color: t.colors.textMuted }]}>You finished every step.</Text>
             </View>
           ) : null}
         </ScrollView>
 
         {!done ? (
-          <View style={styles.runnerControls}>
+          <View style={[styles.runnerControls, { backgroundColor: t.colors.background }]}>
             <Pressable
               onPress={back}
               disabled={index === 0}
@@ -395,8 +401,8 @@ function SequenceRunner({
                 pressed && index !== 0 && { opacity: 0.85 },
               ]}
             >
-              <Ionicons name="arrow-back" size={20} color={index === 0 ? colors.textTertiary : colors.primary} />
-              <Text style={[styles.runnerBtnGhostText, index === 0 && { color: colors.textTertiary }]}>Back</Text>
+              <Ionicons name="arrow-back" size={20} color={index === 0 ? t.colors.textTertiary : t.colors.primary} />
+              <Text style={[styles.runnerBtnGhostText, index === 0 && { color: t.colors.textTertiary }]}>Back</Text>
             </Pressable>
             <Pressable
               onPress={advance}
@@ -417,7 +423,7 @@ function SequenceRunner({
             </Pressable>
           </View>
         ) : (
-          <View style={styles.runnerControls}>
+          <View style={[styles.runnerControls, { backgroundColor: t.colors.background }]}>
             <Pressable
               onPress={onClose}
               accessibilityRole="button"
@@ -449,6 +455,7 @@ function RunnerStepCard({
   positionWord: string;
   remaining: number;
 }) {
+  const t = useTheme();
   const opacity = isCurrent ? 1 : isPast ? 0.4 : 0.55;
   return (
     <View style={[styles.runnerCard, { opacity }]}>
@@ -467,7 +474,7 @@ function RunnerStepCard({
           {item.name}
         </Text>
         {isCurrent && totalDurationSec(item) > 0 ? (
-          <Text style={styles.runnerCountdown}>
+          <Text style={[styles.runnerCountdown, { color: t.colors.primary }]}>
             {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}
           </Text>
         ) : null}
@@ -479,6 +486,7 @@ function RunnerStepCard({
 // ─── Builder screen ────────────────────────────────────────────────────────
 
 export default function StepByStepScreen() {
+  const t = useTheme();
   const router = useRouter();
   const items = useFirstThenItems();
   const settings = useSequenceSettings();
@@ -486,6 +494,7 @@ export default function StepByStepScreen() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [runnerOpen, setRunnerOpen] = useState(false);
+  const { refreshing, onRefresh } = usePullRefresh();
 
   const total = items.length;
   const isEmpty = total === 0;
@@ -529,7 +538,7 @@ export default function StepByStepScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
@@ -540,9 +549,9 @@ export default function StepByStepScreen() {
           accessibilityLabel="Back"
           accessibilityRole="button"
         >
-          <Ionicons name="chevron-back" size={28} color={colors.primary} />
+          <Ionicons name="chevron-back" size={28} color={t.colors.primary} />
         </Pressable>
-        <Text style={styles.headerTitle} accessibilityRole="header">Step by Step</Text>
+        <Text style={[styles.headerTitle, { color: t.colors.text }]} accessibilityRole="header">Step by Step</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -552,18 +561,26 @@ export default function StepByStepScreen() {
         bounces
         alwaysBounceVertical
         overScrollMode="always"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={t.colors.primary}
+            colors={[t.colors.primary]}
+          />
+        }
       >
-        <Text style={styles.subtitle}>
+        <Text style={[styles.subtitle, { color: t.colors.textMuted }]}>
           Add steps in order. The first becomes “First”, the rest become “Then”, and the last becomes “Lastly”.
         </Text>
 
         {isEmpty ? (
           <Card style={styles.emptyCard}>
             <View style={styles.emptyBadge}>
-              <Ionicons name="git-compare-outline" size={44} color={colors.primary} />
+              <Ionicons name="git-compare-outline" size={44} color={t.colors.primary} />
             </View>
-            <Text style={styles.emptyTitle}>No steps yet</Text>
-            <Text style={styles.emptyBody}>
+            <Text style={[styles.emptyTitle, { color: t.colors.text }]}>No steps yet</Text>
+            <Text style={[styles.emptyBody, { color: t.colors.textMuted }]}>
               Tap the + below to add your first step — like “First, brush teeth”.
             </Text>
           </Card>
@@ -613,9 +630,9 @@ export default function StepByStepScreen() {
           accessibilityRole="button"
         >
           <View style={styles.addBtnIcon}>
-            <Ionicons name="add" size={28} color={colors.surface} />
+            <Ionicons name="add" size={28} color={t.colors.surface} />
           </View>
-          <Text style={styles.addBtnText}>
+          <Text style={[styles.addBtnText, { color: t.colors.surface }]}>
             {isEmpty ? 'Add First Step' : 'Add Another Step'}
           </Text>
         </Pressable>
@@ -630,8 +647,8 @@ export default function StepByStepScreen() {
             accessibilityLabel="Start sequence"
             accessibilityRole="button"
           >
-            <Ionicons name="play" size={22} color={colors.surface} />
-            <Text style={styles.startBtnText}>Start</Text>
+            <Ionicons name="play" size={22} color={t.colors.surface} />
+            <Text style={[styles.startBtnText, { color: t.colors.surface }]}>Start</Text>
           </Pressable>
         ) : null}
 
@@ -644,8 +661,8 @@ export default function StepByStepScreen() {
         >
           <View style={styles.settingRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.settingLabel}>Move on automatically</Text>
-              <Text style={styles.settingSub}>
+              <Text style={[styles.settingLabel, { color: t.colors.text }]}>Move on automatically</Text>
+              <Text style={[styles.settingSub, { color: t.colors.textMuted }]}>
                 When on, each step moves on by itself when its timer reaches zero.
               </Text>
             </View>
@@ -666,8 +683,8 @@ export default function StepByStepScreen() {
               accessibilityLabel="Clear all steps"
               accessibilityRole="button"
             >
-              <Ionicons name="trash-outline" size={18} color={colors.danger} />
-              <Text style={styles.clearAllText}>Clear all steps</Text>
+              <Ionicons name="trash-outline" size={18} color={t.colors.danger} />
+              <Text style={[styles.clearAllText, { color: t.colors.danger }]}>Clear all steps</Text>
             </Pressable>
           ) : null}
         </DisclosureRow>
@@ -686,63 +703,57 @@ export default function StepByStepScreen() {
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1},
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
+    paddingVertical: spacing.sm},
   headerIconBtn: {
     width: 44,
     height: 44,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     flex: 1,
     textAlign: 'center',
-    fontSize: typography.heading,
-    fontWeight: '900',
-    color: colors.text,
-    letterSpacing: typography.trackHeading,
+    fontFamily: fonts.displayBlack,
+    fontSize: typography.title,
+    letterSpacing: typography.trackTitle,
   },
   headerSpacer: { width: 44 },
 
   scroll: {
     padding: spacing.lg,
     paddingBottom: 60,
-    gap: spacing.lg,
-  },
+    gap: spacing.lg},
 
   subtitle: {
+    fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.textMuted,
     lineHeight: 22,
   },
 
   emptyCard: {
     alignItems: 'center',
     paddingVertical: spacing.xxl,
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   emptyBadge: {
     width: 88,
     height: 88,
     borderRadius: 44,
     backgroundColor: '#E6F4FD',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   emptyTitle: {
     fontSize: typography.subheading,
     fontWeight: '800',
-    color: colors.text,
+    fontFamily: fonts.displayHeavy,
   },
   emptyBody: {
+    fontFamily: fonts.body,
     fontSize: typography.body,
-    color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 24,
     paddingHorizontal: spacing.lg,
@@ -752,25 +763,22 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   wordPillCol: {
-    width: 72,
-  },
+    width: 72},
   wordPill: {
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.primary,
+
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-  },
+    paddingHorizontal: spacing.sm},
   wordPillText: {
-    color: colors.surface,
+
     fontSize: typography.callout,
     fontWeight: '900',
-    letterSpacing: 0.4,
-  },
+    fontFamily: fonts.displayBlack,
+    letterSpacing: 0.4},
 
   stepCard: {
     flex: 1,
@@ -778,23 +786,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-  },
+
+    borderRadius: radii.card},
   symbolChip: {
     width: 64,
     height: 64,
     borderRadius: 32,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   stepInfo: { flex: 1, gap: 6 },
   stepName: {
     fontSize: typography.subheading,
     fontWeight: '800',
-    color: colors.text,
-    letterSpacing: typography.trackSubhead,
-  },
+    fontFamily: fonts.displayHeavy,
+
+    letterSpacing: typography.trackSubhead},
   timerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -803,27 +809,24 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
   timerText: {
     fontSize: typography.caption,
     fontWeight: '700',
-    color: colors.primary,
+    fontFamily: fonts.displayBold,
   },
   burgerHit: {
     width: 36,
     height: 36,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
 
   editToolbar: {
     flexDirection: 'row',
     gap: 6,
     marginLeft: 72 + spacing.md,
     marginTop: spacing.sm,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -831,53 +834,48 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
     borderRadius: radii.pill,
-    backgroundColor: '#E6F4FD',
-  },
+    backgroundColor: '#E6F4FD'},
   editBtnDisabled: {
-    backgroundColor: colors.background,
+
   },
   editBtnText: {
-    color: colors.primary,
+
     fontWeight: '700',
-    fontSize: typography.caption,
-  },
+    fontFamily: fonts.displayBold,
+    fontSize: typography.caption},
   editBtnDanger: {
-    backgroundColor: 'rgba(243, 49, 42, 0.12)',
-  },
+    backgroundColor: 'rgba(243, 49, 42, 0.12)'},
 
   connector: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingLeft: 72 + spacing.md,
-    paddingVertical: spacing.sm,
-  },
+    paddingVertical: spacing.sm},
 
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.primary,
+
     paddingVertical: 18,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
     minHeight: 60,
-    marginTop: spacing.sm,
-  },
+    marginTop: spacing.sm},
   addBtnIcon: {
     width: 32,
     height: 32,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.18)'},
   addBtnText: {
-    color: colors.surface,
+
     fontSize: typography.body,
     fontWeight: '800',
-    letterSpacing: -0.2,
-  },
+    fontFamily: fonts.displayHeavy,
+    letterSpacing: -0.2},
 
   startBtn: {
     flexDirection: 'row',
@@ -888,30 +886,28 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
-    minHeight: 60,
-  },
+    minHeight: 60},
   startBtnText: {
-    color: colors.surface,
+
     fontSize: typography.body,
     fontWeight: '800',
+    fontFamily: fonts.displayHeavy,
   },
 
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.sm,
-  },
+    paddingVertical: spacing.sm},
   settingLabel: {
     fontSize: typography.body,
     fontWeight: '700',
-    color: colors.text,
+    fontFamily: fonts.displayBold,
   },
   settingSub: {
     fontSize: typography.caption,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
+
+    marginTop: 2},
   clearAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -920,103 +916,92 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: radii.pill,
     backgroundColor: 'rgba(243, 49, 42, 0.10)',
-    marginTop: spacing.sm,
-  },
+    marginTop: spacing.sm},
   clearAllText: {
-    color: colors.danger,
+
     fontWeight: '700',
-    fontSize: typography.callout,
-  },
+    fontFamily: fonts.displayBold,
+    fontSize: typography.callout},
 
   // ── Sequence runner ──────────────────────────────────────────────────────
-  runnerSafe: { flex: 1, backgroundColor: colors.background },
+  runnerSafe: { flex: 1},
   runnerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
+    paddingVertical: spacing.sm},
   runnerBack: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   runnerTitle: {
     flex: 1,
     textAlign: 'center',
     fontSize: typography.subheading,
     fontWeight: '800',
-    color: colors.text,
+    fontFamily: fonts.displayHeavy,
   },
   runnerScroll: {
     padding: spacing.lg,
     paddingBottom: 160,
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   runnerCard: {
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
     padding: spacing.lg,
-    minHeight: 180,
-  },
+    minHeight: 180},
   runnerWordPill: {
     alignSelf: 'flex-start',
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.primary,
-    marginBottom: spacing.md,
-  },
+
+    marginBottom: spacing.md},
   runnerWordPillText: {
     color: '#FFFFFF',
     fontSize: typography.caption,
     fontWeight: '900',
+    fontFamily: fonts.displayBlack,
     letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   runnerCardInner: {
     alignItems: 'center',
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   runnerSymbolChip: {
     width: 96,
     height: 96,
     borderRadius: 48,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   runnerStepName: {
     fontSize: typography.heading,
     fontWeight: '800',
-    color: colors.text,
-    textAlign: 'center',
-  },
+    fontFamily: fonts.displayHeavy,
+
+    textAlign: 'center'},
   runnerCountdown: {
     fontSize: 48,
     fontWeight: '900',
-    color: colors.primary,
+    fontFamily: fonts.displayBlack,
+
     letterSpacing: -0.5,
-    fontVariant: ['tabular-nums'],
-  },
+    fontVariant: ['tabular-nums']},
   runnerDoneCard: {
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.xxl,
-  },
+    paddingVertical: spacing.xxl},
   runnerDoneBadge: {
     width: 110,
     height: 110,
     borderRadius: 55,
     backgroundColor: '#34C759',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   runnerDoneTitle: {
     fontSize: typography.title,
     fontWeight: '900',
-    color: colors.text,
-    letterSpacing: typography.trackTitle,
-  },
+    fontFamily: fonts.displayBlack,
+
+    letterSpacing: typography.trackTitle},
   runnerDoneSub: {
-    fontSize: typography.body,
-    color: colors.textMuted,
-  },
+    fontSize: typography.body},
   runnerControls: {
     position: 'absolute',
     bottom: 0,
@@ -1024,9 +1009,7 @@ const styles = StyleSheet.create({
     right: 0,
     padding: spacing.lg,
     flexDirection: 'row',
-    gap: spacing.md,
-    backgroundColor: colors.background,
-  },
+    gap: spacing.md},
   runnerBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1035,25 +1018,25 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 16,
     borderRadius: radii.pill,
-    minHeight: 56,
-  },
+    minHeight: 56},
   runnerBtnPrimary: {
-    backgroundColor: colors.primary,
+
   },
   runnerBtnPrimaryText: {
     color: '#FFFFFF',
     fontSize: typography.body,
     fontWeight: '800',
+    fontFamily: fonts.displayHeavy,
   },
   runnerBtnGhost: {
-    backgroundColor: 'rgba(25, 154, 238, 0.10)',
-  },
+    backgroundColor: 'rgba(25, 154, 238, 0.10)'},
   runnerBtnGhostText: {
-    color: colors.primary,
+
     fontSize: typography.body,
     fontWeight: '800',
+    fontFamily: fonts.displayHeavy,
   },
   runnerBtnDisabled: {
-    backgroundColor: colors.background,
+
   },
 });

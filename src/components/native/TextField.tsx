@@ -18,7 +18,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { animation, colors as staticColors, radii, spacing, typography } from '../../theme/tokens';
+import { animation, radii, spacing, typography } from '../../theme/tokens';
 import { springPop, timingFocus } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { useTheme } from '../../theme/useTheme';
@@ -135,7 +135,7 @@ export const TextField = React.forwardRef<TextInput, TextFieldProps>(function Te
 
   return (
     <View style={styles.wrap}>
-      <Animated.View style={[styles.container, containerStyle]}>
+      <Animated.View style={[styles.container, { backgroundColor: t.colors.input }, containerStyle]}>
         <TextInput
           ref={ref}
           accessibilityLabel={accessibilityLabel}
@@ -171,12 +171,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 48,
     borderRadius: radii.input,
-    backgroundColor: staticColors.input,
   },
   input: {
     flex: 1,
-    color: staticColors.text,
-    fontSize: typography.body,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
@@ -186,14 +183,10 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: spacing.xs + 2,
     marginLeft: spacing.sm,
-    color: staticColors.danger,
-    fontSize: typography.callout,
     fontWeight: typography.weightCaption,
   },
   helperText: {
     marginTop: spacing.xs + 2,
     marginLeft: spacing.sm,
-    color: staticColors.textTertiary,
-    fontSize: typography.callout,
   },
 });

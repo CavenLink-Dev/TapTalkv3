@@ -44,8 +44,9 @@ import * as Haptics from 'expo-haptics';
 import { Card } from '../../src/components/native/Card';
 import { DisclosureRow } from '../../src/components/native/DisclosureRow';
 import { WheelPicker } from '../../src/components/native/WheelPicker';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
+import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -264,6 +265,7 @@ const CLOCK_RADIUS = (CLOCK_SIZE - 4) / 2;
 const CENTRE = CLOCK_SIZE / 2;
 
 function AnalogFace({ remainingSec }: { remainingSec: number }) {
+  const t = useTheme();
   const h = (remainingSec / 3600) % 12;
   const m = (remainingSec % 3600) / 60;
   const s = remainingSec % 60;
@@ -285,7 +287,7 @@ function AnalogFace({ remainingSec }: { remainingSec: number }) {
           cx={CENTRE}
           cy={CENTRE}
           r={CLOCK_RADIUS}
-          stroke={colors.surface}
+          stroke={t.colors.surface}
           strokeWidth={3}
           fill="#1A2330"
         />
@@ -339,13 +341,13 @@ function AnalogFace({ remainingSec }: { remainingSec: number }) {
             y1={CENTRE + 16}
             x2={CENTRE}
             y2={CENTRE - secondLen}
-            stroke={colors.primary}
+            stroke={t.colors.primary}
             strokeWidth={2}
             strokeLinecap="round"
           />
         </G>
         {/* Centre dot */}
-        <Circle cx={CENTRE} cy={CENTRE} r={5} fill={colors.primary} />
+        <Circle cx={CENTRE} cy={CENTRE} r={5} fill={t.colors.primary} />
       </Svg>
       <Text style={styles.analogSub}>{describeDuration({ h: Math.floor(remainingSec / 3600), m: Math.floor((remainingSec % 3600) / 60), s: remainingSec % 60 })}</Text>
     </View>
@@ -355,6 +357,7 @@ function AnalogFace({ remainingSec }: { remainingSec: number }) {
 // ─── Screen ─────────────────────────────────────────────────────────────────
 
 export default function VisualTimerScreen() {
+  const t = useTheme();
   const router = useRouter();
 
   // Setup state.
@@ -493,7 +496,7 @@ export default function VisualTimerScreen() {
   const summaryAppearance = face === 'modern' ? 'Modern' : face === 'old-school' ? 'Old School' : 'Analog';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
@@ -504,9 +507,9 @@ export default function VisualTimerScreen() {
           accessibilityLabel="Back"
           accessibilityRole="button"
         >
-          <Ionicons name="chevron-back" size={28} color={colors.primary} />
+          <Ionicons name="chevron-back" size={28} color={t.colors.primary} />
         </Pressable>
-        <Text style={styles.title} accessibilityRole="header">Visual Timer</Text>
+        <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">Visual Timer</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -520,8 +523,8 @@ export default function VisualTimerScreen() {
         {/* Duration card — three side-by-side wheels. */}
         <Card style={styles.section}>
           <View style={styles.sectionHead}>
-            <Text style={styles.sectionLabel}>Duration</Text>
-            <Text style={styles.sectionSummary}>{summaryDuration}</Text>
+            <Text style={[styles.sectionLabel, { color: t.colors.text }]}>Duration</Text>
+            <Text style={[styles.sectionSummary, { color: t.colors.textMuted }]}>{summaryDuration}</Text>
           </View>
           <View style={styles.wheelRow}>
             <WheelPicker
@@ -532,7 +535,7 @@ export default function VisualTimerScreen() {
               format={(v) => pad2(v)}
               accessibilityLabel="Hours"
             />
-            <Text style={styles.wheelSeparator}>:</Text>
+            <Text style={[styles.wheelSeparator, { color: t.colors.textTertiary }]}>:</Text>
             <WheelPicker
               values={MINUTES}
               selectedValue={duration.m}
@@ -541,7 +544,7 @@ export default function VisualTimerScreen() {
               format={(v) => pad2(v)}
               accessibilityLabel="Minutes"
             />
-            <Text style={styles.wheelSeparator}>:</Text>
+            <Text style={[styles.wheelSeparator, { color: t.colors.textTertiary }]}>:</Text>
             <WheelPicker
               values={SECONDS}
               selectedValue={duration.s}
@@ -556,10 +559,10 @@ export default function VisualTimerScreen() {
         {/* Start delay card */}
         <Card style={styles.section}>
           <View style={styles.sectionHead}>
-            <Text style={styles.sectionLabel}>Start delay</Text>
-            <Text style={styles.sectionSummary}>{summaryDelay}</Text>
+            <Text style={[styles.sectionLabel, { color: t.colors.text }]}>Start delay</Text>
+            <Text style={[styles.sectionSummary, { color: t.colors.textMuted }]}>{summaryDelay}</Text>
           </View>
-          <Text style={styles.sectionHint}>
+          <Text style={[styles.sectionHint, { color: t.colors.textMuted }]}>
             Wait this long before the countdown starts.
           </Text>
           <View style={styles.wheelRow}>
@@ -571,7 +574,7 @@ export default function VisualTimerScreen() {
               format={(v) => pad2(v)}
               accessibilityLabel="Delay minutes"
             />
-            <Text style={styles.wheelSeparator}>:</Text>
+            <Text style={[styles.wheelSeparator, { color: t.colors.textTertiary }]}>:</Text>
             <WheelPicker
               values={SECONDS}
               selectedValue={delay.s}
@@ -593,7 +596,7 @@ export default function VisualTimerScreen() {
           onToggle={() => setSoundExpanded(v => !v)}
         >
           <View style={styles.disclosureRow}>
-            <Text style={styles.disclosureLabel}>Chime every</Text>
+            <Text style={[styles.disclosureLabel, { color: t.colors.text }]}>Chime every</Text>
             <View style={styles.chimeInputRow}>
               <WheelPicker
                 values={[0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 45, 60]}
@@ -602,7 +605,7 @@ export default function VisualTimerScreen() {
                 width={60}
                 accessibilityLabel="Chime interval minutes"
               />
-              <Text style={styles.chimeUnit}>min</Text>
+              <Text style={[styles.chimeUnit, { color: t.colors.textMuted }]}>min</Text>
             </View>
           </View>
 
@@ -668,7 +671,7 @@ export default function VisualTimerScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`Set duration to ${p.label}`}
               >
-                <Text style={styles.presetChipText}>{p.label}</Text>
+                <Text style={[styles.presetChipText, { color: t.colors.primary }]}>{p.label}</Text>
               </Pressable>
             ))}
           </View>
@@ -682,17 +685,17 @@ export default function VisualTimerScreen() {
           expanded={a11yExpanded}
           onToggle={() => setA11yExpanded(v => !v)}
         >
-          <Text style={styles.placeholderText}>
+          <Text style={[styles.placeholderText, { color: t.colors.textMuted }]}>
             More options coming here — VoiceOver cues, high-contrast face,
             larger numerals. Reduce Motion is already respected automatically.
           </Text>
         </DisclosureRow>
 
         {/* Lock toggle row — pre-start choice; affects run-mode exit. */}
-        <View style={styles.lockRow}>
+        <View style={[styles.lockRow, { backgroundColor: t.colors.surface }]}>
           <View style={styles.lockTextWrap}>
-            <Text style={styles.lockLabel}>Lock focus</Text>
-            <Text style={styles.lockSub}>
+            <Text style={[styles.lockLabel, { color: t.colors.text }]}>Lock focus</Text>
+            <Text style={[styles.lockSub, { color: t.colors.textMuted }]}>
               Require a press-and-hold to exit during the countdown.
             </Text>
           </View>
@@ -719,14 +722,14 @@ export default function VisualTimerScreen() {
             canStart && pressed && { opacity: 0.86 },
           ]}
         >
-          <Ionicons name="play" size={22} color={canStart ? colors.surface : colors.textTertiary} />
-          <Text style={[styles.startBtnText, !canStart && { color: colors.textTertiary }]}>
+          <Ionicons name="play" size={22} color={canStart ? t.colors.surface : t.colors.textTertiary} />
+          <Text style={[styles.startBtnText, !canStart && { color: t.colors.textTertiary }]}>
             Start
           </Text>
         </Pressable>
 
         {!canStart ? (
-          <Text style={styles.startHint}>Set a duration above to enable Start.</Text>
+          <Text style={[styles.startHint, { color: t.colors.textMuted }]}>Set a duration above to enable Start.</Text>
         ) : null}
       </ScrollView>
 
@@ -776,6 +779,7 @@ function RunOverlay({
   onRestart: () => void;
   onClose: () => void;
 }) {
+  const t = useTheme();
   // Fade the overlay in on mount.
   const fade = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -945,9 +949,10 @@ function ToggleRow({
   value: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const t = useTheme();
   return (
     <View style={styles.toggleRow}>
-      <Text style={styles.toggleLabel}>{label}</Text>
+      <Text style={[styles.toggleLabel, { color: t.colors.text }]}>{label}</Text>
       <Switch
         value={value}
         onValueChange={(v) => {
@@ -969,9 +974,10 @@ function SoundPickerRow({
   value: string;
   onChange: (id: string) => void;
 }) {
+  const t = useTheme();
   return (
     <View style={styles.soundRow}>
-      <Text style={styles.toggleLabel}>{label}</Text>
+      <Text style={[styles.toggleLabel, { color: t.colors.text }]}>{label}</Text>
       <View style={styles.soundChips}>
         {SOUND_OPTIONS.map(opt => {
           const active = opt.id === value;
@@ -1010,8 +1016,9 @@ function SegmentedFacePicker({
   face: Face;
   onChange: (f: Face) => void;
 }) {
+  const t = useTheme();
   return (
-    <View style={styles.segmented} accessibilityRole="radiogroup">
+    <View style={[styles.segmented, { backgroundColor: t.colors.background }]} accessibilityRole="radiogroup">
       {([ ['modern', 'Modern'], ['old-school', 'Old School'], ['analog', 'Analog'] ] as [Face, string][]).map(([f, label]) => {
         const active = f === face;
         return (
@@ -1043,233 +1050,189 @@ function SegmentedFacePicker({
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1},
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
+    paddingVertical: spacing.sm},
   headerBack: {
     width: 44,
     height: 44,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   title: {
     flex: 1,
     textAlign: 'center',
     fontSize: typography.heading,
     fontWeight: '900',
-    color: colors.text,
-    letterSpacing: typography.trackHeading,
-  },
+
+    letterSpacing: typography.trackHeading},
   headerSpacer: { width: 44 },
 
   scroll: {
     padding: spacing.lg,
     paddingBottom: 60,
-    gap: spacing.md,
-  },
+    gap: spacing.md},
 
   section: {
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   sectionHead: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   sectionLabel: {
     fontSize: typography.body,
-    fontWeight: '700',
-    color: colors.text,
-  },
+    fontWeight: '700'},
   sectionSummary: {
     fontSize: typography.callout,
-    color: colors.textMuted,
-    fontWeight: '600',
-  },
+
+    fontWeight: '600'},
   sectionHint: {
     fontSize: typography.caption,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-  },
+
+    marginBottom: spacing.sm},
 
   wheelRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'center',
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   wheelSeparator: {
     fontSize: 22,
     fontWeight: '700',
-    color: colors.textTertiary,
-    paddingBottom: 50,
-  },
+
+    paddingBottom: 50},
 
   disclosureRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 48,
-  },
+    minHeight: 48},
   disclosureLabel: {
     fontSize: typography.callout,
-    fontWeight: '700',
-    color: colors.text,
-  },
+    fontWeight: '700'},
   chimeInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   chimeUnit: {
-    fontSize: typography.callout,
-    color: colors.textMuted,
-  },
+    fontSize: typography.callout},
 
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 44,
-  },
+    minHeight: 44},
   toggleLabel: {
     fontSize: typography.callout,
-    fontWeight: '600',
-    color: colors.text,
-  },
+    fontWeight: '600'},
 
   soundRow: {
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   soundChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-  },
+    gap: 6},
   soundChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
-    borderRadius: radii.pill,
-    backgroundColor: colors.background,
-  },
+    borderRadius: radii.pill},
   soundChipActive: {
-    backgroundColor: colors.primary,
+
   },
   soundChipText: {
     fontSize: typography.caption,
-    fontWeight: '700',
-    color: colors.textMuted,
-  },
+    fontWeight: '700'},
   soundChipTextActive: {
-    color: colors.surface,
+
   },
 
   segmented: {
     flexDirection: 'row',
-    backgroundColor: colors.background,
+
     borderRadius: radii.pill,
-    padding: 4,
-  },
+    padding: 4},
   segment: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: radii.pill,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   segmentActive: {
-    backgroundColor: colors.surface,
+
   },
   segmentText: {
     fontSize: typography.callout,
-    fontWeight: '700',
-    color: colors.textMuted,
-  },
+    fontWeight: '700'},
   segmentTextActive: {
-    color: colors.text,
+
   },
 
   presetsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   presetChip: {
     paddingHorizontal: spacing.lg,
     paddingVertical: 10,
     borderRadius: radii.pill,
-    backgroundColor: '#E6F4FD',
-  },
+    backgroundColor: '#E6F4FD'},
   presetChipPressed: { opacity: 0.85 },
   presetChipText: {
     fontSize: typography.callout,
-    fontWeight: '700',
-    color: colors.primary,
-  },
+    fontWeight: '700'},
 
   placeholderText: {
     fontSize: typography.callout,
-    color: colors.textMuted,
-    lineHeight: 21,
-  },
+
+    lineHeight: 21},
 
   lockRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.lg,
     gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-  },
+
+    borderRadius: radii.card},
   lockTextWrap: { flex: 1 },
   lockLabel: {
     fontSize: typography.body,
-    fontWeight: '700',
-    color: colors.text,
-  },
+    fontWeight: '700'},
   lockSub: {
     fontSize: typography.caption,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
+
+    marginTop: 2},
 
   startBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.primary,
+
     paddingVertical: 18,
     borderRadius: radii.pill,
     minHeight: 60,
-    marginTop: spacing.md,
-  },
+    marginTop: spacing.md},
   startBtnDisabled: {
-    backgroundColor: colors.disabled,
+
   },
   startBtnText: {
-    color: colors.surface,
+
     fontSize: typography.body,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
   startHint: {
     textAlign: 'center',
     fontSize: typography.caption,
-    color: colors.textMuted,
-    marginTop: spacing.xs,
-  },
+
+    marginTop: spacing.xs},
 
   // ── Run overlay ───────────────────────────────────────────────────────────
   runOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(8, 14, 24, 0.72)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   runToolbar: {
     position: 'absolute',
     top: spacing.xxl + spacing.lg,
@@ -1277,8 +1240,7 @@ const styles = StyleSheet.create({
     right: spacing.lg,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   runChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1287,93 +1249,78 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: 'rgba(255,255,255,0.16)',
     borderRadius: radii.pill,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   runChipPressed: {
-    backgroundColor: 'rgba(255,255,255,0.28)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.28)'},
   runChipPrimary: {
-    backgroundColor: colors.primary,
+
   },
   runChipLock: {
-    paddingHorizontal: spacing.lg,
-  },
+    paddingHorizontal: spacing.lg},
   runChipText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: typography.callout,
-  },
+    fontSize: typography.callout},
   unlockFill: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(52, 199, 89, 0.65)',
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
 
   runClock: {
     alignItems: 'center',
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   runDelayLabel: {
     color: '#FFFFFF',
     fontSize: typography.callout,
     fontWeight: '700',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
-    opacity: 0.85,
-  },
+    opacity: 0.85},
   runDoneLabel: {
     color: '#FFFFFF',
     fontSize: typography.heading,
     fontWeight: '900',
     letterSpacing: -0.3,
-    marginTop: spacing.lg,
-  },
+    marginTop: spacing.lg},
   runClose: {
     position: 'absolute',
     bottom: spacing.xxl + spacing.md,
     paddingHorizontal: spacing.xxl,
     paddingVertical: 14,
-    backgroundColor: colors.primary,
-    borderRadius: radii.pill,
-  },
+
+    borderRadius: radii.pill},
   runCloseText: {
     color: '#FFFFFF',
     fontSize: typography.body,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
 
   // ── Digital face ──────────────────────────────────────────────────────────
   digitalWrap: {
     alignItems: 'center',
     paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.xxl,
-  },
+    paddingHorizontal: spacing.xxl},
   digitalText: {
     color: '#FFFFFF',
     fontSize: 72,
     fontWeight: '900',
     letterSpacing: 2,
-    fontVariant: ['tabular-nums'],
-  },
+    fontVariant: ['tabular-nums']},
   digitalSub: {
     marginTop: 6,
     color: 'rgba(255,255,255,0.7)',
     fontSize: typography.caption,
     fontWeight: '700',
     letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
 
   // ── Analog face ───────────────────────────────────────────────────────────
   analogWrap: {
     alignItems: 'center',
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   analogSub: {
     color: 'rgba(255,255,255,0.85)',
     fontSize: typography.body,
     fontWeight: '700',
     letterSpacing: 0.3,
-    fontVariant: ['tabular-nums'],
-  },
+    fontVariant: ['tabular-nums']},
 });

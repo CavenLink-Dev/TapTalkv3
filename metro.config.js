@@ -8,5 +8,8 @@ const config = getDefaultConfig(__dirname);
 if (!config.resolver.assetExts.includes('svg')) {
   config.resolver.assetExts.push('svg');
 }
+if (!config.resolver.assetExts.includes('db')) {
+  config.resolver.assetExts.push('db');
+}
 
 module.exports = config;

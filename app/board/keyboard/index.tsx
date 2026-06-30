@@ -35,7 +35,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, Stack, useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
-import { colors, radii, spacing, typography } from '../../../src/theme/tokens';
+import { radii, spacing, typography } from '../../../src/theme/tokens';
 import { hapticSelection } from '../../../src/utils/haptics';
 import {
   QUICK_TALK_MAX,
@@ -44,6 +44,7 @@ import {
   quickTalkCount,
   useQuickTalk,
 } from '../../../src/features/quick-talk/store';
+import { useTheme } from '../../../src/theme/useTheme';
 
 const ROW_1 = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as const;
 const ROW_2 = ['J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R'] as const;
@@ -132,6 +133,7 @@ function speakMessage(text: string): void {
 // ─── Key components ────────────────────────────────────────────────────────
 
 function LetterKey({ value, onPress }: { value: string; onPress: (v: string) => void }) {
+  const t = useTheme();
   return (
     <Pressable
       onPress={() => onPress(value)}
@@ -139,7 +141,7 @@ function LetterKey({ value, onPress }: { value: string; onPress: (v: string) => 
       accessibilityLabel={value}
       style={({ pressed }) => [styles.letterKey, pressed && styles.keyPressed]}
     >
-      <Text style={styles.letterText}>{value}</Text>
+      <Text style={[styles.letterText, { color: t.colors.text }]}>{value}</Text>
     </Pressable>
   );
 }
@@ -153,6 +155,7 @@ function MutedKey({
   onPress: () => void;
   flex?: number;
 }) {
+  const t = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -160,7 +163,7 @@ function MutedKey({
       accessibilityLabel={label}
       style={({ pressed }) => [styles.mutedKey, { flex }, pressed && styles.keyPressed]}
     >
-      <Text style={styles.mutedText}>{label}</Text>
+      <Text style={[styles.mutedText, { color: t.colors.textMuted }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -176,6 +179,7 @@ function IconKey({
   onPress: () => void;
   flex?: number;
 }) {
+  const t = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -183,7 +187,7 @@ function IconKey({
       accessibilityLabel={label}
       style={({ pressed }) => [styles.iconKey, { flex }, pressed && styles.keyPressed]}
     >
-      <Ionicons name={icon} size={24} color={colors.text} />
+      <Ionicons name={icon} size={24} color={t.colors.text} />
     </Pressable>
   );
 }
@@ -191,6 +195,7 @@ function IconKey({
 // ─── Screen ────────────────────────────────────────────────────────────────
 
 export default function KeyboardScreen() {
+  const t = useTheme();
   const router = useRouter();
   const [buffer, setBuffer] = useState('');
   // Subscribe so the Quick Talk badge updates after a save.
@@ -292,7 +297,7 @@ export default function KeyboardScreen() {
   const canSave = buffer.trim().length > 0;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
@@ -303,9 +308,9 @@ export default function KeyboardScreen() {
           accessibilityLabel="Back to Board"
           accessibilityRole="button"
         >
-          <Ionicons name="chevron-back" size={28} color={colors.primary} />
+          <Ionicons name="chevron-back" size={28} color={t.colors.primary} />
         </Pressable>
-        <Text style={styles.title} accessibilityRole="header">TapTalk Keyboard</Text>
+        <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">TapTalk Keyboard</Text>
         <Pressable
           onPress={onSave}
           disabled={!canSave}
@@ -321,9 +326,9 @@ export default function KeyboardScreen() {
           <Ionicons
             name="bookmark"
             size={16}
-            color={canSave ? colors.surface : colors.textTertiary}
+            color={canSave ? t.colors.surface : t.colors.textTertiary}
           />
-          <Text style={[styles.saveBtnText, !canSave && { color: colors.textTertiary }]}>
+          <Text style={[styles.saveBtnText, !canSave && { color: t.colors.textTertiary }]}>
             Save
           </Text>
         </Pressable>
@@ -338,9 +343,9 @@ export default function KeyboardScreen() {
           style={({ pressed }) => [styles.strip, pressed && { opacity: 0.94 }]}
         >
           {buffer.length > 0 ? (
-            <Text style={styles.stripText} numberOfLines={3}>{buffer}</Text>
+            <Text style={[styles.stripText, { color: t.colors.text }]} numberOfLines={3}>{buffer}</Text>
           ) : (
-            <Text style={styles.stripPlaceholder}>
+            <Text style={[styles.stripPlaceholder, { color: t.colors.textTertiary }]}>
               Tap a letter to start typing…
             </Text>
           )}
@@ -352,15 +357,15 @@ export default function KeyboardScreen() {
           hitSlop={10}
           style={({ pressed }) => [styles.clearBtn, pressed && { opacity: 0.7 }]}
         >
-          <Ionicons name="close-circle" size={26} color={colors.textTertiary} />
+          <Ionicons name="close-circle" size={26} color={t.colors.textTertiary} />
         </Pressable>
       </View>
 
       <View style={styles.stripFooter}>
-        <Text style={styles.stripFooterText}>
+        <Text style={[styles.stripFooterText, { color: t.colors.textMuted }]}>
           Tap the strip to hear your message
         </Text>
-        <Text style={styles.stripFooterText}>
+        <Text style={[styles.stripFooterText, { color: t.colors.textMuted }]}>
           {quickTalkCount()} / {QUICK_TALK_MAX} saved
         </Text>
       </View>
@@ -393,7 +398,7 @@ export default function KeyboardScreen() {
             accessibilityLabel="Space"
             style={({ pressed }) => [styles.spaceKey, pressed && styles.keyPressed]}
           >
-            <Text style={styles.spaceText}>Space</Text>
+            <Text style={[styles.spaceText, { color: t.colors.text }]}>Space</Text>
           </Pressable>
         </View>
       </View>
@@ -402,40 +407,36 @@ export default function KeyboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1},
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   headerIconBtn: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: {
     flex: 1,
     fontSize: typography.subheading,
     fontWeight: '800',
-    color: colors.text,
-    letterSpacing: typography.trackSubhead,
-  },
+
+    letterSpacing: typography.trackSubhead},
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.primary,
+
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
   saveBtnDisabled: {
-    backgroundColor: colors.disabled,
+
   },
   saveBtnText: {
-    color: colors.surface,
+
     fontSize: typography.callout,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
 
   // Message strip — 5 px radius per locked spec.
   stripWrap: {
@@ -443,46 +444,38 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing.sm,
     marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-  },
+    marginTop: spacing.sm},
   strip: {
     flex: 1,
-    backgroundColor: colors.surface,
+
     borderRadius: 5,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     minHeight: 84,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   stripText: {
     fontSize: 26,
     fontWeight: '700',
-    color: colors.text,
-    letterSpacing: 0.5,
-  },
+
+    letterSpacing: 0.5},
   stripPlaceholder: {
     fontSize: typography.body,
-    color: colors.textTertiary,
-    fontWeight: '500',
-  },
+
+    fontWeight: '500'},
   clearBtn: {
     width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
-  },
+    marginTop: 4},
   stripFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     marginTop: 6,
-    marginBottom: spacing.md,
-  },
+    marginBottom: spacing.md},
   stripFooterText: {
-    fontSize: typography.caption,
-    color: colors.textMuted,
-  },
+    fontSize: typography.caption},
 
   // Keyboard layout
   keyboard: {
@@ -490,66 +483,55 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingHorizontal: 4,
     paddingBottom: spacing.lg,
-    gap: 6,
-  },
+    gap: 6},
   row: {
     flexDirection: 'row',
-    gap: 4,
-  },
+    gap: 4},
 
   letterKey: {
     flex: 1,
     aspectRatio: 1,
     minHeight: 46,
-    backgroundColor: colors.surface,
+
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   letterText: {
     fontSize: 26,
     fontWeight: '700',
-    color: colors.text,
-    letterSpacing: 0.4,
-  },
+
+    letterSpacing: 0.4},
 
   iconKey: {
     minHeight: 46,
     backgroundColor: '#E0E5EA',
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
 
   mutedKey: {
     minHeight: 46,
     backgroundColor: '#E0E5EA',
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   mutedText: {
     fontSize: 20,
-    fontWeight: '700',
-    color: colors.textMuted,
-  },
+    fontWeight: '700'},
 
   spaceKey: {
     flex: 4,
     minHeight: 46,
-    backgroundColor: colors.surface,
+
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   spaceText: {
     fontSize: typography.callout,
     fontWeight: '700',
-    color: colors.text,
-    letterSpacing: 0.6,
-  },
+
+    letterSpacing: 0.6},
 
   keyPressed: {
-    backgroundColor: '#D1D7DE',
-  },
+    backgroundColor: '#D1D7DE'},
 });

@@ -5,7 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 
 const registerRoute = '/registration/01-who' as Href;
@@ -19,9 +20,10 @@ const HIGHLIGHTS = [
 
 export default function GetStarted() {
   const router = useRouter();
+  const t = useTheme();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.background }]}>
       <View style={styles.hero}>
         <Animated.View entering={FadeInDown.duration(400)} style={styles.logoWrap}>
           <Image
@@ -32,10 +34,10 @@ export default function GetStarted() {
           />
         </Animated.View>
 
-        <Animated.Text entering={FadeInDown.duration(400).delay(80)} style={styles.headline}>
+        <Animated.Text entering={FadeInDown.duration(400).delay(80)} style={[styles.headline, { color: t.colors.text }]}>
           Everyone deserves a voice
         </Animated.Text>
-        <Animated.Text entering={FadeInDown.duration(400).delay(140)} style={styles.subhead}>
+        <Animated.Text entering={FadeInDown.duration(400).delay(140)} style={[styles.subhead, { color: t.colors.textMuted }]}>
           A clear, dependable communication tool built for adults who use AAC.
         </Animated.Text>
 
@@ -47,9 +49,9 @@ export default function GetStarted() {
               style={styles.highlightRow}
             >
               <View style={styles.highlightIcon}>
-                <Ionicons name={h.icon} size={20} color={colors.primary} />
+                <Ionicons name={h.icon} size={20} color={t.colors.primary} />
               </View>
-              <Text style={styles.highlightText}>{h.text}</Text>
+              <Text style={[styles.highlightText, { color: t.colors.text }]}>{h.text}</Text>
             </Animated.View>
           ))}
         </View>
@@ -67,10 +69,10 @@ export default function GetStarted() {
           variant="secondary"
           onPress={() => router.push(loginRoute)}
         />
-        <Text style={styles.privacy}>
+        <Text style={[styles.privacy, { color: t.colors.textTertiary }]}>
           By continuing you agree to our{' '}
-          <Text style={styles.privacyLink}>Terms</Text> and{' '}
-          <Text style={styles.privacyLink}>Privacy Policy</Text>.
+          <Text style={[styles.privacyLink, { color: t.colors.primary }]}>Terms</Text> and{' '}
+          <Text style={[styles.privacyLink, { color: t.colors.primary }]}>Privacy Policy</Text>.
         </Text>
       </View>
     </SafeAreaView>
@@ -80,7 +82,6 @@ export default function GetStarted() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   hero: {
     flex: 1,
@@ -98,7 +99,6 @@ const styles = StyleSheet.create({
   headline: {
     fontFamily: fonts.displayBlack,
     fontSize: 34,
-    color: colors.text,
     letterSpacing: -0.6,
     lineHeight: 40,
   },
@@ -106,7 +106,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     marginTop: spacing.md,
     fontSize: typography.body,
-    color: colors.textMuted,
     lineHeight: 24,
   },
   highlights: {
@@ -130,7 +129,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     flex: 1,
     fontSize: typography.callout,
-    color: colors.text,
     lineHeight: 21,
   },
   footer: {
@@ -142,11 +140,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     textAlign: 'center',
     fontSize: typography.caption,
-    color: colors.textTertiary,
     lineHeight: 18,
   },
   privacyLink: {
     fontFamily: fonts.displayBold,
-    color: colors.primary,
   },
 });

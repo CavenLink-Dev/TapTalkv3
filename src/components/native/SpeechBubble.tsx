@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
-import { colors, radii, shadows, spacing, typography } from '../../theme/tokens';
+import { radii, shadows, spacing, typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 interface SpeechBubbleProps {
   children?: React.ReactNode;
@@ -29,6 +30,7 @@ export function SpeechBubble({
   style,
   textStyle,
 }: SpeechBubbleProps) {
+  const t = useTheme();
   const fullText = text ?? (typeof children === 'string' ? children : '');
   const [shown, setShown] = useState(typewriter ? '' : fullText);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -57,14 +59,25 @@ export function SpeechBubble({
     <View>
       {tail === 'top' && (
         <View style={styles.tailTopRow}>
-          <View style={styles.tailTopBorder} />
-          <View style={styles.tailTopFill} />
+          <View style={[styles.tailTopBorder, { borderBottomColor: t.colors.border }]} />
+          <View style={[styles.tailTopFill, { borderBottomColor: t.colors.surface }]} />
         </View>
       )}
 
-      <View style={[styles.bubble, style]}>
+      <View
+        style={[
+          styles.bubble,
+          {
+            backgroundColor: t.colors.surface,
+            borderColor: t.colors.border,
+          },
+          style,
+        ]}
+      >
         {typewriter || text ? (
-          <Text style={[styles.text, textStyle]}>{typewriter ? shown : text}</Text>
+          <Text style={[styles.text, { color: t.colors.text }, textStyle]}>
+            {typewriter ? shown : text}
+          </Text>
         ) : (
           children
         )}
@@ -72,8 +85,8 @@ export function SpeechBubble({
 
       {tail === 'bottom' && (
         <View style={styles.tailBottomRow}>
-          <View style={styles.tailBottomBorder} />
-          <View style={styles.tailBottomFill} />
+          <View style={[styles.tailBottomBorder, { borderTopColor: t.colors.border }]} />
+          <View style={[styles.tailBottomFill, { borderTopColor: t.colors.surface }]} />
         </View>
       )}
     </View>
@@ -84,17 +97,14 @@ export function SpeechBubble({
 
 const styles = StyleSheet.create({
   bubble: {
-    backgroundColor: colors.surface,
     borderRadius: radii.card,
     borderWidth: 1.5,
-    borderColor: colors.border,
     padding: spacing.lg,
     ...shadows.card,
   },
   text: {
     fontSize: typography.body,
     fontWeight: '600',
-    color: colors.text,
     lineHeight: 24,
   },
 
@@ -111,7 +121,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 11,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: colors.border,
   },
   tailBottomFill: {
     width: 0,
@@ -121,7 +130,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 9,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: colors.surface,
     marginTop: -11,
     marginLeft: 1,
   },
@@ -139,7 +147,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 11,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: colors.border,
   },
   tailTopFill: {
     width: 0,
@@ -149,7 +156,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 9,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: colors.surface,
     marginTop: -9,
     marginLeft: 1,
   },

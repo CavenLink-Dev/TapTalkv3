@@ -1,14 +1,11 @@
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
   FadeInDown,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { colors, radii, spacing, typography } from '../../theme/tokens';
+import { radii, spacing, typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 interface GuardianBlockPanelProps {
   /**
@@ -30,6 +27,8 @@ export function GuardianBlockPanel({
   entranceDelay = 0,
   onCopyLink,
 }: GuardianBlockPanelProps) {
+  const t = useTheme();
+
   // Trigger warning haptic when component mounts
   useEffect(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
@@ -49,27 +48,31 @@ export function GuardianBlockPanel({
       style={styles.container}
     >
       {/* Red warning message */}
-      <View style={styles.warningBox}>
-        <Text style={styles.warningText}>
+      <View style={[styles.warningBox, { backgroundColor: t.colors.danger }]}>
+        <Text style={[styles.warningText, { color: t.colors.surface }]}>
           THIS APP NEEDS A PARENT OR GUARDIAN TO FINISH SETUP FOR ANYONE UNDER 15. WE DO THIS TO KEEP YOUNGER USERS SAFE, FOLLOWING AUSTRALIAN PRIVACY RULES.
         </Text>
       </View>
 
       {/* What should I do now? section */}
       <View style={styles.actionSection}>
-        <Text style={styles.actionTitle}>What should I do now?</Text>
-        <Text style={styles.actionDescription}>Send the link below to a parent or guardian</Text>
-        <Text style={styles.actionSubtext}>
+        <Text style={[styles.actionTitle, { color: t.colors.text }]}>What should I do now?</Text>
+        <Text style={[styles.actionDescription, { color: t.colors.text }]}>
+          Send the link below to a parent or guardian
+        </Text>
+        <Text style={[styles.actionSubtext, { color: t.colors.textMuted }]}>
           We'll email them a secure link so they can finish setting up TapTalk
         </Text>
 
         <Pressable
           onLongPress={handleLongPress}
-          style={styles.copyButton}
+          style={[styles.copyButton, { backgroundColor: t.colors.primary }]}
           accessibilityRole="button"
           accessibilityLabel="Press and hold to copy this link"
         >
-          <Text style={styles.copyButtonText}>Press and hold to copy this link</Text>
+          <Text style={[styles.copyButtonText, { color: t.colors.surface }]}>
+            Press and hold to copy this link
+          </Text>
         </Pressable>
       </View>
     </Animated.View>
@@ -82,14 +85,12 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
   warningBox: {
-    backgroundColor: colors.danger,
     borderRadius: radii.card,
     padding: spacing.lg,
   },
   warningText: {
     fontSize: typography.caption,
     fontWeight: '700',
-    color: colors.surface,
     textAlign: 'center',
     lineHeight: 16,
     letterSpacing: 0.5,
@@ -100,25 +101,21 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontSize: typography.subheading,
     fontWeight: '700',
-    color: colors.text,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
   actionDescription: {
     fontSize: typography.callout,
     fontWeight: '500',
-    color: colors.text,
     textAlign: 'center',
     marginBottom: spacing.xs,
   },
   actionSubtext: {
     fontSize: typography.callout,
-    color: colors.textMuted,
     textAlign: 'center',
     marginBottom: spacing.lg,
   },
   copyButton: {
-    backgroundColor: colors.primary,
     borderRadius: radii.button,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
@@ -127,6 +124,5 @@ const styles = StyleSheet.create({
   copyButtonText: {
     fontSize: typography.callout,
     fontWeight: '600',
-    color: colors.surface,
   },
 });

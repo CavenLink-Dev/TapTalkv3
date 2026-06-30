@@ -34,9 +34,10 @@ import {
 } from '../../src/components/activities/ActivityCompletionOverlay';
 import { Card } from '../../src/components/native/Card';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
 import { playSound } from '../../src/utils/sounds';
+import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -481,15 +482,16 @@ function SettingsModal({
   onRestart: () => void;
   onClose: () => void;
 }) {
+  const t = useTheme();
   const Row = ({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) => (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.diffRow, active && styles.diffRowActive, pressed && { opacity: 0.88 }]}
     >
       <View style={[styles.radio, active && styles.radioActive]}>
-        {active ? <View style={styles.radioDot} /> : null}
+        {active ? <View style={[styles.radioDot, { backgroundColor: t.colors.primary }]} /> : null}
       </View>
-      <Text style={styles.diffLabel}>{label}</Text>
+      <Text style={[styles.diffLabel, { color: t.colors.text }]}>{label}</Text>
     </Pressable>
   );
 
@@ -497,17 +499,17 @@ function SettingsModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlayBackdrop}>
         <Card style={styles.overlayCard}>
-          <Text style={styles.overlayTitle}>Settings</Text>
+          <Text style={[styles.overlayTitle, { color: t.colors.text }]}>Settings</Text>
 
           <View style={styles.section}>
-            <Text style={styles.eyebrow}>DIFFICULTY</Text>
+            <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>DIFFICULTY</Text>
             <Row label="Easy"   active={difficulty === 'easy'}   onPress={() => { hapticSelection(); onChangeDifficulty('easy'); }} />
             <Row label="Medium" active={difficulty === 'medium'} onPress={() => { hapticSelection(); onChangeDifficulty('medium'); }} />
             <Row label="Hard"   active={difficulty === 'hard'}   onPress={() => { hapticSelection(); onChangeDifficulty('hard'); }} />
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.eyebrow}>SPEED</Text>
+            <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>SPEED</Text>
             <Row label="Slow"    active={speed === 'slow'}    onPress={() => { hapticSelection(); onChangeSpeed('slow'); }} />
             <Row label="Fast"    active={speed === 'fast'}    onPress={() => { hapticSelection(); onChangeSpeed('fast'); }} />
             <Row label="Fastest" active={speed === 'fastest'} onPress={() => { hapticSelection(); onChangeSpeed('fastest'); }} />
@@ -515,7 +517,7 @@ function SettingsModal({
 
           <View style={styles.overlayActions}>
             <Pressable onPress={onRestart} style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}>
-              <Text style={styles.btnGhostText}>Restart</Text>
+              <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Restart</Text>
             </Pressable>
             <Pressable onPress={onClose} style={({ pressed }) => [styles.btnPrimary, pressed && { opacity: 0.85 }]}>
               <Text style={styles.btnPrimaryText}>Done</Text>
@@ -538,15 +540,16 @@ function StartOverlay({
   onSelectSpeed: (s: Speed) => void;
   onCancel: () => void; onStart: () => void;
 }) {
+  const t = useTheme();
   const Row = ({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) => (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.diffRow, active && styles.diffRowActive, pressed && { opacity: 0.88 }]}
     >
       <View style={[styles.radio, active && styles.radioActive]}>
-        {active ? <View style={styles.radioDot} /> : null}
+        {active ? <View style={[styles.radioDot, { backgroundColor: t.colors.primary }]} /> : null}
       </View>
-      <Text style={styles.diffLabel}>{label}</Text>
+      <Text style={[styles.diffLabel, { color: t.colors.text }]}>{label}</Text>
     </Pressable>
   );
 
@@ -554,20 +557,20 @@ function StartOverlay({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.overlayBackdrop}>
         <Card style={styles.overlayCard}>
-          <Text style={styles.overlayTitle}>Colour Pop</Text>
-          <Text style={styles.overlaySub}>
+          <Text style={[styles.overlayTitle, { color: t.colors.text }]}>Colour Pop</Text>
+          <Text style={[styles.overlaySub, { color: t.colors.textMuted }]}>
             Shapes fly through the field — tap the matching colour before they escape!
           </Text>
 
           <View style={styles.section}>
-            <Text style={styles.eyebrow}>DIFFICULTY</Text>
+            <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>DIFFICULTY</Text>
             <Row label="Easy"   active={difficulty === 'easy'}   onPress={() => { hapticSelection(); onSelectDifficulty('easy'); }} />
             <Row label="Medium" active={difficulty === 'medium'} onPress={() => { hapticSelection(); onSelectDifficulty('medium'); }} />
             <Row label="Hard"   active={difficulty === 'hard'}   onPress={() => { hapticSelection(); onSelectDifficulty('hard'); }} />
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.eyebrow}>SPEED</Text>
+            <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>SPEED</Text>
             <Row label="Slow"    active={speed === 'slow'}    onPress={() => { hapticSelection(); onSelectSpeed('slow'); }} />
             <Row label="Fast"    active={speed === 'fast'}    onPress={() => { hapticSelection(); onSelectSpeed('fast'); }} />
             <Row label="Fastest" active={speed === 'fastest'} onPress={() => { hapticSelection(); onSelectSpeed('fastest'); }} />
@@ -575,7 +578,7 @@ function StartOverlay({
 
           <View style={styles.overlayActions}>
             <Pressable onPress={onCancel} style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}>
-              <Text style={styles.btnGhostText}>Cancel</Text>
+              <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Cancel</Text>
             </Pressable>
             <Pressable onPress={onStart} style={({ pressed }) => [styles.btnPrimary, pressed && { opacity: 0.85 }]}>
               <Text style={styles.btnPrimaryText}>Start</Text>
@@ -590,6 +593,7 @@ function StartOverlay({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ColourPopScreen() {
+  const t = useTheme();
   const router       = useRouter();
   const insets       = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
@@ -912,7 +916,7 @@ export default function ColourPopScreen() {
             accessibilityLabel={soundOn ? 'Mute' : 'Unmute'}
             style={styles.headerIconBtn}
           >
-            <Ionicons name={soundOn ? 'volume-medium-outline' : 'volume-mute-outline'} size={22} color={colors.text} />
+            <Ionicons name={soundOn ? 'volume-medium-outline' : 'volume-mute-outline'} size={22} color={t.colors.text} />
           </Pressable>
           {showingGame && (
             <Pressable
@@ -920,11 +924,11 @@ export default function ColourPopScreen() {
               hitSlop={10} accessibilityRole="button" accessibilityLabel="Settings"
               style={styles.headerIconBtn}
             >
-              <Ionicons name="options-outline" size={22} color={colors.text} />
+              <Ionicons name="options-outline" size={22} color={t.colors.text} />
             </Pressable>
           )}
           <Pressable onPress={showHelp} hitSlop={10} accessibilityRole="button" accessibilityLabel="Help" style={styles.headerIconBtn}>
-            <Ionicons name="help-circle-outline" size={24} color={colors.text} />
+            <Ionicons name="help-circle-outline" size={24} color={t.colors.text} />
           </Pressable>
         </View>
       </View>
@@ -1066,67 +1070,54 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-    gap: spacing.md, backgroundColor: '#F3F7FF',
-  },
+    gap: spacing.md, backgroundColor: '#F3F7FF'},
   headerActions: { flexDirection: 'row', gap: 2 },
   headerIconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
 
   body: {
     flex: 1, paddingHorizontal: spacing.lg, paddingTop: 6,
-    gap: spacing.sm, justifyContent: 'space-between',
-  },
+    gap: spacing.sm, justifyContent: 'space-between'},
   centred: { alignItems: 'center', marginBottom: 4 },
 
   levelPill: {
     paddingHorizontal: spacing.lg, paddingVertical: 8,
-    borderRadius: radii.pill, borderWidth: 1.5, alignSelf: 'center',
-  },
+    borderRadius: radii.pill, borderWidth: 1.5, alignSelf: 'center'},
   levelPillText: {
-    fontSize: typography.callout, fontWeight: '900', letterSpacing: 0.4,
-  },
+    fontSize: typography.callout, fontWeight: '900', letterSpacing: 0.4},
 
   targetCard: {
     alignItems: 'center', gap: 10,
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderRadius: 22, overflow: 'hidden',
-  },
+    borderRadius: 22, overflow: 'hidden'},
   targetWord: {
-    fontSize: 42, lineHeight: 48, fontWeight: '900', letterSpacing: 0.5,
-  },
+    fontSize: 42, lineHeight: 48, fontWeight: '900', letterSpacing: 0.5},
   goalDots: { flexDirection: 'row', gap: 10 },
   goalDot:  { width: 15, height: 15, borderRadius: 7.5 },
 
   timerTrack: {
     width: '100%', height: 5,
-    backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 2.5, overflow: 'hidden',
-  },
+    backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 2.5, overflow: 'hidden'},
   timerFill: { height: 5, borderRadius: 2.5 },
 
   glitchCardOverlay: {
-    backgroundColor: '#FF2222', borderRadius: 22,
-  },
+    backgroundColor: '#FF2222', borderRadius: 22},
 
   playField: {
     flex: 1, position: 'relative', overflow: 'hidden',
     borderRadius: 26, minHeight: 260,
-    borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.07)',
-  },
+    borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.07)'},
   bgBlob1: {
     position: 'absolute', width: 240, height: 240, borderRadius: 120,
-    top: -55, left: -55,
-  },
+    top: -55, left: -55},
   bgBlob2: {
     position: 'absolute', width: 200, height: 200, borderRadius: 100,
-    bottom: -40, right: -40,
-  },
+    bottom: -40, right: -40},
   wrongOverlay: {
-    backgroundColor: '#FF0000', borderRadius: 24,
-  },
+    backgroundColor: '#FF0000', borderRadius: 24},
 
   shapeTapTarget: {
     minWidth: 60, minHeight: 60,
-    alignItems: 'center', justifyContent: 'center',
-  },
+    alignItems: 'center', justifyContent: 'center'},
 
   // Try-again toast
   tryAgain: {
@@ -1134,57 +1125,46 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     paddingVertical: 11, paddingHorizontal: spacing.lg,
     backgroundColor: 'rgba(28,28,40,0.88)',
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
   tryAgainText: {
-    fontSize: typography.callout, fontWeight: '700', color: '#FFF', letterSpacing: 0.1,
-  },
+    fontSize: typography.callout, fontWeight: '700', color: '#FFF', letterSpacing: 0.1},
 
   // Modals
   overlayBackdrop: {
     flex: 1, backgroundColor: 'rgba(8,14,24,0.62)',
-    alignItems: 'center', justifyContent: 'center', padding: spacing.lg,
-  },
+    alignItems: 'center', justifyContent: 'center', padding: spacing.lg},
   overlayCard: {
     width: '100%', maxWidth: 380,
-    alignItems: 'stretch', gap: spacing.lg, padding: spacing.xl,
-  },
+    alignItems: 'stretch', gap: spacing.lg, padding: spacing.xl},
   overlayTitle: {
-    fontSize: typography.title, fontWeight: '900', color: colors.text,
-    textAlign: 'center', letterSpacing: typography.trackTitle,
-  },
+    fontSize: typography.title, fontWeight: '900', 
+    textAlign: 'center', letterSpacing: typography.trackTitle},
   overlaySub: {
-    fontSize: typography.body, color: colors.textMuted,
-    textAlign: 'center', lineHeight: 22,
-  },
+    fontSize: typography.body, 
+    textAlign: 'center', lineHeight: 22},
   section: { gap: spacing.xs },
   eyebrow: {
-    fontSize: typography.caption, fontWeight: '800', color: colors.textMuted,
-    letterSpacing: 1.1, textTransform: 'uppercase',
-  },
+    fontSize: typography.caption, fontWeight: '800', 
+    letterSpacing: 1.1, textTransform: 'uppercase'},
   diffRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    padding: spacing.md, backgroundColor: colors.background,
-    borderRadius: radii.card, minHeight: 54,
-  },
+    padding: spacing.md, 
+    borderRadius: radii.card, minHeight: 54},
   diffRowActive: { backgroundColor: '#E6F4FD' },
   radio: {
     width: 24, height: 24, borderRadius: 12,
-    borderWidth: 2, borderColor: colors.textTertiary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  radioActive: { borderColor: colors.primary },
-  radioDot:    { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary },
-  diffLabel:   { fontSize: typography.body, fontWeight: '800', color: colors.text },
+    borderWidth: 2, 
+    alignItems: 'center', justifyContent: 'center'},
+  radioActive: { },
+  radioDot:    { width: 12, height: 12, borderRadius: 6},
+  diffLabel:   { fontSize: typography.body, fontWeight: '800'},
   overlayActions: { flexDirection: 'row', gap: spacing.sm },
   btnGhost: {
     flex: 1, paddingVertical: 14, borderRadius: radii.pill,
-    backgroundColor: colors.background, alignItems: 'center', minHeight: 50,
-  },
-  btnGhostText:   { fontSize: typography.body, fontWeight: '700', color: colors.text },
+     alignItems: 'center', minHeight: 50},
+  btnGhostText:   { fontSize: typography.body, fontWeight: '700'},
   btnPrimary: {
     flex: 1, paddingVertical: 14, borderRadius: radii.pill,
-    backgroundColor: colors.primary, alignItems: 'center', minHeight: 50,
-  },
+     alignItems: 'center', minHeight: 50},
   btnPrimaryText: { fontSize: typography.body, fontWeight: '800', color: '#FFF' },
 });

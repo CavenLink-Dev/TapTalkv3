@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing } from '../../../theme/tokens';
+import { spacing } from '../../../theme/tokens';
+import { useTheme } from '../../../theme/useTheme';
 import { searchSymbols } from '../../../features/symbol-brain/symbolSearchService';
 import { SearchContext, SearchResult } from '../../../features/symbol-brain/types';
 import { SymbolResultCard } from './SymbolResultCard';
@@ -18,6 +19,7 @@ export function SymbolSuggestionRow({
   context,
   onSelect,
 }: Props) {
+  const t = useTheme();
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -54,10 +56,10 @@ export function SymbolSuggestionRow({
   if (!query.trim()) return null;
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { borderColor: t.colors.border, backgroundColor: t.colors.surface }]}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Symbol suggestions</Text>
-        {loading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+        <Text style={[styles.title, { color: t.colors.textMuted }]}>Symbol suggestions</Text>
+        {loading ? <ActivityIndicator size="small" color={t.colors.primary} /> : null}
       </View>
       <ScrollView
         horizontal
@@ -73,10 +75,10 @@ export function SymbolSuggestionRow({
           />
         ))}
         {error ? (
-          <Text style={styles.error}>Symbol search unavailable</Text>
+          <Text style={[styles.error, { color: t.colors.danger }]}>Symbol search unavailable</Text>
         ) : null}
         {!loading && !error && results.length === 0 ? (
-          <Text style={styles.empty}>No local symbol found</Text>
+          <Text style={[styles.empty, { color: t.colors.textTertiary }]}>No local symbol found</Text>
         ) : null}
       </ScrollView>
     </View>
@@ -87,8 +89,6 @@ const styles = StyleSheet.create({
   wrap: {
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     paddingVertical: spacing.sm,
   },
   headerRow: {
@@ -101,19 +101,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 12,
     fontWeight: '800',
-    color: colors.textMuted,
   },
   scroll: {
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
   },
   empty: {
-    color: colors.textTertiary,
     fontSize: 13,
     paddingVertical: spacing.md,
   },
   error: {
-    color: colors.danger,
     fontSize: 13,
     fontWeight: '700',
     paddingVertical: spacing.md,

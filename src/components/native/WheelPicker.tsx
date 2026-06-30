@@ -27,7 +27,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { colors, typography } from '../../theme/tokens';
+import { typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 import { hapticSelection } from '../../utils/haptics';
 
 export const WHEEL_ITEM_HEIGHT = 36;
@@ -57,6 +58,7 @@ export function WheelPicker<T extends Renderable>({
   width = 70,
   accessibilityLabel,
 }: WheelPickerProps<T>) {
+  const t = useTheme();
   const listRef = useRef<FlatList<T>>(null);
   const [centreIndex, setCentreIndex] = useState(() =>
     Math.max(0, values.indexOf(selectedValue)),
@@ -106,14 +108,14 @@ export function WheelPicker<T extends Renderable>({
         accessibilityLabel={`${label ? label + ' ' : ''}${display}`}
         accessibilityState={{ selected: index === centreIndex }}
       >
-        <Text style={styles.itemText}>{display}</Text>
+        <Text style={[styles.itemText, { color: t.colors.text }]}>{display}</Text>
       </View>
     );
   };
 
   return (
     <View style={{ width, alignItems: 'center' }} accessibilityLabel={accessibilityLabel}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? <Text style={[styles.label, { color: t.colors.textMuted }]}>{label}</Text> : null}
       <View style={[styles.wheel, { width }]}>
         <FlatList
           ref={listRef}
@@ -150,7 +152,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: typography.caption,
     fontWeight: '700',
-    color: colors.textMuted,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     marginBottom: 4,
@@ -166,7 +167,6 @@ const styles = StyleSheet.create({
   itemText: {
     fontSize: 22,
     fontWeight: '600',
-    color: colors.text,
     letterSpacing: 0.2,
   },
   selectionBand: {

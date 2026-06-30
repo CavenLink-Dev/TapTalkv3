@@ -22,14 +22,17 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Href, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/native/Screen';
-import { animation as anim, colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { animation as anim, radii, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 import { hapticLight, hapticSelection } from '../../src/utils/haptics';
 import {
   ActivityId,
   toggleFavourite,
   useFavouriteActivities,
 } from '../../src/features/activities/favourites-store';
+import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
+import { useTheme } from '../../src/theme/useTheme';
 
 // --- Data ---
 
@@ -39,8 +42,7 @@ interface Activity {
   title: string;
   subtitle: string;
   accent: string;
-  heroBg: string;  // hero image band background
-  bodyBg: string;  // card body background — distinctly lighter than hero
+  heroBg: string;  // hero image band background (light mode)
   image: number;
 }
 
@@ -51,8 +53,7 @@ const ACTIVITIES: Activity[] = [
     title: 'Shape Match',
     subtitle: 'Drag each shape into its matching outline.',
     accent:  '#1B8A4A',
-    heroBg:  '#E8FAE8',   // soft green hero band
-    bodyBg:  '#F3FBF5',   // much lighter mint — clearly distinct from hero
+    heroBg:  '#E8FAE8',
     image:   require('../../assets/activities/shape-match-logo.png'),
   },
   {
@@ -61,8 +62,7 @@ const ACTIVITIES: Activity[] = [
     title: 'Colour Pop',
     subtitle: 'Tap every shape that matches the colour word.',
     accent:  '#7C3AED',
-    heroBg:  '#E0D9FF',   // slightly richer light purple for the hero band
-    bodyBg:  '#EDE9FE',   // the soft whitish-lavender the user approved
+    heroBg:  '#E0D9FF',
     image:   require('../../assets/activities/colour-pop-logo.png'),
   },
 ];
@@ -185,6 +185,7 @@ function SectionHeader({
   entryDelay?: number;
   isFavourites?: boolean;
 }) {
+  const t = useTheme();
   const reduceMotion  = useReduceMotion();
   const mountProgress = useRef(new Animated.Value(0)).current;
 
@@ -218,7 +219,7 @@ function SectionHeader({
       <Text
         style={[
           styles.sectionTitle,
-          isFavourites && styles.sectionTitleFavourites,
+          { color: isFavourites ? '#F5B400' : t.colors.textMuted },
         ]}
       >
         {label}
@@ -242,6 +243,7 @@ function ActivityCard({
   onPress: () => void;
   onToggleStar: () => void;
 }) {
+  const t = useTheme();
   const reduceMotion = useReduceMotion();
 
   const mountProgress   = useRef(new Animated.Value(0)).current;
@@ -377,6 +379,8 @@ function ActivityCard({
     outputRange: [0.5, 1],
   });
 
+  const heroBackground = t.isDark ? `${activity.accent}33` : activity.heroBg;
+
   return (
     <Animated.View
       style={{
@@ -390,10 +394,10 @@ function ActivityCard({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={onPress}
-        style={styles.card}
+        style={[styles.card, { backgroundColor: t.colors.surface }]}
       >
         {/* Hero image band */}
-        <View style={[styles.cardHero, { backgroundColor: activity.heroBg }]}>
+        <View style={[styles.cardHero, { backgroundColor: heroBackground }]}>
           <Animated.View
             style={[StyleSheet.absoluteFill, { transform: [{ scale: heroScale }] }]}
           >
@@ -416,12 +420,16 @@ function ActivityCard({
           </Animated.View>
         </View>
 
-        {/* Card body — tinted with the activity's accent background */}
-        <View style={[styles.cardBody, { backgroundColor: activity.bodyBg }]}>
+        <View
+          style={[
+            styles.cardBody,
+            { backgroundColor: t.colors.surface, borderTopColor: t.colors.border },
+          ]}
+        >
           <View style={styles.cardContentRow}>
             <View style={styles.copy}>
-              <Text style={styles.cardName}>{activity.title}</Text>
-              <Text style={styles.cardSubtitle} numberOfLines={2}>
+              <Text style={[styles.cardName, { color: t.colors.text }]}>{activity.title}</Text>
+              <Text style={[styles.cardSubtitle, { color: t.colors.textMuted }]} numberOfLines={2}>
                 {activity.subtitle}
               </Text>
             </View>
@@ -454,7 +462,7 @@ function ActivityCard({
                   <Ionicons
                     name={favourite ? 'star' : 'star-outline'}
                     size={22}
-                    color={favourite ? '#F5B400' : colors.textTertiary}
+                    color={favourite ? '#F5B400' : t.colors.textTertiary}
                   />
                 </Animated.View>
                 <StarParticles trigger={particleTrigger} />
@@ -479,7 +487,7 @@ function ActivityCard({
                 <Ionicons
                   name="play"
                   size={15}
-                  color="#fff"
+                  color={t.colors.textOnDark}
                   style={styles.playIcon}
                 />
               </Pressable>
@@ -495,7 +503,9 @@ function ActivityCard({
 
 export default function ActivitiesScreen() {
   const router = useRouter();
+  const t = useTheme();
   const favs   = useFavouriteActivities();
+  const { refreshing, onRefresh } = usePullRefresh();
 
   const favouriteActivities = ACTIVITIES.filter(a => favs.includes(a.id));
   const regularActivities   = ACTIVITIES.filter(a => !favs.includes(a.id));
@@ -506,9 +516,24 @@ export default function ActivitiesScreen() {
   };
 
   return (
-    <Screen title="Activities" subtitle="Tap an activity to begin.">
+    <Screen
+      title="Activities"
+      subtitle="Tap an activity to begin."
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+    >
       {favouriteActivities.length > 0 ? (
-        <View style={[styles.section, styles.favouritesSection]}>
+        <View
+          style={[
+            styles.section,
+            styles.favouritesSection,
+            {
+              backgroundColor: t.isDark
+                ? 'rgba(245, 180, 0, 0.12)'
+                : 'rgba(245, 180, 0, 0.06)',
+            },
+          ]}
+        >
           <SectionHeader icon="star" label="Favourites" entryDelay={0} isFavourites />
           <View style={styles.list}>
             {favouriteActivities.map((activity, i) => (
@@ -555,61 +580,48 @@ export default function ActivitiesScreen() {
 
 const styles = StyleSheet.create({
   list: {
-    gap: CARD_GAP,
-  },
+    gap: CARD_GAP},
 
   section: {
     gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
+    marginBottom: spacing.lg},
 
   favouritesSection: {
-    backgroundColor:  'rgba(245, 180, 0, 0.06)',
     borderRadius:     radii.card,
     padding:          spacing.sm,
     marginHorizontal: -spacing.sm,
-    paddingBottom:    spacing.md,
-  },
+    paddingBottom:    spacing.md},
 
   sectionHeader: {
     minHeight:         24,
     flexDirection:     'row',
     alignItems:        'center',
     gap:               6,
-    paddingHorizontal: spacing.xs,
-  },
+    paddingHorizontal: spacing.xs},
 
   sectionTitle: {
+    fontFamily:    fonts.displayHeavy,
     fontSize:      typography.caption,
-    fontWeight:    '800',
-    color:         colors.textMuted,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
 
-  sectionTitleFavourites: {
-    color: '#C68A00',
-  },
-
   card: {
     height:          CARD_HEIGHT,
-    backgroundColor: colors.surface,
+
     borderRadius:    radii.card,
-    overflow:        'hidden',
-  },
+    overflow:        'hidden'},
 
   cardHero: {
     height:               HERO_HEIGHT,
     width:                '100%',
     overflow:             'hidden',
     borderTopLeftRadius:  radii.card,
-    borderTopRightRadius: radii.card,
-  },
+    borderTopRightRadius: radii.card},
 
   cardHeroImage: {
     borderTopLeftRadius:  radii.card,
-    borderTopRightRadius: radii.card,
-  },
+    borderTopRightRadius: radii.card},
 
   shimmerStripe: {
     position:        'absolute',
@@ -618,79 +630,64 @@ const styles = StyleSheet.create({
     width:           54,
     height:          200,
     backgroundColor: 'rgba(255,255,255,0.22)',
-    transform:       [{ rotate: '18deg' }],
-  },
+    transform:       [{ rotate: '18deg' }]},
 
   cardBody: {
     flex:              1,
     paddingHorizontal: spacing.md,
     paddingVertical:   spacing.sm,
     justifyContent:    'center',
-  },
+    borderTopWidth:    StyleSheet.hairlineWidth},
 
   cardContentRow: {
     flexDirection: 'row',
     alignItems:    'center',
-    gap:           spacing.sm,
-  },
+    gap:           spacing.sm},
 
   copy: {
     flex: 1,
-    gap:  4,
-  },
+    gap:  4},
 
   cardName: {
+    fontFamily:    fonts.displayHeavy,
     fontSize:      typography.body,
-    fontWeight:    '800',
-    color:         colors.text,
     letterSpacing: -0.2,
   },
 
   cardSubtitle: {
+    fontFamily: fonts.body,
     fontSize:   typography.caption,
-    color:      colors.textMuted,
     lineHeight: 17,
   },
 
   actions: {
     flexDirection: 'row',
     alignItems:    'center',
-    gap:           spacing.xs,
-  },
+    gap:           spacing.xs},
 
   iconButton: {
     minWidth:       44,
     minHeight:      44,
     alignItems:     'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
 
   starButton: {
-    borderRadius: 22,
-  },
+    borderRadius: 22},
 
   starGlow: {
     position:        'absolute',
     width:           34,
     height:          34,
     borderRadius:    17,
-    backgroundColor: '#FFF0B3',
-  },
+    backgroundColor: '#FFF0B3'},
 
   playButton: {
     width:          38,
     height:         38,
     borderRadius:   19,
     alignItems:     'center',
-    justifyContent: 'center',
-    shadowColor:    '#000',
-    shadowOffset:   { width: 0, height: 2 },
-    shadowOpacity:  0.18,
-    shadowRadius:   3,
-    elevation:      3,
-  },
+    justifyContent: 'center'},
 
   playIcon: {
-    marginLeft: 2,
-  },
+    marginLeft: 2},
 });

@@ -1,5 +1,5 @@
 import seedBundle from '../imports/mulberry/seed.json';
-import { openSymbolBrainDatabase } from './database';
+import { hasBundledSymbolDatabase, openSymbolBrainDatabase } from './database';
 
 type SeedBundle = typeof seedBundle;
 type SeedConcept = SeedBundle['concepts'][number] & {
@@ -31,6 +31,17 @@ export async function seedSymbolBrainDatabase(force = false) {
 async function seedSymbolBrainDatabaseInternal(force = false) {
   const db = await openSymbolBrainDatabase();
   if (!force && await alreadySeeded()) return;
+
+  // Pre-built bundled DB is the only acceptable path on device — JSON seeding
+  // blocks the JS thread for minutes and should never run when a bundle exists.
+  if (!force && hasBundledSymbolDatabase()) {
+    if (__DEV__) {
+      console.warn(
+        'Symbol DB is empty. Rebuild with npm run build:symbol-db and restart — skipping slow JSON seed.',
+      );
+    }
+    return;
+  }
 
   const seed = seedBundle as SeedBundle;
   await db.withTransactionAsync(async () => {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, radii, spacing, typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
+import { radii, spacing, typography } from '../../theme/tokens';
 import { SearchResult } from '../symbol-brain/types';
 import { searchSymbols } from '../symbol-brain/symbolSearchService';
 import { userPreferenceService } from '../symbol-brain/userPreferenceService';
@@ -17,6 +18,7 @@ export function GuardianSymbolOverrideScreen({
   conceptId,
   onSaved,
 }: Props) {
+  const t = useTheme();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -38,9 +40,9 @@ export function GuardianSymbolOverrideScreen({
   }
 
   return (
-    <View style={styles.screen}>
-      <Text style={styles.title}>Guardian Symbol Override</Text>
-      <Text style={styles.copy}>
+    <View style={[styles.screen, { backgroundColor: t.colors.background, padding: spacing.lg }]}>
+      <Text style={[styles.title, { color: t.colors.text }]}>Guardian Symbol Override</Text>
+      <Text style={[styles.copy, { color: t.colors.textMuted }]}>
         Search local Mulberry symbols, then save the selected symbol as this user's preferred symbol.
       </Text>
       <View style={styles.searchRow}>
@@ -49,12 +51,12 @@ export function GuardianSymbolOverrideScreen({
           value={query}
           onChangeText={setQuery}
           placeholder="Search replacement"
-          placeholderTextColor={colors.textTertiary}
-          style={styles.input}
+          placeholderTextColor={t.colors.textTertiary}
+          style={[styles.input, { borderColor: t.colors.border, backgroundColor: t.colors.surface, color: t.colors.text }]}
           onSubmitEditing={runSearch}
         />
-        <Pressable style={styles.button} onPress={runSearch}>
-          <Text style={styles.buttonText}>Search</Text>
+        <Pressable style={[styles.button, { backgroundColor: t.colors.primary }]} onPress={runSearch}>
+          <Text style={[styles.buttonText, { color: t.colors.textOnDark }]}>Search</Text>
         </Pressable>
       </View>
       <View style={styles.grid}>
@@ -62,7 +64,7 @@ export function GuardianSymbolOverrideScreen({
           <View key={result.symbol.id} style={styles.resultWrap}>
             <SymbolResultCard result={result} onPress={savePreference} />
             {savingId === result.symbol.id ? (
-              <Text style={styles.saving}>Saving...</Text>
+              <Text style={[styles.saving, { color: t.colors.textMuted }]}>Saving...</Text>
             ) : null}
           </View>
         ))}
@@ -74,17 +76,13 @@ export function GuardianSymbolOverrideScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.background,
-    padding: spacing.lg,
   },
   title: {
     fontSize: typography.heading,
     fontWeight: '900',
-    color: colors.text,
   },
   copy: {
     marginTop: spacing.sm,
-    color: colors.textMuted,
     fontSize: typography.callout,
   },
   searchRow: {
@@ -97,20 +95,15 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: radii.input,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,
-    color: colors.text,
   },
   button: {
     minWidth: 88,
     borderRadius: radii.button,
-    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonText: {
-    color: colors.textOnDark,
     fontWeight: '800',
   },
   grid: {
@@ -124,7 +117,6 @@ const styles = StyleSheet.create({
   },
   saving: {
     marginTop: spacing.xs,
-    color: colors.textMuted,
     fontSize: typography.caption,
   },
 });

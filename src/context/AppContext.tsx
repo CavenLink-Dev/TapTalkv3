@@ -2,13 +2,23 @@ import React, { createContext, useReducer, useEffect, useCallback, useRef, useSt
 import { AppState as RNAppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, Action } from './types';
+import {
+  COLD_STORAGE_KEY,
+  HOT_STORAGE_KEY,
+  LEGACY_STORAGE_KEY,
+  mergePersistedSlices,
+  splitAppState,
+  type ColdPersistedState,
+  type HotPersistedState,
+} from './persistence';
 import { seedSymbolBrainDatabase } from '../data/sqlite/seedSymbolBrain';
 import { setHapticsEnabled } from '../utils/haptics';
 
-const STORAGE_KEY = '@TapTalk_state';
 const MAX_SAVE_RETRIES = 2;
-/** Batch rapid dispatches (e.g. board taps) into one AsyncStorage write. */
-const SAVE_DEBOUNCE_MS = 400;
+/** Hot slice — board taps, message strip, accessibility tweaks. */
+const HOT_SAVE_DEBOUNCE_MS = 300;
+/** Cold slice — profile, lists, habits, onboarding flags. */
+const COLD_SAVE_DEBOUNCE_MS = 800;
 
 export const initialState: AppState = {
   onboardingComplete: false,
@@ -60,7 +70,6 @@ export const initialState: AppState = {
 
 function mergeStoredState(storedState: Partial<AppState>): AppState {
   const storedAccessibility: Partial<AppState['accessibility']> = storedState.accessibility ?? {};
-  const theme = storedAccessibility.theme === 'system' ? 'light' : storedAccessibility.theme;
 
   return {
     ...initialState,
@@ -76,7 +85,7 @@ function mergeStoredState(storedState: Partial<AppState>): AppState {
     accessibility: {
       ...initialState.accessibility,
       ...storedAccessibility,
-      theme: theme ?? initialState.accessibility.theme,
+      theme: storedAccessibility.theme ?? initialState.accessibility.theme,
     },
     boardLayouts: {
       ...initialState.boardLayouts,
@@ -304,16 +313,43 @@ export function appReducer(state: AppState, action: Action): AppState {
   }
 }
 
-async function persistState(payload: AppState, attempt: number): Promise<void> {
+async function persistJson(key: string, payload: unknown, attempt = 0): Promise<void> {
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    await AsyncStorage.setItem(key, JSON.stringify(payload));
   } catch (e: unknown) {
     if (attempt < MAX_SAVE_RETRIES) {
-      await persistState(payload, attempt + 1);
+      await persistJson(key, payload, attempt + 1);
       return;
     }
     throw e;
   }
+}
+
+async function loadPersistedState(): Promise<Partial<AppState>> {
+  const [hotRaw, coldRaw, legacyRaw] = await Promise.all([
+    AsyncStorage.getItem(HOT_STORAGE_KEY),
+    AsyncStorage.getItem(COLD_STORAGE_KEY),
+    AsyncStorage.getItem(LEGACY_STORAGE_KEY),
+  ]);
+
+  if (hotRaw || coldRaw) {
+    const hot = hotRaw ? (JSON.parse(hotRaw) as Partial<HotPersistedState>) : {};
+    const cold = coldRaw ? (JSON.parse(coldRaw) as Partial<ColdPersistedState>) : {};
+    return mergePersistedSlices(hot, cold);
+  }
+
+  if (legacyRaw) {
+    const legacy = JSON.parse(legacyRaw) as Partial<AppState>;
+    const { hot, cold } = splitAppState(mergeStoredState(legacy));
+    await Promise.all([
+      persistJson(HOT_STORAGE_KEY, hot),
+      persistJson(COLD_STORAGE_KEY, cold),
+    ]);
+    await AsyncStorage.removeItem(LEGACY_STORAGE_KEY);
+    return legacy;
+  }
+
+  return {};
 }
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
@@ -323,28 +359,59 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const saveRetries = useRef(0);
   const stateRef = useRef(state);
   const hydratedRef = useRef(false);
+  const hotSnapshotRef = useRef<HotPersistedState>(splitAppState(state).hot);
+  const coldSnapshotRef = useRef<ColdPersistedState>(splitAppState(state).cold);
+  const saveInFlightRef = useRef(false);
+  const pendingHotSaveRef = useRef(false);
+  const pendingColdSaveRef = useRef(false);
+  const snapshotsSyncedRef = useRef(false);
   stateRef.current = state;
 
   const clearHydrationError = useCallback(() => setHydrationError(null), []);
 
-  const flushSave = useCallback(async () => {
+  const flushSave = useCallback(async (target: 'hot' | 'cold' | 'all' = 'all') => {
+    if (saveInFlightRef.current) {
+      if (target === 'hot' || target === 'all') pendingHotSaveRef.current = true;
+      if (target === 'cold' || target === 'all') pendingColdSaveRef.current = true;
+      return;
+    }
+
+    saveInFlightRef.current = true;
     try {
-      await persistState(stateRef.current, 0);
+      const { hot, cold } = splitAppState(stateRef.current);
+      const writes: Promise<void>[] = [];
+      if (target === 'hot' || target === 'all') {
+        hotSnapshotRef.current = hot;
+        writes.push(persistJson(HOT_STORAGE_KEY, hot));
+      }
+      if (target === 'cold' || target === 'all') {
+        coldSnapshotRef.current = cold;
+        writes.push(persistJson(COLD_STORAGE_KEY, cold));
+      }
+      await Promise.all(writes);
       saveRetries.current = 0;
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Unknown save error';
       if (__DEV__) console.error('Failed to save state after retries:', message);
       saveRetries.current = MAX_SAVE_RETRIES;
       setHydrationError({ phase: 'save', message });
+    } finally {
+      saveInFlightRef.current = false;
+      const pendingHot = pendingHotSaveRef.current;
+      const pendingCold = pendingColdSaveRef.current;
+      pendingHotSaveRef.current = false;
+      pendingColdSaveRef.current = false;
+      if (pendingHot || pendingCold) {
+        await flushSave(pendingHot && pendingCold ? 'all' : pendingHot ? 'hot' : 'cold');
+      }
     }
   }, []);
 
   useEffect(() => {
     const loadState = async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as Partial<AppState>;
+        const parsed = await loadPersistedState();
+        if (Object.keys(parsed).length > 0) {
           dispatch({ type: 'HYDRATE', payload: parsed });
         }
       } catch (e: unknown) {
@@ -352,7 +419,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (__DEV__) console.error('Failed to load state:', message);
         setHydrationError({ phase: 'load', message });
         try {
-          await AsyncStorage.removeItem(STORAGE_KEY);
+          await Promise.all([
+            AsyncStorage.removeItem(HOT_STORAGE_KEY),
+            AsyncStorage.removeItem(COLD_STORAGE_KEY),
+            AsyncStorage.removeItem(LEGACY_STORAGE_KEY),
+          ]);
         } catch {
           // Storage may be entirely unavailable; nothing more to do.
         }
@@ -368,17 +439,38 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // cost on first tile resolve.
   useEffect(() => {
     if (!hydrated) return;
-    seedSymbolBrainDatabase().catch(() => {});
+    seedSymbolBrainDatabase().catch((e) => {
+      if (__DEV__) console.warn('Symbol brain pre-seed failed:', e);
+    });
   }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || snapshotsSyncedRef.current) return;
+    const { hot, cold } = splitAppState(state);
+    hotSnapshotRef.current = hot;
+    coldSnapshotRef.current = cold;
+    snapshotsSyncedRef.current = true;
+  }, [hydrated, state]);
 
   useEffect(() => {
     if (!hydrated) return;
 
-    const timer = setTimeout(() => {
-      flushSave();
-    }, SAVE_DEBOUNCE_MS);
+    const { hot, cold } = splitAppState(state);
+    const hotChanged = JSON.stringify(hot) !== JSON.stringify(hotSnapshotRef.current);
+    const coldChanged = JSON.stringify(cold) !== JSON.stringify(coldSnapshotRef.current);
+    if (!hotChanged && !coldChanged) return;
 
-    return () => clearTimeout(timer);
+    const hotTimer = hotChanged
+      ? setTimeout(() => { flushSave('hot'); }, HOT_SAVE_DEBOUNCE_MS)
+      : undefined;
+    const coldTimer = coldChanged
+      ? setTimeout(() => { flushSave('cold'); }, COLD_SAVE_DEBOUNCE_MS)
+      : undefined;
+
+    return () => {
+      if (hotTimer) clearTimeout(hotTimer);
+      if (coldTimer) clearTimeout(coldTimer);
+    };
   }, [state, hydrated, flushSave]);
 
   useEffect(() => {
@@ -386,7 +478,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     const sub = RNAppState.addEventListener('change', (status) => {
       if (status === 'background' || status === 'inactive') {
-        flushSave();
+        flushSave('all');
       }
     });
 
@@ -396,7 +488,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     return () => {
       if (hydratedRef.current) {
-        persistState(stateRef.current, 0).catch(() => {});
+        const { hot, cold } = splitAppState(stateRef.current);
+        Promise.all([
+          persistJson(HOT_STORAGE_KEY, hot),
+          persistJson(COLD_STORAGE_KEY, cold),
+        ]).catch(() => {});
       }
     };
   }, []);

@@ -9,19 +9,21 @@
 
 import React from 'react';
 import Svg, { Path, Rect } from 'react-native-svg';
-import { colors } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 // ─── Backspace (used inside the "Tap to speak" card) ─────────────────────────
 // Figma node 86:293 — viewBox 45×30, fill error_colour_red (#F3312A).
 
-export function BackspaceIcon({ size = 45, color = colors.danger }: { size?: number; color?: string }) {
+export function BackspaceIcon({ size = 45, color }: { size?: number; color?: string }) {
+  const t = useTheme();
+  const fill = color ?? t.colors.danger;
   const w = size;
   const h = (size * 30) / 45;
   return (
     <Svg width={w} height={h} viewBox="0 0 45 30" fill="none">
       <Path
         d="M21.15 22.5L27 17.625L32.85 22.5L36 19.875L30.15 15L36 10.125L32.85 7.5L27 12.375L21.15 7.5L18 10.125L23.85 15L18 19.875L21.15 22.5ZM13.5 30L0 15L13.5 0H45V30H13.5ZM5.625 15L15.75 26.25H40.5V3.75H15.75L5.625 15Z"
-        fill={color}
+        fill={fill}
       />
     </Svg>
   );

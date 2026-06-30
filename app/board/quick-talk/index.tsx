@@ -31,7 +31,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
-import { colors, radii, spacing, typography } from '../../../src/theme/tokens';
+import { radii, spacing, typography } from '../../../src/theme/tokens';
 import { hapticSelection } from '../../../src/utils/haptics';
 import {
   QUICK_TALK_MAX,
@@ -42,6 +42,7 @@ import {
   updateQuickTalk,
   useQuickTalk,
 } from '../../../src/features/quick-talk/store';
+import { useTheme } from '../../../src/theme/useTheme';
 
 function speakPhrase(text: string): void {
   Speech.stop();
@@ -69,6 +70,7 @@ function PhraseRow({
   onMove: (dir: 'up' | 'down') => void;
   onDelete: () => void;
 }) {
+  const t = useTheme();
   return (
     <View style={styles.row}>
       {editMode ? (
@@ -93,10 +95,10 @@ function PhraseRow({
         accessibilityLabel={`Speak: ${item.text}`}
         style={({ pressed }) => [styles.card, pressed && { opacity: 0.94 }]}
       >
-        <Ionicons name="volume-medium-outline" size={20} color={colors.primary} />
-        <Text style={styles.cardText} numberOfLines={3}>{item.text}</Text>
+        <Ionicons name="volume-medium-outline" size={20} color={t.colors.primary} />
+        <Text style={[styles.cardText, { color: t.colors.text }]} numberOfLines={3}>{item.text}</Text>
         {!editMode ? (
-          <Ionicons name="reorder-three" size={22} color={colors.textTertiary} />
+          <Ionicons name="reorder-three" size={22} color={t.colors.textTertiary} />
         ) : (
           <View style={styles.arrows}>
             <Pressable
@@ -111,7 +113,7 @@ function PhraseRow({
                 pressed && index !== 0 && { opacity: 0.85 },
               ]}
             >
-              <Ionicons name="chevron-up" size={18} color={index === 0 ? colors.textTertiary : colors.primary} />
+              <Ionicons name="chevron-up" size={18} color={index === 0 ? t.colors.textTertiary : t.colors.primary} />
             </Pressable>
             <Pressable
               onPress={() => onMove('down')}
@@ -125,7 +127,7 @@ function PhraseRow({
                 pressed && index !== total - 1 && { opacity: 0.85 },
               ]}
             >
-              <Ionicons name="chevron-down" size={18} color={index === total - 1 ? colors.textTertiary : colors.primary} />
+              <Ionicons name="chevron-down" size={18} color={index === total - 1 ? t.colors.textTertiary : t.colors.primary} />
             </Pressable>
           </View>
         )}
@@ -147,6 +149,7 @@ function EditPhraseSheet({
   onSave: (text: string) => void;
   onCancel: () => void;
 }) {
+  const t = useTheme();
   const [draft, setDraft] = useState<string>(initial);
 
   React.useEffect(() => {
@@ -157,13 +160,13 @@ function EditPhraseSheet({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onCancel}>
-      <SafeAreaView style={styles.sheet} edges={['top']}>
+      <SafeAreaView style={[styles.sheet, { backgroundColor: t.colors.background }]} edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.sheetHeader}>
           <Pressable onPress={onCancel} accessibilityLabel="Cancel" style={styles.sheetTextBtn}>
-            <Text style={styles.sheetCancelText}>Cancel</Text>
+            <Text style={[styles.sheetCancelText, { color: t.colors.textMuted }]}>Cancel</Text>
           </Pressable>
-          <Text style={styles.sheetTitle}>Edit Phrase</Text>
+          <Text style={[styles.sheetTitle, { color: t.colors.text }]}>Edit Phrase</Text>
           <Pressable
             onPress={() => {
               if (!canSave) return;
@@ -178,13 +181,13 @@ function EditPhraseSheet({
         </View>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           <View style={styles.sheetBody}>
-            <Text style={styles.fieldEyebrow}>PHRASE</Text>
+            <Text style={[styles.fieldEyebrow, { color: t.colors.textMuted }]}>PHRASE</Text>
             <TextInput
               value={draft}
               onChangeText={setDraft}
               placeholder="e.g. I want some water please"
-              placeholderTextColor={colors.textTertiary}
-              style={styles.input}
+              placeholderTextColor={t.colors.textTertiary}
+              style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.surface }]}
               maxLength={140}
               autoFocus
               multiline
@@ -200,6 +203,7 @@ function EditPhraseSheet({
 // ─── Screen ────────────────────────────────────────────────────────────────
 
 export default function QuickTalkScreen() {
+  const t = useTheme();
   const router = useRouter();
   const items = useQuickTalk();
   const [editMode, setEditMode] = useState(false);
@@ -248,7 +252,7 @@ export default function QuickTalkScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
@@ -259,9 +263,9 @@ export default function QuickTalkScreen() {
           accessibilityLabel="Back"
           accessibilityRole="button"
         >
-          <Ionicons name="chevron-back" size={28} color={colors.primary} />
+          <Ionicons name="chevron-back" size={28} color={t.colors.primary} />
         </Pressable>
-        <Text style={styles.title} accessibilityRole="header">Quick Talk</Text>
+        <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">Quick Talk</Text>
         {items.length > 0 ? (
           <Pressable
             onPress={() => {
@@ -272,7 +276,7 @@ export default function QuickTalkScreen() {
             accessibilityLabel={editMode ? 'Done editing' : 'Edit list'}
             style={styles.editBtn}
           >
-            <Text style={styles.editBtnText}>{editMode ? 'Done' : 'Edit'}</Text>
+            <Text style={[styles.editBtnText, { color: t.colors.primary }]}>{editMode ? 'Done' : 'Edit'}</Text>
           </Pressable>
         ) : (
           <View style={styles.headerSpacer} />
@@ -288,10 +292,10 @@ export default function QuickTalkScreen() {
       >
         {isFull() ? (
           <View style={styles.fullBanner}>
-            <Ionicons name="warning-outline" size={20} color={colors.warning} />
+            <Ionicons name="warning-outline" size={20} color={t.colors.warning} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.fullTitle}>Quick Talk is full</Text>
-              <Text style={styles.fullSub}>
+              <Text style={[styles.fullTitle, { color: t.colors.text }]}>Quick Talk is full</Text>
+              <Text style={[styles.fullSub, { color: t.colors.textMuted }]}>
                 You've saved {QUICK_TALK_MAX} phrases. Remove one to add another.
               </Text>
             </View>
@@ -300,9 +304,9 @@ export default function QuickTalkScreen() {
 
         {items.length === 0 ? (
           <View style={styles.emptyWrap}>
-            <Ionicons name="chatbubbles-outline" size={64} color={colors.textTertiary} />
-            <Text style={styles.emptyTitle}>No saved phrases yet</Text>
-            <Text style={styles.emptySub}>
+            <Ionicons name="chatbubbles-outline" size={64} color={t.colors.textTertiary} />
+            <Text style={[styles.emptyTitle, { color: t.colors.text }]}>No saved phrases yet</Text>
+            <Text style={[styles.emptySub, { color: t.colors.textMuted }]}>
               Build a sentence on the keyboard, then tap Save to keep it here for quick speaking.
             </Text>
           </View>
@@ -334,7 +338,7 @@ export default function QuickTalkScreen() {
         )}
 
         {items.length > 0 ? (
-          <Text style={styles.countLine}>
+          <Text style={[styles.countLine, { color: t.colors.textMuted }]}>
             {items.length} / {QUICK_TALK_MAX} saved
           </Text>
         ) : null}
@@ -354,39 +358,33 @@ export default function QuickTalkScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1},
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   headerIconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: {
     flex: 1,
     fontSize: typography.heading,
     fontWeight: '900',
-    color: colors.text,
-    letterSpacing: typography.trackHeading,
-  },
+
+    letterSpacing: typography.trackHeading},
   headerSpacer: { width: 44 },
   editBtn: {
     paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   editBtnText: {
     fontSize: typography.body,
-    fontWeight: '800',
-    color: colors.primary,
-  },
+    fontWeight: '800'},
 
   scroll: {
     padding: spacing.lg,
     paddingBottom: 60,
-    gap: spacing.lg,
-  },
+    gap: spacing.lg},
 
   fullBanner: {
     flexDirection: 'row',
@@ -395,36 +393,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     backgroundColor: 'rgba(255, 149, 0, 0.10)',
-    borderRadius: radii.card,
-  },
+    borderRadius: radii.card},
   fullTitle: {
     fontSize: typography.body,
-    fontWeight: '800',
-    color: colors.text,
-  },
+    fontWeight: '800'},
   fullSub: {
     marginTop: 2,
-    fontSize: typography.caption,
-    color: colors.textMuted,
-  },
+    fontSize: typography.caption},
 
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   editHandles: {
     width: 36,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   deleteHandle: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.danger,
+
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
 
   card: {
     flex: 1,
@@ -432,59 +422,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.md,
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
-    minHeight: 60,
-  },
+    minHeight: 60},
   cardText: {
     flex: 1,
     fontSize: typography.body,
-    fontWeight: '700',
-    color: colors.text,
-  },
+    fontWeight: '700'},
   arrows: {
     flexDirection: 'row',
-    gap: 4,
-  },
+    gap: 4},
   arrowBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: '#E6F4FD',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   arrowBtnDisabled: {
-    backgroundColor: colors.background,
+
   },
 
   emptyWrap: {
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.xxl,
-  },
+    paddingVertical: spacing.xxl},
   emptyTitle: {
     fontSize: typography.subheading,
-    fontWeight: '800',
-    color: colors.text,
-  },
+    fontWeight: '800'},
   emptySub: {
     fontSize: typography.body,
-    color: colors.textMuted,
+
     textAlign: 'center',
-    lineHeight: 24,
-  },
+    lineHeight: 24},
 
   countLine: {
     textAlign: 'center',
     fontSize: typography.caption,
-    color: colors.textMuted,
-    fontWeight: '600',
-  },
+
+    fontWeight: '600'},
 
   // ── Edit sheet ──
-  sheet: { flex: 1, backgroundColor: colors.background },
+  sheet: { flex: 1},
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -492,45 +472,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomColor: '#E0E5EA',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+    borderBottomWidth: StyleSheet.hairlineWidth},
   sheetTextBtn: { paddingHorizontal: 4, paddingVertical: 6 },
   sheetCancelText: {
-    color: colors.textMuted,
+
     fontSize: typography.body,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   sheetSaveText: {
-    color: colors.primary,
+
     fontSize: typography.body,
-    fontWeight: '800',
-  },
-  sheetSaveDisabled: { color: colors.textTertiary },
+    fontWeight: '800'},
+  sheetSaveDisabled: { },
   sheetTitle: {
     fontSize: typography.subheading,
-    fontWeight: '800',
-    color: colors.text,
-  },
+    fontWeight: '800'},
   sheetBody: {
     flex: 1,
     padding: spacing.lg,
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   fieldEyebrow: {
     fontSize: typography.caption,
     fontWeight: '800',
-    color: colors.textMuted,
+
     letterSpacing: 1.1,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   input: {
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     fontSize: typography.body,
-    color: colors.text,
+
     minHeight: 120,
-    textAlignVertical: 'top',
-  },
+    textAlignVertical: 'top'},
 });

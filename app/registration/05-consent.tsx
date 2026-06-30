@@ -8,7 +8,8 @@ import {
   requiresGuardianConsent,
   useRegistration,
 } from '../../src/context/RegistrationContext';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 
 const nextRoute = '/registration/06-verify' as Href;
@@ -19,6 +20,7 @@ const PRIVACY_URL = 'https://taptalk.app/privacy';
 
 export default function RegStep5Consent() {
   const router = useRouter();
+  const t = useTheme();
   const { data, updateConsents } = useRegistration();
   const guardian = requiresGuardianConsent(data);
   const displayName =
@@ -65,7 +67,7 @@ export default function RegStep5Consent() {
           hitSlop={8}
           style={styles.linkRow}
         >
-          <Text style={styles.linkText}>Read Terms & Conditions</Text>
+          <Text style={[styles.linkText, { color: t.colors.primary }]}>Read Terms & Conditions</Text>
         </Pressable>
 
         <SelectableCard
@@ -83,7 +85,7 @@ export default function RegStep5Consent() {
           hitSlop={8}
           style={styles.linkRow}
         >
-          <Text style={styles.linkText}>Read Privacy Policy</Text>
+          <Text style={[styles.linkText, { color: t.colors.primary }]}>Read Privacy Policy</Text>
         </Pressable>
 
         {guardian ? (
@@ -121,6 +123,5 @@ const styles = StyleSheet.create({
   linkText: {
     fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    color: colors.primary,
   },
 });

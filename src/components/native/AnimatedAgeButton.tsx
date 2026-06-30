@@ -7,7 +7,8 @@ import Animated, {
   FadeInDown,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { colors, radii, shadows, typography } from '../../theme/tokens';
+import { radii, shadows, typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 export type AgeRange = 'under-13' | '13-to-15' | '16-to-17' | '18-or-older';
 
@@ -36,13 +37,13 @@ interface AnimatedAgeButtonProps {
  */
 export function AnimatedAgeButton({
   label,
-  ageRange,
   selected,
   onPress,
   entranceDelay = 0,
   blocked = false,
   showChevron = true,
 }: AnimatedAgeButtonProps) {
+  const t = useTheme();
   const scale = useSharedValue(1);
   const chevronRotation = useSharedValue(selected ? 1 : 0);
 
@@ -67,6 +68,20 @@ export function AnimatedAgeButton({
     scale.value = withTiming(1, { duration: 100 });
   };
 
+  const buttonBackground = selected && blocked
+    ? t.colors.danger
+    : selected
+      ? t.colors.primary
+      : t.colors.softBlue;
+
+  const buttonBorder = selected && blocked
+    ? t.colors.danger
+    : selected
+      ? t.colors.primaryDark
+      : 'transparent';
+
+  const labelColor = selected ? t.colors.surface : t.colors.text;
+
   return (
     <Animated.View
       entering={FadeInDown.duration(280).delay(entranceDelay)}
@@ -79,30 +94,21 @@ export function AnimatedAgeButton({
           onPress={onPress}
           style={[
             styles.button,
-            selected && !blocked && styles.buttonSelected,
-            selected && blocked && styles.buttonBlocked,
+            {
+              backgroundColor: buttonBackground,
+              borderColor: buttonBorder,
+            },
+            selected && styles.buttonSelected,
           ]}
           accessibilityRole="button"
           accessibilityState={{ selected }}
         >
-          <Text
-            style={[
-              styles.label,
-              selected && !blocked && styles.labelSelected,
-              selected && blocked && styles.labelBlocked,
-            ]}
-          >
+          <Text style={[styles.label, { color: labelColor }]}>
             {label}
           </Text>
           {showChevron && (
             <Animated.View style={chevronStyle}>
-              <Text
-                style={[
-                  styles.chevron,
-                  selected && !blocked && styles.chevronSelected,
-                  selected && blocked && styles.chevronBlocked,
-                ]}
-              >
+              <Text style={[styles.chevron, { color: labelColor }]}>
                 {'\u203A'}
               </Text>
             </Animated.View>
@@ -121,46 +127,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.softBlue,
     borderRadius: radii.card,
     paddingVertical: 16,
     paddingHorizontal: 24,
     minHeight: 60,
     borderWidth: 2,
-    borderColor: 'transparent',
   },
   buttonSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primaryDark,
-    ...shadows.card,
-  },
-  buttonBlocked: {
-    backgroundColor: colors.danger,
-    borderColor: colors.danger,
     ...shadows.card,
   },
   label: {
     fontSize: typography.body,
     fontWeight: '600',
-    color: colors.text,
     textAlign: 'center',
-  },
-  labelSelected: {
-    color: colors.surface,
-  },
-  labelBlocked: {
-    color: colors.surface,
   },
   chevron: {
     fontSize: 28,
     fontWeight: '300',
-    color: colors.text,
     marginLeft: 8,
-  },
-  chevronSelected: {
-    color: colors.surface,
-  },
-  chevronBlocked: {
-    color: colors.surface,
   },
 });

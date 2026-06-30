@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, shadows, symbolColors } from '../../../theme/tokens';
+import { shadows } from '../../../theme/tokens';
+import { useTheme } from '../../../theme/useTheme';
 import { SearchResult } from '../../../features/symbol-brain/types';
 import { ResolveTier } from '../../../features/symbol-brain/resolveSymbolForKeyword';
 import { MulberrySymbol } from './MulberrySymbol';
@@ -21,7 +22,7 @@ function isFallbackTier(tier?: ResolveTier): boolean {
   return tier === 'fuzzy' || tier === 'semantic' || tier === 'category' || tier === 'unknown';
 }
 
-function colourForConcept(result: SearchResult) {
+function colourForConcept(result: SearchResult, symbolColors: ReturnType<typeof useTheme>['symbolColors']) {
   switch (result.concept.concept_type) {
     case 'action': return symbolColors.verb;
     case 'person': return symbolColors.noun;
@@ -35,7 +36,8 @@ function colourForConcept(result: SearchResult) {
 }
 
 export function SymbolResultCard({ result, onPress, compact, tier }: Props) {
-  const bg = colourForConcept(result);
+  const t = useTheme();
+  const bg = colourForConcept(result, t.symbolColors);
   const fallback = isFallbackTier(tier);
   return (
     <Pressable
@@ -50,19 +52,19 @@ export function SymbolResultCard({ result, onPress, compact, tier }: Props) {
       style={[
         styles.card,
         compact && styles.cardCompact,
-        { backgroundColor: bg },
+        { backgroundColor: bg, borderColor: t.colors.symbolOutline },
         shadows.card,
-        fallback && styles.cardFallback,
+        fallback && [styles.cardFallback, { borderColor: t.colors.textMuted }],
       ]}
     >
       <View style={styles.symbolBox}>
         <MulberrySymbol symbolId={result.symbol.id} size={compact ? 42 : 56} />
       </View>
-      <Text style={styles.label} numberOfLines={1}>
+      <Text style={[styles.label, { color: t.colors.text }]} numberOfLines={1}>
         {fallback ? '≈ ' : ''}{result.symbol.display_name}
       </Text>
       {!compact ? (
-        <Text style={styles.meta} numberOfLines={1}>
+        <Text style={[styles.meta, { color: t.colors.textMuted }]} numberOfLines={1}>
           {Math.round(result.score * 100)}% · {result.match_reasons[0] ?? 'candidate'}
         </Text>
       ) : null}
@@ -76,7 +78,6 @@ const styles = StyleSheet.create({
     minHeight: 124,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: colors.symbolOutline,
     padding: 8,
     alignItems: 'center',
   },
@@ -89,7 +90,6 @@ const styles = StyleSheet.create({
     // Dashed border + slight desaturation so the user can see this is an
     // approximate match without the card feeling "wrong" or low-quality.
     borderStyle: 'dashed',
-    borderColor: colors.textMuted,
     opacity: 0.92,
   },
   symbolBox: {
@@ -102,13 +102,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     fontWeight: '800',
-    color: colors.text,
     textAlign: 'center',
   },
   meta: {
     marginTop: 3,
     fontSize: 9,
-    color: colors.textMuted,
     textAlign: 'center',
   },
 });

@@ -18,7 +18,8 @@ import {
   useRegistration,
   verificationContact,
 } from '../../src/context/RegistrationContext';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 import { hapticError, hapticSuccess } from '../../src/utils/haptics';
 
@@ -32,6 +33,7 @@ const ACCEPTED_CODE = '000000';
 
 export default function RegStep6Verify() {
   const router = useRouter();
+  const t = useTheme();
   const { data, update } = useRegistration();
   const { phone } = verificationContact(data);
 
@@ -51,15 +53,15 @@ export default function RegStep6Verify() {
 
   useEffect(() => {
     // Auto-focus the first input on mount.
-    const t = setTimeout(() => firstRef.current?.focus(), 120);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => firstRef.current?.focus(), 120);
+    return () => clearTimeout(timer);
   }, []);
 
   // ── Resend countdown ──
   useEffect(() => {
     if (resendIn <= 0) return;
-    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
   }, [resendIn]);
 
   // ── Auto-advance / backspace between groups ──
@@ -169,7 +171,7 @@ export default function RegStep6Verify() {
             autoComplete="sms-otp"
             returnKeyType="next"
           />
-          <Text style={styles.dash}>–</Text>
+          <Text style={[styles.dash, { color: t.colors.textTertiary }]}>–</Text>
           <TextField
             ref={secondRef as React.Ref<TextInput>}
             accessibilityLabel="Last three digits"
@@ -193,9 +195,9 @@ export default function RegStep6Verify() {
         {error ? (
           <Text
             accessibilityLiveRegion="polite"
-            style={[styles.errorText, locked && styles.errorLocked]}
+            style={[styles.errorText, { color: t.colors.danger }, locked && styles.errorLocked]}
           >
-            <Ionicons name="alert-circle" size={14} color={locked ? colors.danger : colors.danger} />
+            <Ionicons name="alert-circle" size={14} color={t.colors.danger} />
             {'  '}
             {error}
           </Text>
@@ -210,11 +212,11 @@ export default function RegStep6Verify() {
               hitSlop={8}
               style={styles.resendBtn}
             >
-              <Ionicons name="refresh" size={16} color={colors.primary} />
-              <Text style={styles.resendActive}>Resend a new code</Text>
+              <Ionicons name="refresh" size={16} color={t.colors.primary} />
+              <Text style={[styles.resendActive, { color: t.colors.primary }]}>Resend a new code</Text>
             </Pressable>
           ) : (
-            <Text style={styles.resendIdle}>
+            <Text style={[styles.resendIdle, { color: t.colors.textTertiary }]}>
               Resend a new code in {resendIn}s
             </Text>
           )}
@@ -254,12 +256,10 @@ const styles = StyleSheet.create({
   dash: {
     fontFamily: fonts.displayBold,
     fontSize: 26,
-    color: colors.textTertiary,
   },
   errorText: {
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.danger,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -280,11 +280,9 @@ const styles = StyleSheet.create({
   resendActive: {
     fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    color: colors.primary,
   },
   resendIdle: {
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.textTertiary,
   },
 });

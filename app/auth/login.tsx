@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -17,10 +17,11 @@ import { CheckRow } from '../../src/components/native/CheckRow';
 import { SignInWithAppleButton } from '../../src/components/native/SignInWithAppleButton';
 import { DevSkip } from '../../src/components/DevSkip';
 import { useAppContext } from '../../src/hooks/useAppContext';
-import { authFormStyles } from '../../src/styles/authFormStyles';
+import { createAuthFormStyles } from '../../src/styles/authFormStyles';
 import { hapticSelection } from '../../src/utils/haptics';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 
 const signUpRoute = '/registration/01-who' as Href;
@@ -29,6 +30,8 @@ const talkRoute = '/(tabs)/talk' as Href;
 
 export default function LoginScreen() {
   const router = useRouter();
+  const t = useTheme();
+  const authFormStyles = useMemo(() => createAuthFormStyles(t), [t]);
   const { state, dispatch } = useAppContext();
   const [email, setEmail] = useState(state.user.email);
   const [password, setPassword] = useState('');
@@ -67,7 +70,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.background }]} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -81,7 +84,7 @@ export default function LoginScreen() {
               hitSlop={10}
               style={styles.backBtn}
             >
-              <Ionicons name="chevron-back" size={24} color={colors.text} />
+              <Ionicons name="chevron-back" size={24} color={t.colors.text} />
             </Pressable>
           ) : null}
         </View>
@@ -92,10 +95,10 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.title} accessibilityRole="header">
+          <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">
             Welcome back
           </Text>
-          <Text style={styles.subtitle}>Sign in to continue communicating.</Text>
+          <Text style={[styles.subtitle, { color: t.colors.textMuted }]}>Sign in to continue communicating.</Text>
 
           {/* Apple Sign-In leads the form so users with limited typing
               speed don't have to scroll past email / password to find it. */}
@@ -104,9 +107,9 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>Or use email</Text>
-            <View style={styles.dividerLine} />
+            <View style={[styles.dividerLine, { backgroundColor: t.colors.border }]} />
+            <Text style={[styles.dividerText, { color: t.colors.textTertiary }]}>Or use email</Text>
+            <View style={[styles.dividerLine, { backgroundColor: t.colors.border }]} />
           </View>
 
           <View style={styles.form}>
@@ -149,10 +152,10 @@ export default function LoginScreen() {
                 onPress={() => { hapticSelection(); router.push(forgotRoute); }}
                 hitSlop={8}
               >
-                <Text style={styles.link}>Forgot?</Text>
+                <Text style={[styles.link, { color: t.colors.primary }]}>Forgot?</Text>
               </Pressable>
             </View>
-            <Text style={styles.rememberHelp}>
+            <Text style={[styles.rememberHelp, { color: t.colors.textTertiary }]}>
               Keeps you signed in on this device until you sign out. Turn off
               for a shared device.
             </Text>
@@ -174,8 +177,8 @@ export default function LoginScreen() {
             onPress={() => { hapticSelection(); router.push(signUpRoute); }}
             style={styles.createRow}
           >
-            <Text style={styles.createText}>
-              New to TapTalk? <Text style={styles.link}>Create an account</Text>
+            <Text style={[styles.createText, { color: t.colors.textMuted }]}>
+              New to TapTalk? <Text style={[styles.link, { color: t.colors.primary }]}>Create an account</Text>
             </Text>
           </Pressable>
         </View>
@@ -186,7 +189,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1 },
   flex: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -208,14 +211,12 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.title,
-    color: colors.text,
     letterSpacing: typography.trackTitle,
   },
   subtitle: {
     marginTop: spacing.sm,
     fontFamily: fonts.body,
     fontSize: typography.body,
-    color: colors.textMuted,
   },
   form: { marginTop: spacing.xxl, gap: spacing.lg },
   rememberRow: {
@@ -228,12 +229,10 @@ const styles = StyleSheet.create({
     marginTop: -spacing.sm + 2,
     fontFamily: fonts.body,
     fontSize: typography.caption,
-    color: colors.textTertiary,
     lineHeight: 18,
   },
   link: {
     fontFamily: fonts.displayBold,
-    color: colors.primary,
     fontSize: typography.callout,
   },
   footer: {
@@ -250,14 +249,13 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginVertical: spacing.lg,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border, opacity: 0.5 },
+  dividerLine: { flex: 1, height: 1, opacity: 0.5 },
   dividerText: {
     fontFamily: fonts.body,
     fontSize: typography.caption,
-    color: colors.textTertiary,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   createRow: { alignItems: 'center', marginTop: spacing.xs },
-  createText: { fontFamily: fonts.body, fontSize: typography.callout, color: colors.textMuted },
+  createText: { fontFamily: fonts.body, fontSize: typography.callout },
 });

@@ -4,7 +4,7 @@
  * Replaces the old open dashboard (user card + zero-stats + inline edit form +
  * flat guide list) with a calm, compact, progressively-disclosed settings
  * screen. Structure: Header → User Card → Profile → Settings → Accessibility →
- * Privacy & Data → Library & Guides → About → Sign Out.
+ * Privacy & Data → Tour of TapTalk → About → Sign Out.
  *
  * Design laws applied: 1 (simple first), 3 (expandable sections), 5 (deeper
  * pages on demand), 12 (separate risky actions), 13/14/16 (clear results,
@@ -22,11 +22,14 @@ import {
   Alert,
   Animated,
   Easing,
+  Image,
   LayoutAnimation,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
   Switch,
+  Share,
   Text,
   UIManager,
   View,
@@ -39,10 +42,12 @@ import { Screen } from '../../src/components/native/Screen';
 import { TextField } from '../../src/components/native/TextField';
 import { TapTalkMascot } from '../../src/components/TapTalkMascot';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { splitAppState } from '../../src/context/persistence';
+import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { verifyPin } from '../../src/utils/pin';
-import { hapticSelection } from '../../src/utils/haptics';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { hapticSelection, hapticSuccess } from '../../src/utils/haptics';
+import { radii, spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 
@@ -54,6 +59,7 @@ const APP_VERSION = '0.1.0';
 const voiceRoute = '/settings/voice' as Href;
 const displayRoute = '/settings/display' as Href;
 const attributionRoute = '/symbol-attribution' as Href;
+const tourRoute = '/onboarding/tour' as Href;
 const splashRoute = '/onboarding/splash' as Href;
 
 const USER_TYPE_LABELS: Record<string, string> = {
@@ -61,6 +67,24 @@ const USER_TYPE_LABELS: Record<string, string> = {
   parent: 'Parent / Family',
   support: 'Support worker',
   guardian: 'Therapist',
+};
+
+function speechRateLabel(rate: number): string {
+  if (rate < 0.8) return 'Slow';
+  if (rate > 1.0) return 'Fast';
+  return 'Normal';
+}
+
+const TEXT_SIZE_LABELS: Record<string, string> = {
+  default: 'Default',
+  large: 'Large',
+  xlarge: 'Extra Large',
+  maximum: 'Maximum',
+};
+
+const BUTTON_SIZE_LABELS: Record<string, string> = {
+  standard: 'Standard',
+  large: 'Large',
 };
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -276,6 +300,7 @@ function CollapsibleSection({ title, expanded, onToggle, reduceMotion, children 
 export default function MeScreen() {
   const router = useRouter();
   const reduceMotion = useReduceMotion();
+  const { refreshing, onRefresh } = usePullRefresh();
   const { state, dispatch } = useAppContext();
   const t = useTheme();
 
@@ -284,9 +309,12 @@ export default function MeScreen() {
     settings: false,
     accessibility: false,
     privacy: false,
-    library: false,
+    tour: false,
     about: false,
   });
+  const [nameModalVisible, setNameModalVisible] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [saveNotice, setSaveNotice] = useState('');
   const toggleSection = (key: keyof typeof open) =>
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
 
@@ -297,11 +325,40 @@ export default function MeScreen() {
   const [pinError, setPinError] = useState('');
   const [showPin, setShowPin] = useState(false);
 
+  const themeLabel =
+    state.accessibility.theme === 'dark'
+      ? 'Dark'
+      : state.accessibility.theme === 'system'
+        ? 'System'
+        : 'Light';
+
   const name =
     state.user.displayName || state.user.nickname || state.user.name || 'Guest';
   const initial = name.charAt(0).toUpperCase() || '?';
   const userType = state.user.role ? USER_TYPE_LABELS[state.user.role] ?? 'Other' : 'Not set';
   const hasPhoto = !!state.profilePhotoUri;
+  const voiceLabel = speechRateLabel(state.accessibility.speechRate);
+  const textSizeLabel = TEXT_SIZE_LABELS[state.accessibility.textSize] ?? 'Default';
+  const buttonSizeLabel = BUTTON_SIZE_LABELS[state.accessibility.buttonSize] ?? 'Standard';
+
+  const showSaveNotice = useCallback((message: string) => {
+    setSaveNotice(message);
+    setTimeout(() => setSaveNotice(''), 2200);
+  }, []);
+
+  const saveDisplayName = useCallback(
+    (raw: string) => {
+      const trimmed = raw.trim();
+      if (!trimmed) return;
+      dispatch({
+        type: 'SET_USER',
+        payload: { displayName: trimmed, nickname: trimmed, name: trimmed },
+      });
+      hapticSuccess();
+      showSaveNotice('Profile updated');
+    },
+    [dispatch, showSaveNotice],
+  );
 
   const comingSoon = useCallback((feature: string) => {
     Alert.alert(feature, 'This is coming soon. We are building it with care.', [
@@ -327,7 +384,14 @@ export default function MeScreen() {
       if (index === cancelButtonIndex) return;
       if (hasPhoto && index === destructiveButtonIndex) {
         dispatch({ type: 'SET_PROFILE_PHOTO', payload: null });
-        hapticSelection();
+        hapticSuccess();
+        showSaveNotice('Profile picture removed');
+        return;
+      }
+      if (index === 0) {
+        dispatch({ type: 'SET_PROFILE_PHOTO', payload: null });
+        hapticSuccess();
+        showSaveNotice('Using TapTalk avatar');
         return;
       }
       const option = options[index];
@@ -350,9 +414,10 @@ export default function MeScreen() {
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
-  }, [hasPhoto, dispatch, comingSoon]);
+  }, [hasPhoto, dispatch, comingSoon, showSaveNotice]);
 
   const onEditDisplayName = useCallback(() => {
+    hapticSelection();
     if (Platform.OS === 'ios' && typeof Alert.prompt === 'function') {
       Alert.prompt(
         'Display Name',
@@ -361,20 +426,17 @@ export default function MeScreen() {
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Save',
-            onPress: (text?: string) => {
-              const trimmed = (text ?? '').trim();
-              if (!trimmed) return;
-              dispatch({ type: 'SET_USER', payload: { displayName: trimmed, nickname: trimmed } });
-            },
+            onPress: (text?: string) => saveDisplayName(text ?? ''),
           },
         ],
         'plain-text',
         name === 'Guest' ? '' : name,
       );
     } else {
-      comingSoon('Display Name');
+      setNameDraft(name === 'Guest' ? '' : name);
+      setNameModalVisible(true);
     }
-  }, [name, dispatch, comingSoon]);
+  }, [name, saveDisplayName]);
 
   const onEditUserType = useCallback(() => {
     hapticSelection();
@@ -391,6 +453,8 @@ export default function MeScreen() {
       const role = roles[index]?.role;
       if (!role) return;
       dispatch({ type: 'SET_USER', payload: { role } });
+      hapticSuccess();
+      showSaveNotice('User type updated');
     };
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -403,7 +467,7 @@ export default function MeScreen() {
         { text: 'Cancel', style: 'cancel' as const },
       ]);
     }
-  }, [dispatch, state.user.role]);
+  }, [dispatch, state.user.role, showSaveNotice]);
 
   // Caregiver lock handlers ──
   const toggleLock = useCallback(() => {
@@ -454,9 +518,73 @@ export default function MeScreen() {
     ]);
   }, [dispatch, router]);
 
+  const exportProfileData = useCallback(async () => {
+    hapticSelection();
+    const { hot, cold } = splitAppState(state);
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      locale: 'en-AU',
+      hot,
+      cold: {
+        ...cold,
+        parent: { ...cold.parent, pin: cold.parent.pin ? '[stored on device]' : '' },
+      },
+    };
+    try {
+      await Share.share({
+        title: 'TapTalk profile export',
+        message: JSON.stringify(payload, null, 2),
+      });
+    } catch {
+      Alert.alert(
+        'Export not available',
+        'Sharing could not start on this device. Your data is still stored safely on this iPhone or iPad.',
+        [{ text: 'OK', style: 'cancel' }],
+      );
+    }
+  }, [state]);
+
+  const deleteProfileData = useCallback(() => {
+    Alert.alert(
+      'Delete profile data?',
+      'This removes your profile, boards, lists, and habits from this device. Your display and accessibility choices stay. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            hapticSelection();
+            setCaregiverLocked(false);
+            dispatch({ type: 'SIGN_OUT' });
+            Alert.alert(
+              'Profile data deleted',
+              'Your TapTalk profile on this device has been cleared. Accessibility settings were kept.',
+              [{ text: 'OK', style: 'cancel' }],
+            );
+          },
+        },
+      ],
+    );
+  }, [dispatch]);
+
   return (
-    <Screen title="Profile" subtitle="Your voice, access, and app controls.">
+    <Screen
+      title="Profile"
+      subtitle="Your voice, access, and app controls."
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+    >
       {/* 2 · User Card — always visible; opens the Profile section. */}
+      {saveNotice ? (
+        <Text
+          style={[styles.saveNotice, { color: t.colors.success }]}
+          accessibilityLiveRegion="polite"
+          accessibilityRole="alert"
+        >
+          {saveNotice}
+        </Text>
+      ) : null}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${name}. Voice and AAC profile ready.`}
@@ -468,8 +596,16 @@ export default function MeScreen() {
         style={({ pressed }) => [pressed && styles.userCardPressed]}
       >
         <Card style={styles.userCard}>
-          <View style={styles.avatar}>
-            <Text style={[styles.avatarText, { color: t.colors.surface }]}>{initial}</Text>
+          <View style={[styles.avatar, { backgroundColor: t.colors.primary }]}>
+            {hasPhoto ? (
+              <Image
+                source={{ uri: state.profilePhotoUri! }}
+                style={styles.avatarImage}
+                accessibilityIgnoresInvertColors
+              />
+            ) : (
+              <Text style={[styles.avatarText, { color: t.colors.surface }]}>{initial}</Text>
+            )}
           </View>
           <View style={styles.userCopy}>
             <Text style={[styles.userName, { color: t.colors.text }]} numberOfLines={1}>
@@ -512,7 +648,7 @@ export default function MeScreen() {
         <SettingsRow
           icon="mic-outline"
           label="Voice Name"
-          value="Default"
+          value={voiceLabel}
           hint="Choose the speaking voice"
           onPress={() => router.push(voiceRoute)}
         />
@@ -557,8 +693,14 @@ export default function MeScreen() {
           iconColor="#BD73FF"
           iconBg="#F3EAFF"
           label="Language"
-          value="English"
-          onPress={() => comingSoon('Language')}
+          value="English (AU)"
+          onPress={() =>
+            Alert.alert(
+              'Language',
+              'TapTalk is in Australian English (en-AU). More languages are planned.',
+              [{ text: 'OK', style: 'cancel' }],
+            )
+          }
           showDivider={false}
         />
       </CollapsibleSection>
@@ -570,10 +712,15 @@ export default function MeScreen() {
         onToggle={() => toggleSection('accessibility')}
         reduceMotion={reduceMotion}
       >
+        <Text style={[styles.sectionNote, { color: t.colors.textMuted }]}>
+          Set up TapTalk for AAC users, families, and support workers. Most options live in
+          Display — open it to change text, buttons, and theme.
+        </Text>
         <SettingsRow
           icon="text-outline"
           label="Text Size"
-          hint="Make text larger or smaller"
+          value={textSizeLabel}
+          hint="Opens Display to change label size"
           onPress={() => router.push(displayRoute)}
         />
         <SettingsRow
@@ -581,6 +728,8 @@ export default function MeScreen() {
           iconColor="#5CD65C"
           iconBg="#E8FAE8"
           label="Button Size"
+          value={buttonSizeLabel}
+          hint="Opens Display to change tap target size"
           onPress={() => router.push(displayRoute)}
         />
         <SettingsRow
@@ -589,11 +738,11 @@ export default function MeScreen() {
           iconBg="#FFF4E0"
           label="Reduce Motion"
           value={reduceMotion ? 'On' : 'Follows iOS'}
-          hint="Reduce Motion follows your iOS setting"
+          hint="TapTalk follows the Reduce Motion setting in iOS Settings"
           onPress={() =>
             Alert.alert(
               'Reduce Motion',
-              'TapTalk follows the Reduce Motion setting in iOS Settings → Accessibility → Motion. When it is on, animations become gentle fades.',
+              'TapTalk follows the Reduce Motion setting in iOS Settings → Accessibility → Motion. When it is on, animations become gentle fades instead of movement.',
               [{ text: 'OK', style: 'cancel' }],
             )
           }
@@ -602,28 +751,29 @@ export default function MeScreen() {
           icon="contrast-outline"
           iconColor="#BD73FF"
           iconBg="#F3EAFF"
-          label="Increase Contrast"
+          label="High Contrast"
+          hint="Stronger borders and text in TapTalk"
           toggle={{ value: state.accessibility.highContrast, onValueChange: toggleHighContrast }}
         />
         <SettingsRow
+          icon="color-palette-outline"
+          label="Theme"
+          value={themeLabel}
+          hint="Opens Display to choose light, dark, or system"
+          onPress={() => router.push(displayRoute)}
+        />
+        <SettingsRow
           icon="eye-outline"
-          label="VoiceOver Support"
+          label="VoiceOver"
           value="Built in"
-          hint="Information about screen reader support"
+          hint="Screen reader labels on every control"
           onPress={() =>
             Alert.alert(
-              'VoiceOver Support',
-              'Every control in TapTalk is labelled for VoiceOver. Turn VoiceOver on in iOS Settings → Accessibility.',
+              'VoiceOver',
+              'Every button, tile, and setting in TapTalk has a VoiceOver label and hint. Turn VoiceOver on in iOS Settings → Accessibility → VoiceOver.',
               [{ text: 'OK', style: 'cancel' }],
             )
           }
-        />
-        <SettingsRow
-          icon="heart-outline"
-          iconColor="#FF9500"
-          iconBg="#FFF4E0"
-          label="Calm Feedback"
-          onPress={() => comingSoon('Calm Feedback')}
           showDivider={false}
         />
       </CollapsibleSection>
@@ -636,21 +786,22 @@ export default function MeScreen() {
         reduceMotion={reduceMotion}
       >
         <Text style={[styles.sectionNote, { color: t.colors.textMuted }]}>
-          TapTalk keeps your profile and AAC choices private. Photos are only used when you choose
-          them. You can export or delete your profile data anytime.
+          TapTalk stores your profile and AAC choices on this device using local storage. Nothing
+          is sent to a cloud server by default. Voice and labels use Australian English (en-AU).
+          Photos are only used when you choose them.
         </Text>
 
-        {/* Caregiver lock — preserved feature, lives with trust & control. */}
+        {/* Caregiver lock — PIN protects settings on shared devices. */}
         <SettingsRow
           icon="lock-closed-outline"
           label="Caregiver Lock"
-          hint="Protect settings with a PIN"
+          hint="Requires a PIN before changing settings on a shared iPad or iPhone"
           toggle={{ value: caregiverLocked, onValueChange: toggleLock }}
         />
         {pinPromptVisible ? (
           <View style={[styles.pinPrompt, { backgroundColor: t.colors.input }]}>
             <Text style={[styles.pinPromptLabel, { color: t.colors.text }]}>
-              Enter your 6-digit PIN to disable lock
+              Enter your 6-digit PIN to turn off Caregiver Lock on this shared device
             </Text>
             <View style={styles.pinInputRow}>
               <TextField
@@ -710,25 +861,53 @@ export default function MeScreen() {
           iconColor="#5CD65C"
           iconBg="#E8FAE8"
           label="Camera Access"
-          onPress={() => comingSoon('Camera Access')}
+          onPress={() =>
+            Alert.alert(
+              'Camera Access',
+              'TapTalk only uses the camera when you choose to take a profile photo. You can allow or deny access in iOS Settings → TapTalk → Camera.',
+              [{ text: 'OK', style: 'cancel' }],
+            )
+          }
         />
         <SettingsRow
           icon="images-outline"
           iconColor="#BD73FF"
           iconBg="#F3EAFF"
           label="Photo Access"
-          onPress={() => comingSoon('Photo Access')}
+          onPress={() =>
+            Alert.alert(
+              'Photo Access',
+              'TapTalk only reads photos when you pick one for your profile. You can allow or deny access in iOS Settings → TapTalk → Photos.',
+              [{ text: 'OK', style: 'cancel' }],
+            )
+          }
         />
         <SettingsRow
           icon="phone-portrait-outline"
           label="Local Data"
           value="On this device"
-          onPress={() => comingSoon('Local Data')}
+          hint="How TapTalk stores your data locally"
+          onPress={() =>
+            Alert.alert(
+              'Local data storage',
+              'Your profile, boards, and AAC choices are saved on this iPhone or iPad. TapTalk uses two local storage areas: one for day-to-day AAC use, and one for profile and lists. Data stays on your device unless you export it.',
+              [{ text: 'OK', style: 'cancel' }],
+            )
+          }
+        />
+        <SettingsRow
+          icon="ribbon-outline"
+          iconColor="#FF9500"
+          iconBg="#FFF4E0"
+          label="Mulberry Symbols (CC BY-SA 4.0)"
+          hint="View symbol licence and attribution"
+          onPress={() => router.push(attributionRoute)}
         />
         <SettingsRow
           icon="download-outline"
           label="Export My Data"
-          onPress={() => comingSoon('Export My Data')}
+          hint="Share a copy of your profile as text"
+          onPress={exportProfileData}
         />
         <SettingsRow
           icon="trash-outline"
@@ -736,49 +915,26 @@ export default function MeScreen() {
           iconBg="#FDECEC"
           label="Delete Profile Data"
           destructive
-          hint="Calm, confirmed delete"
-          onPress={() =>
-            Alert.alert(
-              'Delete Profile Data',
-              'This will be available soon. When ready, it will ask you to confirm before anything is removed.',
-              [{ text: 'OK', style: 'cancel' }],
-            )
-          }
+          hint="Removes profile data from this device after confirmation"
+          onPress={deleteProfileData}
           showDivider={false}
         />
       </CollapsibleSection>
 
-      {/* 8 · Library & Guides */}
+      {/* 8 · Tour of TapTalk */}
       <CollapsibleSection
-        title="Library & Guides"
-        expanded={open.library}
-        onToggle={() => toggleSection('library')}
+        title="Tour of TapTalk"
+        expanded={open.tour}
+        onToggle={() => toggleSection('tour')}
         reduceMotion={reduceMotion}
       >
         <SettingsRow
-          icon="book-outline"
-          label="Welcome to TapTalk"
-          onPress={() => comingSoon('Welcome to TapTalk')}
-        />
-        <SettingsRow
-          icon="grid-outline"
-          label="Using the AAC Board"
-          onPress={() => comingSoon('Using the AAC Board')}
-        />
-        <SettingsRow
-          icon="list-outline"
-          label="First-Then and Lists"
-          onPress={() => comingSoon('First-Then and Lists')}
-        />
-        <SettingsRow
-          icon="shield-checkmark-outline"
-          label="Caregiver Controls"
-          onPress={() => comingSoon('Caregiver Controls')}
-        />
-        <SettingsRow
-          icon="information-circle-outline"
-          label="Symbol Licences & Attribution"
-          onPress={() => router.push(attributionRoute)}
+          icon="compass-outline"
+          iconColor="#199AEE"
+          iconBg="#E6F4FD"
+          label="Replay the tour"
+          hint="Walk through Talk, Activity, Tools, and Profile"
+          onPress={() => router.push(tourRoute)}
           showDivider={false}
         />
       </CollapsibleSection>
@@ -790,28 +946,16 @@ export default function MeScreen() {
         onToggle={() => toggleSection('about')}
         reduceMotion={reduceMotion}
       >
+        <Text style={[styles.sectionNote, { color: t.colors.textMuted }]}>
+          TapTalk is an AAC app that helps everyone build and speak messages with symbols,
+          routines, and calm tools — built with care in Adelaide, South Australia.
+        </Text>
         <SettingsRow icon="information-circle-outline" label="App Version" value={APP_VERSION} info />
         <SettingsRow
           icon="ribbon-outline"
-          label="Symbol Licences"
+          label="Mulberry Symbols"
+          hint="Licences and attribution"
           onPress={() => router.push(attributionRoute)}
-        />
-        <SettingsRow
-          icon="library-outline"
-          label="Mulberry Attribution"
-          onPress={() => router.push(attributionRoute)}
-        />
-        <SettingsRow
-          icon="help-buoy-outline"
-          iconColor="#5CD65C"
-          iconBg="#E8FAE8"
-          label="Support"
-          onPress={() => comingSoon('Support')}
-        />
-        <SettingsRow
-          icon="document-text-outline"
-          label="Privacy Policy"
-          onPress={() => comingSoon('Privacy Policy')}
           showDivider={false}
         />
       </CollapsibleSection>
@@ -829,6 +973,56 @@ export default function MeScreen() {
         onPress={signOut}
         variant="danger"
       />
+
+      <Modal
+        visible={nameModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNameModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss display name editor"
+          onPress={() => setNameModalVisible(false)}
+        >
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: t.colors.surface }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, { color: t.colors.text }]}>Display Name</Text>
+            <Text style={[styles.modalDesc, { color: t.colors.textMuted }]}>
+              This is the name shown on your profile.
+            </Text>
+            <TextField
+              accessibilityLabel="Display name"
+              placeholder="e.g. Alex"
+              value={nameDraft}
+              onChangeText={setNameDraft}
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <PrimaryButton
+                accessibilityLabel="Save display name"
+                label="Save"
+                disabled={!nameDraft.trim()}
+                onPress={() => {
+                  saveDisplayName(nameDraft);
+                  setNameModalVisible(false);
+                }}
+                style={styles.modalButton}
+              />
+              <PrimaryButton
+                accessibilityLabel="Cancel"
+                label="Cancel"
+                variant="secondary"
+                onPress={() => setNameModalVisible(false)}
+                style={styles.modalButton}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -841,6 +1035,12 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.xl,
   },
+  saveNotice: {
+    fontFamily: fonts.displayBold,
+    fontSize: typography.caption,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
   userCardPressed: {
     opacity: 0.7,
   },
@@ -850,24 +1050,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 28,
-    backgroundColor: colors.primary,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 56,
+    height: 56,
   },
   avatarText: {
     fontFamily: fonts.displayBlack,
-    color: colors.surface,
     fontSize: 26,
   },
   userCopy: { flex: 1 },
   userName: {
     fontFamily: fonts.displayHeavy,
-    color: colors.text,
     fontSize: typography.subheading,
     letterSpacing: -0.3,
   },
   userMeta: {
     fontFamily: fonts.body,
     marginTop: 2,
-    color: colors.textMuted,
     fontSize: typography.caption,
   },
 
@@ -878,7 +1079,6 @@ const styles = StyleSheet.create({
   sectionEyebrow: {
     fontFamily: fonts.bodyHeavy,
     fontSize: typography.caption,
-    color: colors.textTertiary,
     letterSpacing: 0.8,
     marginBottom: spacing.xs,
     marginLeft: spacing.xs,
@@ -897,7 +1097,6 @@ const styles = StyleSheet.create({
   sectionHeaderTitle: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.body,
-    color: colors.text,
     letterSpacing: -0.2,
   },
   sectionBody: {
@@ -906,7 +1105,6 @@ const styles = StyleSheet.create({
   sectionNote: {
     fontFamily: fonts.body,
     fontSize: typography.caption,
-    color: colors.textMuted,
     lineHeight: 19,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
@@ -922,9 +1120,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     minHeight: 52,
   },
-  rowPressed: {
-    backgroundColor: colors.background,
-  },
   rowIcon: {
     width: 34,
     height: 34,
@@ -936,19 +1131,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    color: colors.text,
-  },
-  rowLabelDestructive: {
-    color: colors.danger,
   },
   rowValue: {
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.textTertiary,
   },
   rowDivider: {
     height: 1,
-    backgroundColor: '#EEF2F6',
     marginLeft: 34 + spacing.md + spacing.md,
   },
 
@@ -964,7 +1153,6 @@ const styles = StyleSheet.create({
   },
   mascotText: {
     fontFamily: fonts.body,
-    color: colors.textMuted,
     fontSize: typography.caption,
     textAlign: 'center',
   },
@@ -974,12 +1162,10 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
     marginBottom: spacing.sm,
     borderRadius: radii.card,
-    backgroundColor: colors.input,
     padding: spacing.md,
   },
   pinPromptLabel: {
     fontFamily: fonts.displayHeavy,
-    color: colors.text,
     fontSize: typography.caption,
     marginBottom: spacing.sm,
   },
@@ -1000,7 +1186,6 @@ const styles = StyleSheet.create({
   },
   pinError: {
     fontFamily: fonts.displayBold,
-    color: colors.danger,
     fontSize: typography.caption,
     marginBottom: spacing.sm,
   },
@@ -1009,6 +1194,34 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   pinButton: {
+    flex: 1,
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  modalTitle: {
+    fontFamily: fonts.displayHeavy,
+    fontSize: typography.subheading,
+  },
+  modalDesc: {
+    fontFamily: fonts.body,
+    fontSize: typography.callout,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  modalButton: {
     flex: 1,
   },
 });

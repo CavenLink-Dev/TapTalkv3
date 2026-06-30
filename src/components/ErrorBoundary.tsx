@@ -1,7 +1,8 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { radii, spacing, typography } from '../theme/tokens';
+import { useTheme } from '../theme/useTheme';
 
 interface Props {
   children: ReactNode;
@@ -10,6 +11,36 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+}
+
+function ErrorBoundaryFallback({
+  error,
+  onReset,
+}: {
+  error: Error | null;
+  onReset: () => void;
+}) {
+  const t = useTheme();
+
+  return (
+    <View style={[styles.container, { backgroundColor: t.colors.background }]}>
+      <View style={styles.icon}>
+        <Ionicons name="warning-outline" size={48} color={t.colors.warning} />
+      </View>
+      <Text style={[styles.title, { color: t.colors.text }]}>Something went wrong</Text>
+      <Text style={[styles.message, { color: t.colors.textMuted }]}>
+        {error?.message ?? 'An unexpected error occurred.'}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Try again"
+        onPress={onReset}
+        style={[styles.button, { backgroundColor: t.colors.primary }]}
+      >
+        <Text style={[styles.buttonText, { color: t.colors.surface }]}>Try Again</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -30,23 +61,10 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <View style={styles.container}>
-          <View style={styles.icon}>
-            <Ionicons name="warning-outline" size={48} color={colors.warning} />
-          </View>
-          <Text style={styles.title}>Something went wrong</Text>
-          <Text style={styles.message}>
-            {this.state.error?.message ?? 'An unexpected error occurred.'}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Try again"
-            onPress={this.handleReset}
-            style={styles.button}
-          >
-            <Text style={styles.buttonText}>Try Again</Text>
-          </Pressable>
-        </View>
+        <ErrorBoundaryFallback
+          error={this.state.error}
+          onReset={this.handleReset}
+        />
       );
     }
 
@@ -60,12 +78,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.button,
-    backgroundColor: colors.primary,
     paddingHorizontal: 32,
     marginTop: spacing.xl,
   },
   buttonText: {
-    color: colors.surface,
     fontSize: typography.body,
     fontWeight: '700',
   },
@@ -73,21 +89,18 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background,
     padding: spacing.xl,
   },
   icon: {
     marginBottom: spacing.lg,
   },
   message: {
-    color: colors.textMuted,
     fontSize: typography.callout,
     textAlign: 'center',
     marginTop: spacing.sm,
     lineHeight: 21,
   },
   title: {
-    color: colors.text,
     fontSize: typography.heading,
     fontWeight: '800',
   },

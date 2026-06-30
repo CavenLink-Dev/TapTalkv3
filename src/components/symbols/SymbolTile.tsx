@@ -10,7 +10,8 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, shadows } from '../../theme/tokens';
+import { shadows } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 export type SymbolTileProps = {
   label:    string;
@@ -31,6 +32,8 @@ export function SymbolTile({
   size = 70,
   noGloss,
 }: SymbolTileProps) {
+  const t = useTheme();
+
   return (
     <View
       style={[
@@ -40,7 +43,7 @@ export function SymbolTile({
           width: size,
           height: size,
           backgroundColor: color,
-          borderColor: colors.symbolOutline,
+          borderColor: t.colors.symbolOutline,
         },
       ]}
     >

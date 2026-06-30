@@ -2,7 +2,8 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { AnimatedChoiceCard } from './AnimatedChoiceCard';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { spacing, typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 interface GuardianQuestionButtonsProps {
   selected: 'yes' | 'no' | null;
@@ -22,12 +23,14 @@ export function GuardianQuestionButtons({
   onSelect,
   entranceDelay = 0,
 }: GuardianQuestionButtonsProps) {
+  const t = useTheme();
+
   return (
     <Animated.View
       entering={FadeInDown.duration(300).delay(entranceDelay)}
       style={styles.container}
     >
-      <Text style={styles.label}>Are you their legal guardian?</Text>
+      <Text style={[styles.label, { color: t.colors.text }]}>Are you their legal guardian?</Text>
       <View style={styles.row}>
         <View style={styles.halfWidth}>
           <AnimatedChoiceCard
@@ -57,7 +60,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: typography.callout,
     fontWeight: '600',
-    color: colors.text,
     textAlign: 'center',
     marginBottom: spacing.md,
   },

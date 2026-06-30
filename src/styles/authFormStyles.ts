@@ -1,28 +1,34 @@
 import { StyleSheet } from 'react-native';
-import { colors, spacing, typography } from '../theme/tokens';
+import { spacing, typography } from '../theme/tokens';
+import type { ThemeValues } from '../theme/useTheme';
 
-export const authFormStyles = StyleSheet.create({
-  button: {
-    marginTop: spacing.md,
-  },
-  field: {
-    marginBottom: spacing.md,
-    marginTop: 6,
-  },
-  label: {
-    color: colors.text,
-    fontSize: typography.caption,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  link: {
-    color: colors.primary,
-    fontSize: typography.callout,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  linkButton: {
-    paddingTop: spacing.lg,
-  },
-});
+export function createAuthFormStyles(t: ThemeValues) {
+  return StyleSheet.create({
+    button: {
+      marginTop: spacing.md,
+    },
+    field: {
+      marginBottom: spacing.md,
+      marginTop: 6,
+    },
+    label: {
+      color: t.colors.text,
+      fontFamily: t.fonts.displayHeavy,
+      fontSize: t.typography.caption,
+      fontWeight: typography.weightEyebrow,
+      letterSpacing: typography.trackEyebrow,
+      textTransform: 'uppercase',
+    },
+    link: {
+      color: t.colors.primary,
+      fontFamily: t.fonts.displayHeavy,
+      fontSize: t.typography.callout,
+      fontWeight: typography.weightHeading,
+      textAlign: 'center',
+    },
+    linkButton: {
+      paddingTop: spacing.lg,
+      minHeight: 44,
+    },
+  });
+}

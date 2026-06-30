@@ -34,7 +34,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { DisclosureRow } from '../../src/components/native/DisclosureRow';
 import { WheelPicker } from '../../src/components/native/WheelPicker';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
 import {
   PlanStep,
@@ -43,6 +43,7 @@ import {
   formatDateKey,
   parseDateKey,
 } from '../../src/features/calendar/store';
+import { useTheme } from '../../src/theme/useTheme';
 
 const SYMBOLS: { name: React.ComponentProps<typeof Ionicons>['name']; color: string; label: string }[] = [
   { name: 'sunny-outline',         color: '#FFB020', label: 'Morning'  },
@@ -128,6 +129,7 @@ function StepEditor({
   onSave: (next: DraftStep) => void;
   onCancel: () => void;
 }) {
+  const t = useTheme();
   const [local, setLocal] = useState<DraftStep>(draft);
 
   React.useEffect(() => {
@@ -140,13 +142,13 @@ function StepEditor({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onCancel}>
-      <SafeAreaView style={styles.sheet} edges={['top']}>
+      <SafeAreaView style={[styles.sheet, { backgroundColor: t.colors.background }]} edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.sheetHeader}>
           <Pressable onPress={onCancel} accessibilityLabel="Cancel" style={styles.sheetTextBtn}>
-            <Text style={styles.sheetCancelText}>Cancel</Text>
+            <Text style={[styles.sheetCancelText, { color: t.colors.textMuted }]}>Cancel</Text>
           </Pressable>
-          <Text style={styles.sheetTitle}>Step {index + 1}</Text>
+          <Text style={[styles.sheetTitle, { color: t.colors.text }]}>Step {index + 1}</Text>
           <Pressable
             onPress={() => {
               if (!local.name.trim()) return;
@@ -169,7 +171,7 @@ function StepEditor({
           overScrollMode="always"
         >
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <Text style={styles.fieldEyebrow}>SYMBOL</Text>
+            <Text style={[styles.fieldEyebrow, { color: t.colors.textMuted }]}>SYMBOL</Text>
             <View style={styles.symGrid}>
               {STEP_SYMBOLS.map((s, idx) => {
                 const active = idx === local.symbolIndex;
@@ -192,26 +194,26 @@ function StepEditor({
                     <View style={[styles.symBg, { backgroundColor: hexAlpha(s.color, 0.18) }]}>
                       <Ionicons name={s.name} size={26} color={s.color} />
                     </View>
-                    <Text style={styles.symLabel}>{s.label}</Text>
+                    <Text style={[styles.symLabel, { color: t.colors.text }]}>{s.label}</Text>
                   </Pressable>
                 );
               })}
             </View>
 
-            <Text style={styles.fieldEyebrow}>STEP NAME</Text>
+            <Text style={[styles.fieldEyebrow, { color: t.colors.textMuted }]}>STEP NAME</Text>
             <TextInput
               value={local.name}
               onChangeText={(t) => setLocal(d => ({ ...d, name: t }))}
               placeholder="e.g. Brush teeth"
-              placeholderTextColor={colors.textTertiary}
-              style={styles.input}
+              placeholderTextColor={t.colors.textTertiary}
+              style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.surface }]}
               maxLength={40}
               returnKeyType="done"
               accessibilityLabel="Step name"
             />
 
-            <Text style={styles.fieldEyebrow}>START TIME</Text>
-            <View style={styles.wheelRow}>
+            <Text style={[styles.fieldEyebrow, { color: t.colors.textMuted }]}>START TIME</Text>
+            <View style={[styles.wheelRow, { backgroundColor: t.colors.surface }]}>
               <WheelPicker
                 values={HOURS}
                 selectedValue={local.hour}
@@ -220,7 +222,7 @@ function StepEditor({
                 format={(v) => String(v).padStart(2, '0')}
                 accessibilityLabel="Start hour"
               />
-              <Text style={styles.wheelSeparator}>:</Text>
+              <Text style={[styles.wheelSeparator, { color: t.colors.textTertiary }]}>:</Text>
               <WheelPicker
                 values={MINUTES}
                 selectedValue={local.minute}
@@ -231,7 +233,7 @@ function StepEditor({
               />
             </View>
 
-            <Text style={styles.fieldEyebrow}>DURATION</Text>
+            <Text style={[styles.fieldEyebrow, { color: t.colors.textMuted }]}>DURATION</Text>
             <View style={styles.durRow}>
               {DURATIONS.map(d => {
                 const active = local.duration === d;
@@ -260,21 +262,21 @@ function StepEditor({
             </View>
 
             <View style={styles.endsAtRow}>
-              <Text style={styles.endsAtLabel}>Ends at</Text>
-              <Text style={styles.endsAtValue}>
+              <Text style={[styles.endsAtLabel, { color: t.colors.textMuted }]}>Ends at</Text>
+              <Text style={[styles.endsAtValue, { color: t.colors.text }]}>
                 {fmtClock(endMin)}
               </Text>
             </View>
 
-            <View style={styles.previewBox}>
+            <View style={[styles.previewBox, { backgroundColor: t.colors.surface }]}>
               <View style={[styles.previewChip, { backgroundColor: hexAlpha(sym.color, 0.18) }]}>
                 <Ionicons name={sym.name} size={28} color={sym.color} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.previewName} numberOfLines={1}>
+                <Text style={[styles.previewName, { color: t.colors.text }]} numberOfLines={1}>
                   {local.name.trim() || 'Your step'}
                 </Text>
-                <Text style={styles.previewTime}>
+                <Text style={[styles.previewTime, { color: t.colors.textMuted }]}>
                   {fmtClock(startMin)} – {fmtClock(endMin)}
                 </Text>
               </View>
@@ -299,6 +301,7 @@ function DateSheet({
   onSave: (next: Date) => void;
   onCancel: () => void;
 }) {
+  const t = useTheme();
   const [year, setYear] = useState(current.getFullYear());
   const [month, setMonth] = useState(current.getMonth());
   const [day, setDay] = useState(current.getDate());
@@ -323,13 +326,13 @@ function DateSheet({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onCancel}>
-      <SafeAreaView style={styles.sheet} edges={['top']}>
+      <SafeAreaView style={[styles.sheet, { backgroundColor: t.colors.background }]} edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.sheetHeader}>
           <Pressable onPress={onCancel} accessibilityLabel="Cancel" style={styles.sheetTextBtn}>
-            <Text style={styles.sheetCancelText}>Cancel</Text>
+            <Text style={[styles.sheetCancelText, { color: t.colors.textMuted }]}>Cancel</Text>
           </Pressable>
-          <Text style={styles.sheetTitle}>Choose Date</Text>
+          <Text style={[styles.sheetTitle, { color: t.colors.text }]}>Choose Date</Text>
           <Pressable
             onPress={() => {
               hapticSelection();
@@ -338,11 +341,11 @@ function DateSheet({
             accessibilityLabel="Save date"
             style={styles.sheetTextBtn}
           >
-            <Text style={styles.sheetSaveText}>Save</Text>
+            <Text style={[styles.sheetSaveText, { color: t.colors.primary }]}>Save</Text>
           </Pressable>
         </View>
         <View style={styles.dateBody}>
-          <View style={styles.wheelRow}>
+          <View style={[styles.wheelRow, { backgroundColor: t.colors.surface }]}>
             <WheelPicker
               values={monthOptions}
               selectedValue={month}
@@ -378,6 +381,7 @@ function DateSheet({
 // ─── Screen ────────────────────────────────────────────────────────────────
 
 export default function NewPlanScreen() {
+  const t = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
   const initialDate = params.date ? parseDateKey(params.date) : new Date();
@@ -474,7 +478,7 @@ export default function NewPlanScreen() {
     : defaultDraft(lastEnd);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <Pressable
@@ -484,9 +488,9 @@ export default function NewPlanScreen() {
           accessibilityLabel="Cancel"
           accessibilityRole="button"
         >
-          <Ionicons name="chevron-back" size={28} color={colors.primary} />
+          <Ionicons name="chevron-back" size={28} color={t.colors.primary} />
         </Pressable>
-        <Text style={styles.title} accessibilityRole="header">New Plan</Text>
+        <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">New Plan</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -501,7 +505,7 @@ export default function NewPlanScreen() {
         >
           {/* Symbol + name */}
           <Card style={styles.section}>
-            <Text style={styles.fieldEyebrow}>SYMBOL</Text>
+            <Text style={[styles.fieldEyebrow, { color: t.colors.textMuted }]}>SYMBOL</Text>
             <View style={styles.symGrid}>
               {SYMBOLS.map((s, idx) => {
                 const active = idx === planSymbolIndex;
@@ -524,19 +528,19 @@ export default function NewPlanScreen() {
                     <View style={[styles.symBg, { backgroundColor: hexAlpha(s.color, 0.18) }]}>
                       <Ionicons name={s.name} size={26} color={s.color} />
                     </View>
-                    <Text style={styles.symLabel}>{s.label}</Text>
+                    <Text style={[styles.symLabel, { color: t.colors.text }]}>{s.label}</Text>
                   </Pressable>
                 );
               })}
             </View>
 
-            <Text style={styles.fieldEyebrow}>PLAN NAME</Text>
+            <Text style={[styles.fieldEyebrow, { color: t.colors.textMuted }]}>PLAN NAME</Text>
             <TextInput
               value={planName}
               onChangeText={setPlanName}
               placeholder="e.g. Morning Routine"
-              placeholderTextColor={colors.textTertiary}
-              style={styles.input}
+              placeholderTextColor={t.colors.textTertiary}
+              style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.surface }]}
               maxLength={40}
               returnKeyType="done"
               accessibilityLabel="Plan name"
@@ -551,13 +555,13 @@ export default function NewPlanScreen() {
             style={({ pressed }) => [styles.dateRow, pressed && { opacity: 0.94 }]}
           >
             <View style={styles.dateIconChip}>
-              <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+              <Ionicons name="calendar-outline" size={20} color={t.colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.dateLabel}>Date</Text>
-              <Text style={styles.dateValue}>{dayLabel(date)}</Text>
+              <Text style={[styles.dateLabel, { color: t.colors.textMuted }]}>Date</Text>
+              <Text style={[styles.dateValue, { color: t.colors.text }]}>{dayLabel(date)}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+            <Ionicons name="chevron-forward" size={20} color={t.colors.textTertiary} />
           </Pressable>
 
           {/* Description (optional) */}
@@ -573,7 +577,7 @@ export default function NewPlanScreen() {
               value={description}
               onChangeText={setDescription}
               placeholder="e.g. Calm start to the day."
-              placeholderTextColor={colors.textTertiary}
+              placeholderTextColor={t.colors.textTertiary}
               style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
               multiline
               maxLength={140}
@@ -584,13 +588,13 @@ export default function NewPlanScreen() {
           {/* Steps */}
           <View style={styles.section}>
             <View style={styles.stepsHeader}>
-              <Text style={styles.stepsTitle}>Steps</Text>
-              <Text style={styles.stepsCount}>{steps.length} step{steps.length === 1 ? '' : 's'}</Text>
+              <Text style={[styles.stepsTitle, { color: t.colors.text }]}>Steps</Text>
+              <Text style={[styles.stepsCount, { color: t.colors.textMuted }]}>{steps.length} step{steps.length === 1 ? '' : 's'}</Text>
             </View>
 
             {steps.length === 0 ? (
-              <View style={styles.stepsEmpty}>
-                <Text style={styles.stepsEmptyText}>
+              <View style={[styles.stepsEmpty, { backgroundColor: t.colors.surface }]}>
+                <Text style={[styles.stepsEmptyText, { color: t.colors.textMuted }]}>
                   Add steps in order. They start from Step 1 and run top to bottom.
                 </Text>
               </View>
@@ -602,7 +606,7 @@ export default function NewPlanScreen() {
                   const endMin = startMin + s.duration;
                   return (
                     <View key={s.id} style={styles.stepRow}>
-                      <Text style={styles.stepNumber}>{idx + 1}</Text>
+                      <Text style={[styles.stepNumber, { color: t.colors.textMuted }]}>{idx + 1}</Text>
                       <Pressable
                         onPress={() => openEditStep(idx)}
                         accessibilityRole="button"
@@ -613,10 +617,10 @@ export default function NewPlanScreen() {
                           <Ionicons name={sym.name} size={22} color={sym.color} />
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.stepName} numberOfLines={1}>
+                          <Text style={[styles.stepName, { color: t.colors.text }]} numberOfLines={1}>
                             {s.name || 'Untitled step'}
                           </Text>
-                          <Text style={styles.stepTime}>
+                          <Text style={[styles.stepTime, { color: t.colors.textMuted }]}>
                             {fmtClock(startMin)} – {fmtClock(endMin)} · {s.duration} min
                           </Text>
                         </View>
@@ -626,7 +630,7 @@ export default function NewPlanScreen() {
                           accessibilityLabel={`Delete step ${idx + 1}`}
                           style={styles.deleteHit}
                         >
-                          <Ionicons name="close-circle" size={22} color={colors.textTertiary} />
+                          <Ionicons name="close-circle" size={22} color={t.colors.textTertiary} />
                         </Pressable>
                       </Pressable>
                     </View>
@@ -641,10 +645,10 @@ export default function NewPlanScreen() {
               accessibilityLabel="Add a step"
               style={({ pressed }) => [styles.addStepBtn, pressed && { opacity: 0.85 }]}
             >
-              <View style={styles.addStepBubble}>
-                <Ionicons name="add" size={26} color={colors.surface} />
+              <View style={[styles.addStepBubble, { backgroundColor: t.colors.primary }]}>
+                <Ionicons name="add" size={26} color={t.colors.surface} />
               </View>
-              <Text style={styles.addStepLabel}>
+              <Text style={[styles.addStepLabel, { color: t.colors.primary }]}>
                 {steps.length === 0 ? 'Add first step' : 'Add another step'}
               </Text>
             </Pressable>
@@ -665,14 +669,14 @@ export default function NewPlanScreen() {
             <Ionicons
               name="checkmark"
               size={22}
-              color={canSave ? colors.surface : colors.textTertiary}
+              color={canSave ? t.colors.surface : t.colors.textTertiary}
             />
-            <Text style={[styles.saveBtnText, !canSave && { color: colors.textTertiary }]}>
+            <Text style={[styles.saveBtnText, !canSave && { color: t.colors.textTertiary }]}>
               Save Plan
             </Text>
           </Pressable>
           {!canSave ? (
-            <Text style={styles.saveHint}>
+            <Text style={[styles.saveHint, { color: t.colors.textMuted }]}>
               Add a name and at least one step to save.
             </Text>
           ) : null}
@@ -703,81 +707,70 @@ export default function NewPlanScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1},
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
+    paddingVertical: spacing.sm},
   headerIconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: {
     flex: 1,
     textAlign: 'center',
     fontSize: typography.heading,
     fontWeight: '900',
-    color: colors.text,
-    letterSpacing: typography.trackHeading,
-  },
+
+    letterSpacing: typography.trackHeading},
   headerSpacer: { width: 44 },
 
   scroll: {
     padding: spacing.lg,
     paddingBottom: 60,
-    gap: spacing.lg,
-  },
+    gap: spacing.lg},
 
   section: {
-    gap: spacing.md,
-  },
+    gap: spacing.md},
 
   fieldEyebrow: {
     fontSize: typography.caption,
     fontWeight: '800',
-    color: colors.textMuted,
+
     letterSpacing: 1.1,
     textTransform: 'uppercase',
-    marginTop: spacing.sm,
-  },
+    marginTop: spacing.sm},
 
   input: {
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     fontSize: typography.body,
-    color: colors.text,
-    minHeight: 52,
-  },
+
+    minHeight: 52},
 
   symGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   symTile: {
     width: '30%',
     aspectRatio: 0.95,
     padding: 6,
     borderRadius: radii.card,
-    backgroundColor: colors.surface,
+
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-  },
+    gap: 4},
   symBg: {
     width: 52,
     height: 52,
     borderRadius: 26,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   symLabel: {
     fontSize: typography.caption,
-    fontWeight: '700',
-    color: colors.text,
-  },
+    fontWeight: '700'},
 
   dateRow: {
     flexDirection: 'row',
@@ -785,104 +778,83 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
-    minHeight: 60,
-  },
+    minHeight: 60},
   dateIconChip: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: '#E6F4FD',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   dateLabel: {
     fontSize: typography.caption,
     fontWeight: '700',
-    color: colors.textMuted,
+
     letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   dateValue: {
     marginTop: 2,
     fontSize: typography.body,
-    fontWeight: '700',
-    color: colors.text,
-  },
+    fontWeight: '700'},
 
   stepsHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   stepsTitle: {
     fontSize: typography.subheading,
-    fontWeight: '800',
-    color: colors.text,
-  },
+    fontWeight: '800'},
   stepsCount: {
     fontSize: typography.caption,
-    color: colors.textMuted,
-    fontWeight: '700',
-  },
+
+    fontWeight: '700'},
   stepsEmpty: {
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
     padding: spacing.lg,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   stepsEmptyText: {
     fontSize: typography.callout,
-    color: colors.textMuted,
+
     textAlign: 'center',
-    lineHeight: 22,
-  },
+    lineHeight: 22},
 
   stepRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   stepNumber: {
     width: 24,
     textAlign: 'center',
     fontSize: typography.callout,
-    fontWeight: '800',
-    color: colors.textMuted,
-  },
+    fontWeight: '800'},
   stepCard: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-  },
+
+    borderRadius: radii.card},
   stepChip: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   stepName: {
     fontSize: typography.body,
-    fontWeight: '700',
-    color: colors.text,
-  },
+    fontWeight: '700'},
   stepTime: {
     marginTop: 2,
-    fontSize: typography.caption,
-    color: colors.textMuted,
-  },
+    fontSize: typography.caption},
   deleteHit: {
     width: 28,
     height: 28,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
 
   addStepBtn: {
     flexDirection: 'row',
@@ -892,50 +864,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     backgroundColor: '#E6F4FD',
     borderRadius: radii.card,
-    marginTop: spacing.sm,
-  },
+    marginTop: spacing.sm},
   addStepBubble: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primary,
+
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   addStepLabel: {
     fontSize: typography.body,
-    fontWeight: '800',
-    color: colors.primary,
-  },
+    fontWeight: '800'},
 
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.primary,
+
     paddingVertical: 18,
     borderRadius: radii.pill,
     minHeight: 60,
-    marginTop: spacing.md,
-  },
+    marginTop: spacing.md},
   saveBtnDisabled: {
-    backgroundColor: colors.disabled,
+
   },
   saveBtnText: {
-    color: colors.surface,
+
     fontSize: typography.body,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
   saveHint: {
     textAlign: 'center',
     fontSize: typography.caption,
-    color: colors.textMuted,
-    marginTop: spacing.xs,
-  },
+
+    marginTop: spacing.xs},
 
   // ── Sheets ─────────────────────────────────────────────────────────────
-  sheet: { flex: 1, backgroundColor: colors.background },
+  sheet: { flex: 1},
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -943,64 +908,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomColor: '#E0E5EA',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+    borderBottomWidth: StyleSheet.hairlineWidth},
   sheetTextBtn: { paddingHorizontal: 4, paddingVertical: 6 },
   sheetCancelText: {
-    color: colors.textMuted,
+
     fontSize: typography.body,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   sheetSaveText: {
-    color: colors.primary,
+
     fontSize: typography.body,
-    fontWeight: '800',
-  },
-  sheetSaveDisabled: { color: colors.textTertiary },
+    fontWeight: '800'},
+  sheetSaveDisabled: { },
   sheetTitle: {
     fontSize: typography.subheading,
-    fontWeight: '800',
-    color: colors.text,
-  },
+    fontWeight: '800'},
   sheetBody: {
     padding: spacing.lg,
     gap: spacing.md,
-    paddingBottom: 60,
-  },
+    paddingBottom: 60},
 
   wheelRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
     paddingVertical: spacing.md,
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   wheelSeparator: {
     fontSize: 22,
     fontWeight: '700',
-    color: colors.textTertiary,
-    paddingBottom: 50,
-  },
+
+    paddingBottom: 50},
 
   durRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-  },
+    gap: 6},
   durChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-  },
-  durChipActive: { backgroundColor: colors.primary },
+    borderRadius: radii.pill},
+  durChipActive: { },
   durChipText: {
     fontSize: typography.callout,
-    fontWeight: '700',
-    color: colors.textMuted,
-  },
+    fontWeight: '700'},
   durChipTextActive: { color: '#FFFFFF' },
 
   endsAtRow: {
@@ -1008,48 +960,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
+    paddingVertical: spacing.sm},
   endsAtLabel: {
     fontSize: typography.callout,
-    fontWeight: '700',
-    color: colors.textMuted,
-  },
+    fontWeight: '700'},
   endsAtValue: {
     fontSize: typography.body,
-    fontWeight: '800',
-    color: colors.text,
-  },
+    fontWeight: '800'},
 
   previewBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
-    padding: spacing.md,
-  },
+    padding: spacing.md},
   previewChip: {
     width: 48,
     height: 48,
     borderRadius: 24,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   previewName: {
     fontSize: typography.body,
-    fontWeight: '800',
-    color: colors.text,
-  },
+    fontWeight: '800'},
   previewTime: {
     marginTop: 2,
-    fontSize: typography.caption,
-    color: colors.textMuted,
-  },
+    fontSize: typography.caption},
 
   dateBody: {
     flex: 1,
     padding: spacing.lg,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
 });

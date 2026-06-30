@@ -30,7 +30,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { WheelPicker } from '../../src/components/native/WheelPicker';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
 import {
   FirstThenItem,
@@ -38,6 +38,7 @@ import {
   updateFirstThen,
   useFirstThenItems,
 } from '../../src/features/first-then/store';
+import { useTheme } from '../../src/theme/useTheme';
 
 type SymbolOption = {
   name: React.ComponentProps<typeof Ionicons>['name'];
@@ -81,6 +82,7 @@ function findSymbolIndex(item: FirstThenItem | undefined): number | null {
 }
 
 export default function AddStepScreen() {
+  const t = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const items = useFirstThenItems();
@@ -129,7 +131,7 @@ export default function AddStepScreen() {
   const totalDuration = hours * 3600 + minutes * 60 + seconds;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
@@ -140,9 +142,9 @@ export default function AddStepScreen() {
           accessibilityLabel="Cancel"
           accessibilityRole="button"
         >
-          <Ionicons name="chevron-back" size={28} color={colors.primary} />
+          <Ionicons name="chevron-back" size={28} color={t.colors.primary} />
         </Pressable>
-        <Text style={styles.headerTitle} accessibilityRole="header">
+        <Text style={[styles.headerTitle, { color: t.colors.text }]} accessibilityRole="header">
           {isEdit ? 'Edit Step' : 'Add Step'}
         </Text>
         <View style={styles.headerSpacer} />
@@ -172,17 +174,17 @@ export default function AddStepScreen() {
                 <Ionicons name={selectedSym.name} size={56} color={selectedSym.color} />
               </View>
             ) : (
-              <View style={styles.previewChipEmpty}>
-                <Ionicons name="image-outline" size={40} color={colors.textTertiary} />
+              <View style={[styles.previewChipEmpty, { borderColor: t.colors.border }]}>
+                <Ionicons name="image-outline" size={40} color={t.colors.textTertiary} />
               </View>
             )}
-            <Text style={styles.previewName} numberOfLines={1}>
+            <Text style={[styles.previewName, { color: t.colors.text }]} numberOfLines={1}>
               {name.trim() || (selectedSym ? 'Your step' : 'Pick a symbol below')}
             </Text>
             {totalDuration > 0 ? (
               <View style={styles.previewTimer}>
-                <Ionicons name="time-outline" size={16} color={colors.primary} />
-                <Text style={styles.previewTimerText}>
+                <Ionicons name="time-outline" size={16} color={t.colors.primary} />
+                <Text style={[styles.previewTimerText, { color: t.colors.primary }]}>
                   {hours > 0 ? `${hours}h ` : ''}{minutes > 0 ? `${minutes}m ` : ''}{seconds > 0 ? `${seconds}s` : ''}
                 </Text>
               </View>
@@ -192,15 +194,15 @@ export default function AddStepScreen() {
           {/* Section 1 — name */}
           <View style={styles.section}>
             <View style={styles.sectionHead}>
-              <View style={styles.sectionNum}><Text style={styles.sectionNumText}>1</Text></View>
-              <Text style={styles.sectionTitle}>What is the step?</Text>
+              <View style={[styles.sectionNum, { backgroundColor: t.colors.primary }]}><Text style={[styles.sectionNumText, { color: t.colors.surface }]}>1</Text></View>
+              <Text style={[styles.sectionTitle, { color: t.colors.text }]}>What is the step?</Text>
             </View>
             <TextInput
               value={name}
               onChangeText={setName}
               placeholder="e.g. Brush teeth"
-              placeholderTextColor={colors.textTertiary}
-              style={styles.input}
+              placeholderTextColor={t.colors.textTertiary}
+              style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.surface }]}
               autoCorrect={false}
               maxLength={40}
               returnKeyType="done"
@@ -211,10 +213,10 @@ export default function AddStepScreen() {
           {/* Section 2 — h/m/s pickers */}
           <View style={styles.section}>
             <View style={styles.sectionHead}>
-              <View style={styles.sectionNum}><Text style={styles.sectionNumText}>2</Text></View>
-              <Text style={styles.sectionTitle}>How long? (optional)</Text>
+              <View style={[styles.sectionNum, { backgroundColor: t.colors.primary }]}><Text style={[styles.sectionNumText, { color: t.colors.surface }]}>2</Text></View>
+              <Text style={[styles.sectionTitle, { color: t.colors.text }]}>How long? (optional)</Text>
             </View>
-            <View style={styles.wheelRow}>
+            <View style={[styles.wheelRow, { backgroundColor: t.colors.surface }]}>
               <WheelPicker
                 values={HOURS}
                 selectedValue={hours}
@@ -223,7 +225,7 @@ export default function AddStepScreen() {
                 format={(v) => pad2(v)}
                 accessibilityLabel="Hours"
               />
-              <Text style={styles.wheelSeparator}>:</Text>
+              <Text style={[styles.wheelSeparator, { color: t.colors.textTertiary }]}>:</Text>
               <WheelPicker
                 values={MINUTES}
                 selectedValue={minutes}
@@ -232,7 +234,7 @@ export default function AddStepScreen() {
                 format={(v) => pad2(v)}
                 accessibilityLabel="Minutes"
               />
-              <Text style={styles.wheelSeparator}>:</Text>
+              <Text style={[styles.wheelSeparator, { color: t.colors.textTertiary }]}>:</Text>
               <WheelPicker
                 values={SECONDS}
                 selectedValue={seconds}
@@ -242,7 +244,7 @@ export default function AddStepScreen() {
                 accessibilityLabel="Seconds"
               />
             </View>
-            <Text style={styles.wheelHint}>
+            <Text style={[styles.wheelHint, { color: t.colors.textMuted }]}>
               Leave at 00:00:00 for a step that needs no timer.
             </Text>
           </View>
@@ -250,8 +252,8 @@ export default function AddStepScreen() {
           {/* Section 3 — symbol */}
           <View style={styles.section}>
             <View style={styles.sectionHead}>
-              <View style={styles.sectionNum}><Text style={styles.sectionNumText}>3</Text></View>
-              <Text style={styles.sectionTitle}>Pick a symbol</Text>
+              <View style={[styles.sectionNum, { backgroundColor: t.colors.primary }]}><Text style={[styles.sectionNumText, { color: t.colors.surface }]}>3</Text></View>
+              <Text style={[styles.sectionTitle, { color: t.colors.text }]}>Pick a symbol</Text>
             </View>
             <View style={styles.symbolGrid}>
               {SYMBOLS.map((s, idx) => {
@@ -280,7 +282,7 @@ export default function AddStepScreen() {
                     >
                       <Ionicons name={s.name} size={34} color={s.color} />
                     </View>
-                    <Text style={styles.symbolTileLabel}>{s.label}</Text>
+                    <Text style={[styles.symbolTileLabel, { color: t.colors.text }]}>{s.label}</Text>
                   </Pressable>
                 );
               })}
@@ -302,9 +304,9 @@ export default function AddStepScreen() {
             <Ionicons
               name="checkmark"
               size={22}
-              color={canSave ? colors.surface : colors.textTertiary}
+              color={canSave ? t.colors.surface : t.colors.textTertiary}
             />
-            <Text style={[styles.saveBtnText, !canSave && { color: colors.textTertiary }]}>
+            <Text style={[styles.saveBtnText, !canSave && { color: t.colors.textTertiary }]}>
               {isEdit ? 'Save Changes' : 'Save Step'}
             </Text>
           </Pressable>
@@ -315,61 +317,54 @@ export default function AddStepScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1},
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
+    paddingVertical: spacing.sm},
   headerIconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: {
     flex: 1,
     textAlign: 'center',
     fontSize: typography.heading,
     fontWeight: '900',
-    color: colors.text,
-    letterSpacing: typography.trackHeading,
-  },
+
+    letterSpacing: typography.trackHeading},
   headerSpacer: { width: 44 },
 
   scroll: {
     padding: spacing.lg,
     paddingBottom: 60,
-    gap: spacing.xl,
-  },
+    gap: spacing.xl},
 
   preview: {
     alignItems: 'center',
     gap: spacing.sm,
-    paddingVertical: spacing.lg,
-  },
+    paddingVertical: spacing.lg},
   previewChipEmpty: {
     width: 120,
     height: 120,
     borderRadius: 60,
     borderWidth: 2,
-    borderColor: colors.border,
+
     borderStyle: 'dashed',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   previewChip: {
     width: 120,
     height: 120,
     borderRadius: 60,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   previewName: {
     fontSize: typography.heading,
     fontWeight: '800',
-    color: colors.text,
+
     marginTop: spacing.xs,
     letterSpacing: typography.trackHeading,
-    maxWidth: '90%',
-  },
+    maxWidth: '90%'},
   previewTimer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -377,116 +372,98 @@ const styles = StyleSheet.create({
     backgroundColor: '#E6F4FD',
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
   previewTimerText: {
     fontSize: typography.callout,
-    fontWeight: '700',
-    color: colors.primary,
-  },
+    fontWeight: '700'},
 
   section: { gap: spacing.md },
   sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   sectionNum: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.primary,
+
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   sectionNumText: {
-    color: colors.surface,
+
     fontWeight: '900',
-    fontSize: typography.callout,
-  },
+    fontSize: typography.callout},
   sectionTitle: {
     fontSize: typography.subheading,
     fontWeight: '800',
-    color: colors.text,
-    letterSpacing: typography.trackSubhead,
-  },
+
+    letterSpacing: typography.trackSubhead},
 
   input: {
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
     paddingHorizontal: spacing.lg,
     paddingVertical: 16,
     fontSize: typography.body,
-    color: colors.text,
-    minHeight: 56,
-  },
+
+    minHeight: 56},
 
   wheelRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
+
     borderRadius: radii.card,
     paddingVertical: spacing.md,
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
   wheelSeparator: {
     fontSize: 22,
     fontWeight: '700',
-    color: colors.textTertiary,
-    paddingBottom: 50,
-  },
+
+    paddingBottom: 50},
   wheelHint: {
     fontSize: typography.caption,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
+
+    textAlign: 'center'},
 
   symbolGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   symbolTile: {
     width: '30%',
     aspectRatio: 0.95,
     padding: 6,
     borderRadius: radii.card,
-    backgroundColor: colors.surface,
+
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-  },
+    gap: 4},
   symbolTileBg: {
     width: 64,
     height: 64,
     borderRadius: 32,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   symbolTileLabel: {
     fontSize: typography.caption,
-    fontWeight: '700',
-    color: colors.text,
-  },
+    fontWeight: '700'},
 
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.primary,
+
     paddingVertical: 18,
     borderRadius: radii.pill,
     minHeight: 60,
-    marginTop: spacing.md,
-  },
+    marginTop: spacing.md},
   saveBtnDisabled: {
-    backgroundColor: colors.disabled,
+
   },
   saveBtnText: {
-    color: colors.surface,
+
     fontSize: typography.body,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
 });

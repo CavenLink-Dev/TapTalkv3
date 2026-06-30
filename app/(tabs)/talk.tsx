@@ -33,11 +33,12 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Polyline } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, useRouter } from 'expo-router';
-import { BackspaceIcon, BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
+import { BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
+import { TalkMessageStrip, type MessageStripTile } from '../../src/components/talk/TalkMessageStrip';
 import { MulberrySymbol, prewarmMulberryAssets } from '../../src/components/symbols/MulberrySymbol';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
-import { animation, colors, spacing } from '../../src/theme/tokens';
+import { animation, spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
@@ -145,14 +146,11 @@ const TOP_TAB_META: Record<TopTab, { icon: React.ComponentProps<typeof Ionicons>
   clear:   { icon: 'close-circle-outline',   label: 'CLEAR'   },
 };
 
-// Idle / active colours, kept inline so the tint animation has explicit
-// endpoints to interpolate between.
-const TOP_TAB_IDLE_COLOR   = '#8A8F95';
 // Active state mirrors the bottom-nav outline weight — a deep neutral
 // rather than brand blue, so the press feedback reads as "selected" without
 // shouting. Was `colors.primary` (#199AEE); the blue felt disconnected from
 // the rest of the chrome.
-const TOP_TAB_ACTIVE_COLOR = colors.symbolOutline;
+const TOP_TAB_IDLE_COLOR = '#8A8F95';
 
 // ─── Symbol palette ──────────────────────────────────────────────────────────
 // Vibrant, matte primaries chosen from the iOS system palette. The tile
@@ -232,12 +230,22 @@ const BACK_TILE: BoardTile = { id: 'back', label: 'Back', kind: 'action', color:
 const HOME_TILE: BoardTile = { id: 'home', label: 'Home', kind: 'action', color: '#6B7580' };
 
 const BoardNavTile = React.memo(function BoardNavTile({ tile, size }: { tile: BoardTile; size: number }) {
+  const t = useTheme();
   return (
-    <View style={[styles.navTileShell, { width: size, height: size }]}>
+    <View
+      style={[
+        styles.navTileShell,
+        { width: size, height: size, backgroundColor: t.isDark ? t.colors.input : '#E8EBED' },
+      ]}
+    >
       <View style={styles.navTileIconMount}>
         {tile.id === 'back' ? <BoardBackIcon size={40} /> : <BoardHomeIcon size={40} />}
       </View>
-      <Text style={styles.navTileLabel} numberOfLines={1} adjustsFontSizeToFit>
+      <Text
+        style={[styles.navTileLabel, { color: t.isDark ? t.colors.textMuted : '#4B555C' }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {tile.label}
       </Text>
     </View>
@@ -261,6 +269,7 @@ function TileSymbol({ tile, size, resolved }: { tile: BoardTile; size: number; r
 }
 
 function BoardFolderTile({ tile, size, resolved }: { tile: BoardTile; size: number; resolved?: ResolvedSymbol }) {
+  const t = useTheme();
   // Folder tiles render at the same square footprint as word tiles so the
   // grid reads as one rhythm regardless of `kind`.
   return (
@@ -270,7 +279,11 @@ function BoardFolderTile({ tile, size, resolved }: { tile: BoardTile; size: numb
         resizeMode="stretch"
         style={[styles.tileBackground, { width: size, height: size }]}
       />
-      <Text style={styles.folderLabel} numberOfLines={1} adjustsFontSizeToFit>
+      <Text
+        style={[styles.folderLabel, { color: t.colors.text }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {tile.label}
       </Text>
       <TileSymbol tile={tile} size={size} resolved={resolved} />
@@ -279,6 +292,7 @@ function BoardFolderTile({ tile, size, resolved }: { tile: BoardTile; size: numb
 }
 
 function BoardWordTile({ tile, size, resolved }: { tile: BoardTile; size: number; resolved?: ResolvedSymbol }) {
+  const t = useTheme();
   const isFallback =
     resolved != null &&
     !tile.mulberrySymbolId &&
@@ -299,66 +313,24 @@ function BoardWordTile({ tile, size, resolved }: { tile: BoardTile; size: number
       />
       {isFallback ? (
         <View
-          style={[StyleSheet.absoluteFillObject, styles.wordTileFallbackBorder]}
+          style={[
+            StyleSheet.absoluteFillObject,
+            styles.wordTileFallbackBorder,
+            { borderColor: t.isDark ? t.colors.textTertiary : '#8A8F95' },
+          ]}
           pointerEvents="none"
         />
       ) : null}
-      <Text style={styles.wordLabel} numberOfLines={1} adjustsFontSizeToFit>
+      <Text
+        style={[styles.wordLabel, { color: t.colors.text }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {isFallback ? '≈ ' : ''}{tile.label}
       </Text>
       <TileSymbol tile={tile} size={size} resolved={resolved} />
     </View>
   );
-}
-
-function MessageChip({
-  tile,
-  label,
-  onRemove,
-}: {
-  tile?: BoardTile;
-  label: string;
-  onRemove?: () => void;
-}) {
-  const chipTile = tile ?? {
-    id: label,
-    label,
-    kind: 'word' as const,
-    color: '#5CC9E8',
-    background: 'cyan' as const,
-  };
-
-  const inner = (
-    <>
-      <Image
-        source={wordBackgroundForTile(chipTile)}
-        resizeMode="stretch"
-        style={styles.messageChipBackground}
-      />
-      <Text style={styles.messageChipLabel} numberOfLines={1} adjustsFontSizeToFit>
-        {label}
-      </Text>
-    </>
-  );
-
-  // When removable (item 10): chips become Pressable so VoiceOver users and
-  // sighted users can tap to remove individual words without backspacing
-  // from the end. Principle 5 — deeper detail in-place; Principle 20 — hit
-  // target kept at the full chip size.
-  if (onRemove) {
-    return (
-      <Pressable
-        onPress={onRemove}
-        accessibilityRole="button"
-        accessibilityLabel={`Remove ${label}`}
-        style={({ pressed }) => [styles.messageChip, pressed && { opacity: 0.7 }]}
-      >
-        {inner}
-      </Pressable>
-    );
-  }
-
-  return <View style={styles.messageChip}>{inner}</View>;
 }
 
 function GhostTileClone({
@@ -470,6 +442,7 @@ function BoardTileButton({
   tileRects,
   jiggle,
 }: BoardTileButtonProps) {
+  const t = useTheme();
   const pressableRef = useRef<View>(null);
   const scale = useRef(new RNAnimated.Value(1)).current;
   // Item 2 — RM: swap spring scale for an opacity dip so the tile
@@ -551,6 +524,7 @@ function BoardTileButton({
       for (const otherId in rects) {
         if (otherId === tile.id) continue;
         const r = rects[otherId];
+        if (!r) continue;
         const cx = r.x + r.width / 2;
         const cy = r.y + r.height / 2;
         const d = Math.hypot(cx - dropX, cy - dropY);
@@ -618,9 +592,9 @@ function BoardTileButton({
           accessibilityLabel={`Remove ${tile.label}`}
           onPress={() => onHide(tile)}
           hitSlop={10}
-          style={styles.deleteBadge}
+          style={[styles.deleteBadge, { backgroundColor: t.colors.danger }]}
         >
-          <Ionicons name="close" size={16} color={colors.surface} />
+          <Ionicons name="close" size={16} color={t.colors.surface} />
         </Pressable>
       ) : null}
     </>
@@ -656,7 +630,7 @@ function BoardTileButton({
           style={({ pressed }) => [
             styles.tilePressable,
             pressed && !editMode && styles.tilePressed,
-            isDraggable && styles.tileEditOutline,
+            isDraggable && [styles.tileEditOutline, { borderColor: t.colors.primary }],
           ]}
         >
           {tileContent}
@@ -712,7 +686,7 @@ function TopNavTab({
   const reduceMotion = useReduceMotion();
   const t = useTheme();
   const idleColor = t.isDark ? t.colors.textTertiary : TOP_TAB_IDLE_COLOR;
-  const activeColor = t.isDark ? t.colors.symbolOutline : TOP_TAB_ACTIVE_COLOR;
+  const activeColor = t.colors.symbolOutline;
 
   // Single shared value drives both colour and scale so the active tab
   // brightens and lifts together. JS-driver because of the colour
@@ -986,16 +960,39 @@ export default function TalkScreen() {
     });
     return lookup;
   }, []);
-  const messageText = useMemo(
-    () => state.messageWords.map(word => word.label).join(' '),
-    [state.messageWords],
-  );
-  const hasWords = state.messageWords.length > 0;
-  const visibleMessageWords = state.messageWords.slice(0, MESSAGE_SLOT_COUNT);
 
   const announce = useCallback((message: string) => {
     AccessibilityInfo.announceForAccessibility(message);
   }, []);
+
+  const handleStripSpeak = useCallback((messageText: string, hasWords: boolean) => {
+    if (!messageText.trim() || !hasWords) {
+      announce('No message to speak');
+      return;
+    }
+    speak(messageText, {
+      rate: state.accessibility.speechRate,
+      pitch: state.accessibility.speechPitch,
+    });
+    announce(`Speaking: ${messageText}`);
+  }, [announce, speak, state.accessibility.speechPitch, state.accessibility.speechRate]);
+
+  const handleStripBackspace = useCallback((hasWords: boolean) => {
+    hapticIfEnabled();
+    if (hasWords) {
+      dispatch({ type: 'REMOVE_LAST_WORD' });
+      return;
+    }
+    setActiveMode('home');
+    setPreviousMode(null);
+    setActiveTab('taptalk');
+  }, [dispatch, hapticIfEnabled]);
+
+  const handleStripRemoveWord = useCallback((index: number, label: string) => {
+    hapticIfEnabled();
+    dispatch({ type: 'REMOVE_WORD_AT_INDEX', payload: index });
+    announce(`Removed ${label}`);
+  }, [announce, dispatch, hapticIfEnabled]);
 
   const appendWord = useCallback((tile: BoardTile) => {
     const label = tile.speech ?? tile.label;
@@ -1028,13 +1025,14 @@ export default function TalkScreen() {
   }, [appendWord, hapticIfEnabled]);
 
   const repeatMessage = useCallback(() => {
+    const messageText = messageWordsRef.current.map(word => word.label).join(' ');
     if (!messageText.trim()) {
       announce('No message to speak');
       return;
     }
     speak(messageText, { rate: state.accessibility.speechRate, pitch: state.accessibility.speechPitch });
     announce(`Speaking: ${messageText}`);
-  }, [announce, messageText, speak]);
+  }, [announce, speak, state.accessibility.speechPitch, state.accessibility.speechRate]);
 
   const clearMessage = useCallback(() => {
     ghostsRef.current = [];
@@ -1175,53 +1173,6 @@ export default function TalkScreen() {
     announce(`${TOP_TAB_META[tab].label} selected`);
   }, [announce, clearMessage, hapticIfEnabled, router]);
 
-  const handleSpeak = useCallback(() => {
-    repeatMessage();
-  }, [repeatMessage]);
-
-  const handleBackspace = useCallback(() => {
-    hapticIfEnabled();
-    if (hasWords) {
-      dispatch({ type: 'REMOVE_LAST_WORD' });
-      return;
-    }
-    setActiveMode('home');
-    setPreviousMode(null);
-    setActiveTab('taptalk');
-  }, [dispatch, hapticIfEnabled, hasWords]);
-
-  // Item 10 — tap individual chips to remove them (principle 25 / 26).
-  const handleRemoveWord = useCallback((index: number) => {
-    hapticIfEnabled();
-    const label = state.messageWords[index]?.label ?? 'word';
-    dispatch({ type: 'REMOVE_WORD_AT_INDEX', payload: index });
-    announce(`Removed ${label}`);
-  }, [announce, dispatch, hapticIfEnabled, state.messageWords]);
-
-  // Item 9 — long-press backspace to clear all with a confirmation
-  // alert (principles 12 + 6: destructive actions need confirmation;
-  // Alert.alert for focused tasks).
-  const handleBackspaceLongPress = useCallback(() => {
-    if (!hasWords) return;
-    hapticIfEnabled();
-    Alert.alert(
-      'Clear message?',
-      'All words will be removed.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: () => {
-            if (state.accessibility.hapticsEnabled !== false) hapticError();
-            clearMessage();
-          },
-        },
-      ],
-      { cancelable: true },
-    );
-  }, [clearMessage, hapticIfEnabled, hasWords, state.accessibility.hapticsEnabled]);
-
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       scrollPositions.current[activeMode] = e.nativeEvent.contentOffset.y;
@@ -1240,82 +1191,24 @@ export default function TalkScreen() {
               accessibilityRole="button"
               accessibilityLabel="Dismiss speech error"
               onPress={clearError}
-              style={styles.errorBanner}
+              style={[styles.errorBanner, { backgroundColor: t.colors.danger }]}
             >
               <Text style={styles.errorText}>Speech unavailable: {lastError.message}</Text>
             </Pressable>
           </Reanimated.View>
         ) : null}
 
-        <View
-          style={[
-            styles.messageArea,
-            {
-              backgroundColor: t.colors.surface,
-              borderBottomColor: t.colors.border,
-            },
-          ]}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={hasWords ? `Speak ${messageText}` : 'Tap symbols to build a sentence'}
-            onPress={handleSpeak}
-            style={styles.messageButton}
-          >
-            {!hasWords && ghosts.length === 0 ? (
-              <Text
-                style={[
-                  styles.messageText,
-                  styles.messagePlaceholder,
-                  { color: t.colors.textTertiary },
-                ]}
-                numberOfLines={1}
-              >
-                Tap to speak....
-              </Text>
-            ) : null}
-            <View
-              style={[
-                styles.messageSlotRow,
-                !hasWords && ghosts.length === 0 && styles.messageSlotRowHidden,
-              ]}
-            >
-              {Array.from({ length: MESSAGE_SLOT_COUNT }).map((_, index) => {
-                const word = visibleMessageWords[index];
-                return (
-                  <View
-                    key={index}
-                    ref={ref => {
-                      messageSlotRefs.current[index] = ref;
-                    }}
-                    style={styles.messageSlot}
-                  >
-                    {word ? (
-                      <MessageChip
-                        label={word.label}
-                        tile={chipTileLookup.get(word.label.toLowerCase())}
-                        onRemove={() => handleRemoveWord(index)}
-                      />
-                    ) : null}
-                  </View>
-                );
-              })}
-            </View>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={hasWords ? 'Backspace' : 'Return to home board'}
-            accessibilityHint={hasWords ? 'Hold to clear all words' : undefined}
-            onPress={handleBackspace}
-            onLongPress={handleBackspaceLongPress}
-            delayLongPress={500}
-            style={styles.backspace}
-          >
-            {/* Slightly heavier — bigger glyph reads stronger against
-                the white message strip without changing the tap target. */}
-            <BackspaceIcon size={56} />
-          </Pressable>
-        </View>
+        <TalkMessageStrip
+          messageSlotRefs={messageSlotRefs}
+          chipTileLookup={chipTileLookup as Map<string, MessageStripTile>}
+          ghostCount={ghosts.length}
+          wordBackgroundForTile={(tile) => wordBackgroundForTile(tile as BoardTile)}
+          onSpeak={handleStripSpeak}
+          onBackspace={handleStripBackspace}
+          onClearAll={clearMessage}
+          onRemoveWord={handleStripRemoveWord}
+          hapticsEnabled={state.accessibility.hapticsEnabled !== false}
+        />
 
         <TopNav
           visible={showTopNav}
@@ -1392,7 +1285,6 @@ export default function TalkScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.surface,
   },
   screenRoot: {
     flex: 1,
@@ -1402,7 +1294,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.danger,
     borderRadius: 8,
   },
   errorText: {
@@ -1418,9 +1309,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingBottom: 18,
-    backgroundColor: colors.surface,
     borderBottomWidth: 1.4,
-    borderBottomColor: colors.border,
   },
   messageButton: {
     flex: 1,
@@ -1429,13 +1318,11 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   messageText: {
-    color: '#202020',
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '700',
   },
   messagePlaceholder: {
-    color: '#A5A5A5',
     fontWeight: '400',
   },
   messageSlotRow: {
@@ -1470,7 +1357,6 @@ const styles = StyleSheet.create({
     left: 3,
     right: 3,
     top: 5,
-    color: '#202020',
     fontSize: 8,
     lineHeight: 10,
     fontWeight: '800',
@@ -1485,7 +1371,6 @@ const styles = StyleSheet.create({
   },
   topNavSlot: {
     position: 'relative',
-    backgroundColor: colors.background,
     zIndex: 2,
   },
   topNavPanel: {
@@ -1495,10 +1380,8 @@ const styles = StyleSheet.create({
     borderRightWidth: 1.6,
     borderBottomWidth: 1.6,
     borderTopWidth: 0,
-    borderColor: '#9A9A9A',
     borderBottomLeftRadius: 18,
     borderBottomRightRadius: 18,
-    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
@@ -1545,8 +1428,6 @@ const styles = StyleSheet.create({
     width: 62,
     height: 18,
     borderWidth: 2,
-    borderColor: colors.primaryDark,
-    backgroundColor: colors.softBlue,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 4,
@@ -1569,13 +1450,9 @@ const styles = StyleSheet.create({
   },
   // Neutral idle look when closed and not being pressed — keeps the blue
   // strictly tied to pressed/active states without changing the open visuals.
-  navToggleIdle: {
-    borderColor: '#9A9A9A',
-    backgroundColor: '#FFFFFF',
-  },
+  navToggleIdle: {},
   board: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   boardContent: {
     flexDirection: 'row',
@@ -1592,6 +1469,22 @@ const styles = StyleSheet.create({
   tilePressed: {
     opacity: 0.82,
   },
+  deleteBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
+  tileEditOutline: {
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderRadius: 14,
+  },
   tileShell: {
     position: 'relative',
   },
@@ -1605,7 +1498,6 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     top: 16,
-    color: '#202020',
     fontSize: 20,
     lineHeight: 24,
     fontWeight: '600',
@@ -1633,7 +1525,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#8A8F95',
   },
   wordTileFill: {
     position: 'absolute',
@@ -1647,7 +1538,6 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     top: 16,
-    color: '#202020',
     fontSize: 20,
     lineHeight: 24,
     fontWeight: '600',
@@ -1667,7 +1557,6 @@ const styles = StyleSheet.create({
   },
   navTileShell: {
     position: 'relative',
-    backgroundColor: '#E8EBED',
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1680,7 +1569,6 @@ const styles = StyleSheet.create({
   navTileLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#4B555C',
     textAlign: 'center',
     paddingBottom: 6,
   },

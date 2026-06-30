@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -12,9 +12,10 @@ import {
   GuardianRelationship,
   useRegistration,
 } from '../../src/context/RegistrationContext';
-import { authFormStyles } from '../../src/styles/authFormStyles';
+import { createAuthFormStyles } from '../../src/styles/authFormStyles';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 
 const nextRoute = '/registration/04-secure' as Href;
@@ -32,6 +33,8 @@ const RELATIONSHIPS: { id: GuardianRelationship; label: string }[] = [
 
 export default function RegStep3Contact() {
   const router = useRouter();
+  const t = useTheme();
+  const authFormStyles = useMemo(() => createAuthFormStyles(t), [t]);
   const { data, update } = useRegistration();
   const gate = ageGate(data);
 
@@ -164,8 +167,8 @@ export default function RegStep3Contact() {
               hitSlop={8}
               style={styles.knownRow}
             >
-              <Text style={styles.knownText}>Log in instead</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+              <Text style={[styles.knownText, { color: t.colors.primary }]}>Log in instead</Text>
+              <Ionicons name="chevron-forward" size={16} color={t.colors.primary} />
             </Pressable>
           ) : null}
         </View>
@@ -193,10 +196,10 @@ export default function RegStep3Contact() {
             <Ionicons
               name="shield-checkmark-outline"
               size={20}
-              color={colors.primaryDark}
+              color={t.colors.primaryDark}
               accessibilityElementsHidden
             />
-            <Text style={styles.noteText}>
+            <Text style={[styles.noteText, { color: t.colors.text }]}>
               Your email becomes the account login and your phone is the
               verification contact. The AAC user's name and DOB are kept
               for personalisation only.
@@ -227,7 +230,6 @@ const styles = StyleSheet.create({
   knownText: {
     fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    color: colors.primary,
   },
   note: {
     flexDirection: 'row',
@@ -241,7 +243,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.text,
     lineHeight: 21,
   },
 });

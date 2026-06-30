@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,13 +13,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { TextField } from '../../src/components/native/TextField';
-import { authFormStyles } from '../../src/styles/authFormStyles';
+import { createAuthFormStyles } from '../../src/styles/authFormStyles';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 
 export default function ForgotPassword() {
   const router = useRouter();
+  const t = useTheme();
+  const authFormStyles = useMemo(() => createAuthFormStyles(t), [t]);
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
 
@@ -32,7 +35,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.background }]} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -45,7 +48,7 @@ export default function ForgotPassword() {
             hitSlop={10}
             style={styles.backBtn}
           >
-            <Ionicons name="chevron-back" size={24} color={colors.text} />
+            <Ionicons name="chevron-back" size={24} color={t.colors.text} />
           </Pressable>
         </View>
 
@@ -55,15 +58,15 @@ export default function ForgotPassword() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.title}>Reset password</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: t.colors.text }]}>Reset password</Text>
+          <Text style={[styles.subtitle, { color: t.colors.textMuted }]}>
             Enter the email on your account and we'll send a link to reset your password.
           </Text>
 
           {sent ? (
             <View style={styles.confirmBox}>
-              <Ionicons name="mail-unread-outline" size={28} color={colors.primary} />
-              <Text style={styles.confirmText}>
+              <Ionicons name="mail-unread-outline" size={28} color={t.colors.primary} />
+              <Text style={[styles.confirmText, { color: t.colors.text }]}>
                 If an account exists for {email.trim()}, a reset link is on its way. Check your inbox.
               </Text>
             </View>
@@ -105,7 +108,7 @@ export default function ForgotPassword() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1 },
   flex: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -116,12 +119,11 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
-  title: { fontFamily: fonts.displayBlack, fontSize: 30, color: colors.text, letterSpacing: -0.5 },
+  title: { fontFamily: fonts.displayBlack, fontSize: 30, letterSpacing: -0.5 },
   subtitle: {
     fontFamily: fonts.body,
     marginTop: spacing.sm,
     fontSize: typography.body,
-    color: colors.textMuted,
     lineHeight: 24,
   },
   form: { marginTop: spacing.xxl },
@@ -134,6 +136,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
-  confirmText: { fontFamily: fonts.body, flex: 1, fontSize: typography.callout, color: colors.text, lineHeight: 21 },
+  confirmText: { fontFamily: fonts.body, flex: 1, fontSize: typography.callout, lineHeight: 21 },
   footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
 });

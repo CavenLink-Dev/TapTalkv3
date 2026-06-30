@@ -1,17 +1,19 @@
 import React, { useCallback } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { useTheme } from '../../src/theme/useTheme';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
 import type { AppState } from '../../src/context/types';
 
 type TextSize = AppState['accessibility']['textSize'];
+type ButtonSize = AppState['accessibility']['buttonSize'];
 type Theme = AppState['accessibility']['theme'];
 
 const TEXT_SIZE_OPTIONS: { label: string; value: TextSize; preview: number }[] = [
@@ -19,6 +21,11 @@ const TEXT_SIZE_OPTIONS: { label: string; value: TextSize; preview: number }[] =
   { label: 'Large', value: 'large', preview: 18 },
   { label: 'Extra Large', value: 'xlarge', preview: 21 },
   { label: 'Maximum', value: 'maximum', preview: 24 },
+];
+
+const BUTTON_SIZE_OPTIONS: { label: string; value: ButtonSize; hint: string }[] = [
+  { label: 'Standard', value: 'standard', hint: '44 pt minimum tap targets' },
+  { label: 'Large', value: 'large', hint: 'Bigger buttons for easier tapping' },
 ];
 
 const THEME_OPTIONS: { label: string; value: Theme; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
@@ -29,13 +36,19 @@ const THEME_OPTIONS: { label: string; value: Theme; icon: React.ComponentProps<t
 
 export default function DisplaySettingsScreen() {
   const router = useRouter();
+  const reduceMotion = useReduceMotion();
   const { state, dispatch } = useAppContext();
   const t = useTheme();
-  const { textSize, highContrast, theme } = state.accessibility;
+  const { textSize, buttonSize, highContrast, theme } = state.accessibility;
 
   const setTextSize = useCallback((value: TextSize) => {
     hapticSelection();
     dispatch({ type: 'SET_ACCESSIBILITY', payload: { textSize: value } });
+  }, [dispatch]);
+
+  const setButtonSize = useCallback((value: ButtonSize) => {
+    hapticSelection();
+    dispatch({ type: 'SET_ACCESSIBILITY', payload: { buttonSize: value } });
   }, [dispatch]);
 
   const setTheme = useCallback((value: Theme) => {
@@ -77,10 +90,16 @@ export default function DisplaySettingsScreen() {
         alwaysBounceVertical
         overScrollMode="always"
       >
+        <Text style={[styles.pageIntro, { color: t.colors.textMuted }]}>
+          Adjust how TapTalk looks for AAC users, carers, and support workers. Changes apply
+          across the app and are saved on this device.
+        </Text>
 
         <Card style={styles.section}>
           <Text style={[styles.sectionTitle, { color: t.colors.textTertiary }]}>TEXT SIZE</Text>
-          <Text style={[styles.sectionDesc, { color: t.colors.textMuted }]}>Affects labels throughout the app.</Text>
+          <Text style={[styles.sectionDesc, { color: t.colors.textMuted }]}>
+            Makes labels and buttons easier to read. Does not change iOS system text size.
+          </Text>
           <View style={styles.optionGroup}>
             {TEXT_SIZE_OPTIONS.map((opt) => {
               const selected = textSize === opt.value;
@@ -91,7 +110,7 @@ export default function DisplaySettingsScreen() {
                   accessibilityRole="radio"
                   accessibilityState={{ checked: selected }}
                   accessibilityLabel={`Text size ${opt.label}`}
-                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: t.isDark ? '#1A3A5F' : '#EAF6FE' }]}
+                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: t.colors.selectionBg }]}
                 >
                   <Text style={[styles.previewText, { fontSize: opt.preview, color: t.colors.text }, selected && { color: t.colors.primary }]}>
                     {opt.label}
@@ -106,7 +125,42 @@ export default function DisplaySettingsScreen() {
         </Card>
 
         <Card style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: t.colors.textTertiary }]}>BUTTON SIZE</Text>
+          <Text style={[styles.sectionDesc, { color: t.colors.textMuted }]}>
+            Larger buttons are easier to tap on shared iPads and for users with motor needs.
+          </Text>
+          <View style={styles.optionGroup}>
+            {BUTTON_SIZE_OPTIONS.map((opt) => {
+              const selected = buttonSize === opt.value;
+              return (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => setButtonSize(opt.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                  accessibilityLabel={`Button size ${opt.label}. ${opt.hint}`}
+                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: t.colors.selectionBg }]}
+                >
+                  <View style={styles.buttonSizeCopy}>
+                    <Text style={[styles.previewText, { color: t.colors.text }, selected && { color: t.colors.primary }]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={[styles.optionHint, { color: t.colors.textMuted }]}>{opt.hint}</Text>
+                  </View>
+                  {selected && (
+                    <Ionicons name="checkmark-circle" size={22} color={t.colors.primary} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Card>
+
+        <Card style={styles.section}>
           <Text style={[styles.sectionTitle, { color: t.colors.textTertiary }]}>THEME</Text>
+          <Text style={[styles.sectionDesc, { color: t.colors.textMuted }]}>
+            Light, dark, or match your iPhone or iPad system setting.
+          </Text>
           <View style={styles.themeRow}>
             {THEME_OPTIONS.map((opt) => {
               const selected = theme === opt.value;
@@ -117,7 +171,7 @@ export default function DisplaySettingsScreen() {
                   accessibilityRole="radio"
                   accessibilityState={{ checked: selected }}
                   accessibilityLabel={`${opt.label} theme`}
-                  style={[styles.themeOption, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: t.isDark ? '#1A3A5F' : '#EAF6FE' }]}
+                  style={[styles.themeOption, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: t.colors.selectionBg }]}
                 >
                   <Ionicons
                     name={opt.icon}
@@ -138,7 +192,9 @@ export default function DisplaySettingsScreen() {
           <View style={styles.toggleRow}>
             <View style={styles.toggleLeft}>
               <Text style={[styles.toggleTitle, { color: t.colors.text }]}>High Contrast</Text>
-              <Text style={[styles.toggleDesc, { color: t.colors.textMuted }]}>Increases contrast for easier reading.</Text>
+              <Text style={[styles.toggleDesc, { color: t.colors.textMuted }]}>
+                Heavier borders and stronger text colour for clearer separation.
+              </Text>
             </View>
             <Switch
               value={highContrast}
@@ -152,7 +208,9 @@ export default function DisplaySettingsScreen() {
           <View style={[styles.toggleRow, { marginTop: 12 }]}>
             <View style={styles.toggleLeft}>
               <Text style={[styles.toggleTitle, { color: t.colors.text }]}>Haptic Feedback</Text>
-              <Text style={[styles.toggleDesc, { color: t.colors.textMuted }]}>Vibrate on button and tile taps.</Text>
+              <Text style={[styles.toggleDesc, { color: t.colors.textMuted }]}>
+                A light vibration when you tap buttons and symbol tiles.
+              </Text>
             </View>
             <Switch
               value={hapticsEnabled}
@@ -162,6 +220,36 @@ export default function DisplaySettingsScreen() {
               ios_backgroundColor={t.colors.disabled}
               accessibilityLabel="Haptic feedback"
             />
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Reduce Motion, ${reduceMotion ? 'on' : 'follows iOS'}`}
+            accessibilityHint="Explains how TapTalk follows the iOS Reduce Motion setting"
+            onPress={() =>
+              Alert.alert(
+                'Reduce Motion',
+                'TapTalk follows the Reduce Motion setting in iOS Settings → Accessibility → Motion. When it is on, animations become gentle fades.',
+                [{ text: 'OK', style: 'cancel' }],
+              )
+            }
+            style={[styles.infoRow, { borderTopColor: t.colors.border }]}
+          >
+            <View style={styles.toggleLeft}>
+              <Text style={[styles.toggleTitle, { color: t.colors.text }]}>Reduce Motion</Text>
+              <Text style={[styles.toggleDesc, { color: t.colors.textMuted }]}>
+                {reduceMotion ? 'On — animations are reduced' : 'Follows iOS — change in Settings → Accessibility → Motion'}
+              </Text>
+            </View>
+            <Ionicons name="information-circle-outline" size={22} color={t.colors.textTertiary} />
+          </Pressable>
+          <View style={[styles.infoRow, { borderTopColor: t.colors.border }]}>
+            <View style={styles.toggleLeft}>
+              <Text style={[styles.toggleTitle, { color: t.colors.text }]}>VoiceOver</Text>
+              <Text style={[styles.toggleDesc, { color: t.colors.textMuted }]}>
+                Built in — every control has a label and hint for screen readers.
+              </Text>
+            </View>
+            <Ionicons name="checkmark-circle" size={22} color={t.colors.success} accessibilityElementsHidden />
           </View>
         </Card>
 
@@ -173,16 +261,13 @@ export default function DisplaySettingsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   backButton: {
     width: 44,
@@ -195,7 +280,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: fonts.displayHeavy,
     fontSize: typography.body,
-    color: colors.text,
     letterSpacing: -0.2,
   },
   headerSpacer: {
@@ -206,19 +290,22 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingBottom: 36,
   },
+  pageIntro: {
+    fontFamily: fonts.body,
+    fontSize: typography.callout,
+    lineHeight: 21,
+  },
   section: {
     gap: spacing.sm,
   },
   sectionTitle: {
     fontFamily: fonts.bodyHeavy,
     fontSize: typography.caption,
-    color: colors.textTertiary,
     letterSpacing: 1.0,
   },
   sectionDesc: {
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.textMuted,
     marginBottom: spacing.sm,
   },
   optionGroup: {
@@ -232,19 +319,17 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: radii.card,
     borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  optionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: '#EAF6FE',
   },
   previewText: {
     fontFamily: fonts.displayBold,
-    color: colors.text,
   },
-  previewSelected: {
-    color: colors.primary,
+  buttonSizeCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  optionHint: {
+    fontFamily: fonts.body,
+    fontSize: typography.caption,
   },
   themeRow: {
     flexDirection: 'row',
@@ -258,21 +343,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radii.card,
     borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     gap: spacing.xs,
-  },
-  themeOptionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: '#EAF6FE',
   },
   themeLabel: {
     fontFamily: fonts.displayBold,
     fontSize: typography.caption,
-    color: colors.textMuted,
-  },
-  themeLabelSelected: {
-    color: colors.primary,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -287,12 +362,20 @@ const styles = StyleSheet.create({
   toggleTitle: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.callout,
-    color: colors.text,
   },
   toggleDesc: {
     fontFamily: fonts.body,
     fontSize: typography.caption,
-    color: colors.textMuted,
     marginTop: 2,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingTop: spacing.md,
+    marginTop: spacing.sm,
+    borderTopWidth: 1,
+    minHeight: 44,
   },
 });

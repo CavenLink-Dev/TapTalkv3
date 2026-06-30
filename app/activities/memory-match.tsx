@@ -37,7 +37,8 @@ import {
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { hapticSelection } from '../../src/utils/haptics';
 import { playSound, playSelectThenConfirm, playStreakSound } from '../../src/utils/sounds';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { radii, spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,7 @@ function StartOverlay({
   onCancel: () => void;
   onStart: () => void;
 }) {
+  const t = useTheme();
   const row = (d: Difficulty, label: string) => {
     const active = difficulty === d;
     return (
@@ -116,9 +118,9 @@ function StartOverlay({
         style={({ pressed }) => [styles.diffRow, active && styles.diffRowActive, pressed && { opacity: 0.92 }]}
       >
         <View style={[styles.radio, active && styles.radioActive]}>
-          {active ? <View style={styles.radioDot} /> : null}
+          {active ? <View style={[styles.radioDot, { backgroundColor: t.colors.primary }]} /> : null}
         </View>
-        <Text style={styles.diffLabel}>{label}</Text>
+        <Text style={[styles.diffLabel, { color: t.colors.text }]}>{label}</Text>
       </Pressable>
     );
   };
@@ -127,13 +129,13 @@ function StartOverlay({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.overlayBackdrop}>
         <Card style={styles.overlayCard}>
-          <Text style={styles.overlayTitle} accessibilityRole="header">Memory Match</Text>
-          <Text style={styles.overlaySub}>
+          <Text style={[styles.overlayTitle, { color: t.colors.text }]} accessibilityRole="header">Memory Match</Text>
+          <Text style={[styles.overlaySub, { color: t.colors.textMuted }]}>
             A shape appears then hides. Pick the one you saw.
           </Text>
 
           <View style={styles.section}>
-            <Text style={styles.sectionEyebrow}>DIFFICULTY</Text>
+            <Text style={[styles.sectionEyebrow, { color: t.colors.textMuted }]}>DIFFICULTY</Text>
             {row('easy',   'Easy')}
             {row('medium', 'Medium')}
             {row('hard',   'Hard')}
@@ -146,7 +148,7 @@ function StartOverlay({
               accessibilityLabel="Cancel"
               style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}
             >
-              <Text style={styles.btnGhostText}>Cancel</Text>
+              <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Cancel</Text>
             </Pressable>
             <Pressable
               onPress={onStart}
@@ -168,6 +170,7 @@ function StartOverlay({
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function MemoryMatchScreen() {
+  const t = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { dispatch } = useAppContext();
@@ -348,7 +351,7 @@ export default function MemoryMatchScreen() {
             <Ionicons
               name={soundOn ? 'volume-medium-outline' : 'volume-mute-outline'}
               size={22}
-              color={colors.text}
+              color={t.colors.text}
             />
           </Pressable>
           <Pressable
@@ -358,7 +361,7 @@ export default function MemoryMatchScreen() {
             accessibilityLabel="Help"
             style={styles.headerIconBtn}
           >
-            <Ionicons name="help-circle-outline" size={24} color={colors.text} />
+            <Ionicons name="help-circle-outline" size={24} color={t.colors.text} />
           </Pressable>
         </View>
       </View>
@@ -380,13 +383,13 @@ export default function MemoryMatchScreen() {
                 { transform: [{ scale: levelPillScale }] },
               ]}
             >
-              <Text style={styles.levelPillText}>
+              <Text style={[styles.levelPillText, { color: t.colors.primary }]}>
                 Level {level} of {totalLevels}
               </Text>
             </Animated.View>
           </View>
 
-          <Text style={styles.instruction}>
+          <Text style={[styles.instruction, { color: t.colors.text }]}>
             {roundPhase === 'show'   ? 'Look at the shape.' : null}
             {roundPhase === 'choose' ? 'Which shape did you see?' : null}
             {roundPhase === 'result'
@@ -395,13 +398,13 @@ export default function MemoryMatchScreen() {
           </Text>
 
           {/* Target shape */}
-          <View style={styles.targetBox}>
+          <View style={[styles.targetBox, { backgroundColor: t.colors.surface }]}>
             <Animated.View style={{ opacity: shapeOpacity }}>
               <Shape index={round.target} size={80} />
             </Animated.View>
             {roundPhase === 'choose' && (
               <View style={styles.hiddenLabel}>
-                <Text style={styles.hiddenText}>Hidden</Text>
+                <Text style={[styles.hiddenText, { color: t.colors.textTertiary }]}>Hidden</Text>
               </View>
             )}
           </View>
@@ -409,7 +412,7 @@ export default function MemoryMatchScreen() {
           {/* Result banner */}
           {roundPhase === 'result' && (
             <View style={[styles.resultBanner, { backgroundColor: isCorrect ? '#D6F0DD' : '#E6F4FD' }]}>
-              <Text style={[styles.resultText, { color: isCorrect ? '#1A7A3A' : colors.primary }]}>
+              <Text style={[styles.resultText, { color: isCorrect ? '#1A7A3A' : t.colors.primary }]}>
                 {isCorrect ? 'You got it.' : 'Keep going.'}
               </Text>
             </View>
@@ -421,9 +424,9 @@ export default function MemoryMatchScreen() {
               {round.choices.map((shapeIndex) => {
                 const isSelected = chosen === shapeIndex;
                 const isTarget   = shapeIndex === round.target;
-                let borderColor: string = colors.border;
-                if (roundPhase === 'result' && isSelected && isCorrect) borderColor = colors.success;
-                if (roundPhase === 'result' && isTarget)                borderColor = colors.success;
+                let borderColor: string = t.colors.border;
+                if (roundPhase === 'result' && isSelected && isCorrect) borderColor = t.colors.success;
+                if (roundPhase === 'result' && isTarget)                borderColor = t.colors.success;
                 return (
                   <Pressable
                     key={shapeIndex}
@@ -465,8 +468,8 @@ export default function MemoryMatchScreen() {
           style={[styles.tryAgain, { bottom: insets.bottom + 90, opacity: tryAgainFade }]}
           pointerEvents="none"
         >
-          <Ionicons name="refresh-circle-outline" size={20} color={colors.primary} />
-          <Text style={styles.tryAgainText}>Try Again</Text>
+          <Ionicons name="refresh-circle-outline" size={20} color={t.colors.primary} />
+          <Text style={[styles.tryAgainText, { color: t.colors.primary }]}>Try Again</Text>
         </Animated.View>
       ) : null}
 
@@ -515,91 +518,80 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     gap: spacing.md,
-    backgroundColor: BG,
-  },
+    backgroundColor: BG},
   headerActions: { flexDirection: 'row', gap: 4 },
   headerIconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
 
   content: {
     padding: spacing.xl,
     alignItems: 'center',
-    gap: spacing.xl,
-  },
+    gap: spacing.xl},
 
   subhead: { alignItems: 'center', width: '100%' },
   levelPill: {
     paddingHorizontal: spacing.lg,
     paddingVertical: 8,
     backgroundColor: '#E6F4FD',
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
   levelPillText: {
     fontSize: typography.body,
     fontWeight: '900',
-    color: colors.primary,
-    letterSpacing: 0.4,
-  },
+
+    letterSpacing: 0.4},
 
   instruction: {
     fontSize: typography.subheading,
     fontWeight: '800',
-    color: colors.text,
+
     textAlign: 'center',
     letterSpacing: -0.2,
-    minHeight: 32,
-  },
+    minHeight: 32},
 
   targetBox: {
     width: 140,
     height: 140,
     borderRadius: radii.card,
-    backgroundColor: colors.surface,
+
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   hiddenLabel: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   hiddenText: {
     fontSize: typography.caption,
     fontWeight: '700',
-    color: colors.textTertiary,
+
     letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
 
   resultBanner: {
     width: '100%',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
     borderRadius: radii.pill,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   resultText: { fontSize: typography.body, fontWeight: '800', textAlign: 'center' },
 
   choiceGrid: {
     flexDirection: 'row',
     gap: spacing.lg,
     justifyContent: 'center',
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   choiceCard: {
     width: 100,
     height: 100,
     borderRadius: radii.card,
-    backgroundColor: colors.surface,
+
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2.5,
-  },
-  choicePressed: { backgroundColor: colors.background, transform: [{ scale: 0.96 }] },
+    borderWidth: 2.5},
+  choicePressed: {  transform: [{ scale: 0.96 }] },
 
   nextBtn: {
-    backgroundColor: colors.primary,
+
     borderRadius: radii.button,
     paddingHorizontal: spacing.xxl,
     paddingVertical: spacing.md,
     alignItems: 'center',
-    minWidth: 160,
-  },
+    minWidth: 160},
   nextBtnText: { color: BG, fontSize: typography.body, fontWeight: '800', letterSpacing: -0.2 },
 
   // ── Toasts ──────────────────────────────────────────────────────────
@@ -614,9 +606,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     backgroundColor: '#E6F4FD',
-    borderRadius: radii.pill,
-  },
-  tryAgainText: { fontSize: typography.body, fontWeight: '800', color: colors.primary },
+    borderRadius: radii.pill},
+  tryAgainText: { fontSize: typography.body, fontWeight: '800'},
 
   correctToast: {
     position: 'absolute',
@@ -629,8 +620,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     backgroundColor: '#D6F0DD',
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
   correctToastText: { fontSize: typography.body, fontWeight: '800', color: '#1A7A3A' },
 
   // ── Overlays ────────────────────────────────────────────────────────
@@ -639,75 +629,67 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(8, 14, 24, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.lg,
-  },
+    padding: spacing.lg},
   overlayCard: {
     width: '100%',
     maxWidth: 380,
     alignItems: 'stretch',
     gap: spacing.lg,
-    padding: spacing.xl,
-  },
+    padding: spacing.xl},
   overlayTitle: {
     fontSize: typography.title,
     fontWeight: '900',
-    color: colors.text,
+
     textAlign: 'center',
-    letterSpacing: -0.5,
-  },
-  overlaySub: { fontSize: typography.body, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+    letterSpacing: -0.5},
+  overlaySub: { fontSize: typography.body,  textAlign: 'center', lineHeight: 22 },
   section: { gap: spacing.sm },
   sectionEyebrow: {
     fontSize: typography.caption,
     fontWeight: '800',
-    color: colors.textMuted,
+
     letterSpacing: 1.1,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   diffRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.md,
-    backgroundColor: colors.background,
+
     borderRadius: radii.card,
-    minHeight: 52,
-  },
+    minHeight: 52},
   diffRowActive: { backgroundColor: '#E6F4FD' },
   radio: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: colors.textTertiary,
+
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioActive: { borderColor: colors.primary },
-  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary },
-  diffLabel: { fontSize: typography.body, fontWeight: '800', color: colors.text },
-  diffSub: { fontSize: typography.caption, color: colors.textMuted, marginTop: 2, fontWeight: '600' },
+    justifyContent: 'center'},
+  radioActive: { },
+  radioDot: { width: 12, height: 12, borderRadius: 6},
+  diffLabel: { fontSize: typography.body, fontWeight: '800'},
+  diffSub: { fontSize: typography.caption,  marginTop: 2, fontWeight: '600' },
 
   overlayActions: { flexDirection: 'row', gap: spacing.sm },
   btnGhost: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: radii.pill,
-    backgroundColor: colors.background,
+
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 50,
-  },
-  btnGhostText: { fontSize: typography.body, fontWeight: '700', color: colors.text },
+    minHeight: 50},
+  btnGhostText: { fontSize: typography.body, fontWeight: '700'},
   btnPrimary: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: radii.pill,
-    backgroundColor: colors.primary,
+
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 50,
-  },
+    minHeight: 50},
   btnPrimaryText: { fontSize: typography.body, fontWeight: '800', color: '#FFFFFF' },
   btnSecondary: {
     width: '100%',
@@ -716,9 +698,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#E6F4FD',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 50,
-  },
-  btnSecondaryText: { fontSize: typography.body, fontWeight: '800', color: colors.primary },
+    minHeight: 50},
+  btnSecondaryText: { fontSize: typography.body, fontWeight: '800'},
 
   // Success styles removed — completion UI now lives in ActivityCompletionOverlay.
 });

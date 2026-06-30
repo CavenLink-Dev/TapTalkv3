@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   NativeSyntheticEvent,
   Pressable,
@@ -15,14 +15,17 @@ import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { TextField } from '../../src/components/native/TextField';
 import { RegistrationScaffold } from '../../src/components/registration/RegistrationScaffold';
 import { ageGate, useRegistration } from '../../src/context/RegistrationContext';
-import { authFormStyles } from '../../src/styles/authFormStyles';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { createAuthFormStyles } from '../../src/styles/authFormStyles';
+import { spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 
 const nextRoute = '/registration/03-contact' as Href;
 
 export default function RegStep2AacUser() {
   const router = useRouter();
+  const t = useTheme();
+  const authFormStyles = useMemo(() => createAuthFormStyles(t), [t]);
   const { data, update } = useRegistration();
   const monthRef = useRef<TextInput>(null);
   const yearRef = useRef<TextInput>(null);
@@ -140,7 +143,7 @@ export default function RegStep2AacUser() {
               onChangeText={onDayChange}
               style={[authFormStyles.field, styles.dobField]}
             />
-            <Text style={styles.dobSep}>/</Text>
+            <Text style={[styles.dobSep, { color: t.colors.textTertiary }]}>/</Text>
             <TextField
               accessibilityLabel="Month"
               placeholder="MM"
@@ -152,7 +155,7 @@ export default function RegStep2AacUser() {
               onKeyPress={onKey('month')}
               style={[authFormStyles.field, styles.dobField]}
             />
-            <Text style={styles.dobSep}>/</Text>
+            <Text style={[styles.dobSep, { color: t.colors.textTertiary }]}>/</Text>
             <TextField
               accessibilityLabel="Year"
               placeholder="YYYY"
@@ -173,23 +176,26 @@ export default function RegStep2AacUser() {
             <Ionicons
               name="alert-circle"
               size={22}
-              color={colors.danger}
+              color={t.colors.danger}
               accessibilityElementsHidden
             />
             <View style={styles.flex}>
-              <Text style={styles.blockTitle}>A guardian is required</Text>
-              <Text style={styles.blockBody}>
+              <Text style={[styles.blockTitle, { color: t.colors.danger }]}>A guardian is required</Text>
+              <Text style={[styles.blockBody, { color: t.colors.text }]}>
                 TapTalk needs a guardian to set up accounts for users under 15.
-                Tap back and select <Text style={styles.blockEm}>For someone else</Text>.
+                Tap back and select <Text style={[styles.blockEm, { color: t.colors.danger }]}>For someone else</Text>.
               </Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Go back and change who is setting up"
                 onPress={() => router.back()}
                 hitSlop={6}
-                style={styles.blockBtn}
+                style={[
+                  styles.blockBtn,
+                  { backgroundColor: t.colors.surface, borderColor: t.colors.danger },
+                ]}
               >
-                <Text style={styles.blockBtnLabel}>Go back</Text>
+                <Text style={[styles.blockBtnLabel, { color: t.colors.danger }]}>Go back</Text>
               </Pressable>
             </View>
           </Animated.View>
@@ -209,7 +215,6 @@ const styles = StyleSheet.create({
   dobSep: {
     fontFamily: fonts.displayBold,
     fontSize: typography.title,
-    color: colors.textTertiary,
   },
   block: {
     flexDirection: 'row',
@@ -223,29 +228,24 @@ const styles = StyleSheet.create({
   blockTitle: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.body,
-    color: colors.danger,
   },
   blockBody: {
     marginTop: 4,
     fontFamily: fonts.body,
     fontSize: typography.callout,
-    color: colors.text,
     lineHeight: 21,
   },
-  blockEm: { fontFamily: fonts.displayBold, color: colors.danger },
+  blockEm: { fontFamily: fonts.displayBold },
   blockBtn: {
     marginTop: spacing.md,
     alignSelf: 'flex-start',
     paddingVertical: 6,
     paddingHorizontal: spacing.md,
     borderRadius: 22,
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.danger,
   },
   blockBtnLabel: {
     fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    color: colors.danger,
   },
 });

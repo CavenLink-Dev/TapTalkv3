@@ -1,41 +1,40 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  withSpring,
   withTiming,
   FadeInDown,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
-import { colors, radii, shadows, typography } from '../../theme/tokens';
+import { radii, typography } from '../../theme/tokens';
+import { springPop, timingFast } from '../../theme/motion';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { useTheme } from '../../theme/useTheme';
+import { hapticSelection } from '../../utils/haptics';
+import { ThemedText } from './ThemedText';
 
 interface AnimatedChoiceCardProps {
   label: string;
   selected: boolean;
   onPress: () => void;
-  /**
-   * Delay for the entrance animation (used for staggering)
-   */
+  accessibilityLabel?: string;
   entranceDelay?: number;
-  /**
-   * Show chevron on the right side
-   */
   showChevron?: boolean;
 }
 
-/**
- * Animated choice card with iOS-native press feedback.
- * Scales down to 0.97 with a spring on press, and haptic feedback.
- * When selected, shows blue border and slight lift with shadow.
- */
 export function AnimatedChoiceCard({
   label,
   selected,
   onPress,
+  accessibilityLabel,
   entranceDelay = 0,
   showChevron = false,
 }: AnimatedChoiceCardProps) {
+  const t = useTheme();
+  const reduceMotion = useReduceMotion();
   const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
   const chevronRotation = useSharedValue(selected ? 1 : 0);
 
   useEffect(() => {
@@ -44,6 +43,7 @@ export function AnimatedChoiceCard({
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
+    opacity: opacity.value,
   }));
 
   const chevronStyle = useAnimatedStyle(() => ({
@@ -51,12 +51,24 @@ export function AnimatedChoiceCard({
   }));
 
   const handlePressIn = () => {
-    scale.value = withTiming(0.985, { duration: 100 });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    if (reduceMotion) {
+      opacity.value = withTiming(0.85, timingFast());
+      return;
+    }
+    scale.value = withTiming(0.985, timingFast());
   };
 
   const handlePressOut = () => {
-    scale.value = withTiming(1, { duration: 100 });
+    if (reduceMotion) {
+      opacity.value = withTiming(1, timingFast());
+      return;
+    }
+    scale.value = withSpring(1, springPop);
+  };
+
+  const handlePress = () => {
+    hapticSelection();
+    onPress();
   };
 
   return (
@@ -68,21 +80,26 @@ export function AnimatedChoiceCard({
         <Pressable
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
-          onPress={onPress}
+          onPress={handlePress}
           style={({ pressed }) => [
             styles.card,
+            {
+              backgroundColor: pressed ? t.colors.primaryPressed : t.colors.primary,
+            },
             selected && styles.cardSelected,
-            pressed && styles.cardPressed,
           ]}
           accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel ?? label}
           accessibilityState={{ selected }}
         >
-          <Text style={[styles.label, selected && styles.labelSelected]}>
+          <ThemedText variant="body" color={t.colors.surface} style={styles.label}>
             {label}
-          </Text>
+          </ThemedText>
           {showChevron && (
             <Animated.View style={chevronStyle}>
-              <Text style={[styles.chevron, selected && styles.chevronSelected]}>{'\u203A'}</Text>
+              <ThemedText variant="heading" color={t.colors.surface} style={styles.chevron}>
+                {'\u203A'}
+              </ThemedText>
             </Animated.View>
           )}
         </Pressable>
@@ -99,35 +116,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
     borderRadius: radii.card,
     paddingVertical: 16,
     paddingHorizontal: 24,
     minHeight: 60,
   },
-  cardSelected: {
-    backgroundColor: colors.primary,
-    ...shadows.card,
-  },
-  cardPressed: {
-    backgroundColor: colors.mascot,
-  },
+  cardSelected: {},
   label: {
-    fontSize: typography.body,
-    fontWeight: '600',
-    color: colors.surface,
+    fontWeight: typography.weightSubhead,
     textAlign: 'center',
   },
-  labelSelected: {
-    color: colors.surface,
-  },
   chevron: {
-    fontSize: 28,
-    fontWeight: '300',
-    color: colors.surface,
     marginLeft: 8,
-  },
-  chevronSelected: {
-    color: colors.surface,
+    fontWeight: '300',
   },
 });

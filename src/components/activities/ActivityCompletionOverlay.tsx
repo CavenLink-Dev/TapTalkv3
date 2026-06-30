@@ -19,7 +19,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { colors, radii, spacing, typography } from '../../theme/tokens';
+import { radii, spacing, typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ export function ActivityCompletionOverlay({
   onCancel,
   theme,
 }: ActivityCompletionOverlayProps) {
+  const t = useTheme();
   // Compute elapsed once when the overlay opens (visible flips to true).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const elapsed = useMemo(() => {
@@ -106,7 +108,7 @@ export function ActivityCompletionOverlay({
       onRequestClose={onCancel}
     >
       <View style={styles.backdrop}>
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: t.colors.surface }]}>
 
           {/* ── Accent colour strip across the top ── */}
           <View style={[styles.strip, { backgroundColor: theme.primary }]} />
@@ -117,9 +119,9 @@ export function ActivityCompletionOverlay({
             accessibilityRole="button"
             accessibilityLabel="Close"
             hitSlop={10}
-            style={styles.cancelBtn}
+            style={[styles.cancelBtn, { backgroundColor: t.colors.background }]}
           >
-            <Text style={styles.cancelX}>✕</Text>
+            <Text style={[styles.cancelX, { color: t.colors.textMuted }]}>✕</Text>
           </Pressable>
 
           {/* ── Icon + title row ── */}
@@ -132,12 +134,12 @@ export function ActivityCompletionOverlay({
             </View>
             <View style={styles.titleBlock}>
               <Text
-                style={styles.cardTitle}
+                style={[styles.cardTitle, { color: t.colors.text }]}
                 accessibilityRole="header"
               >
                 You did it! 🎉
               </Text>
-              <Text style={styles.cardSub}>
+              <Text style={[styles.cardSub, { color: t.colors.textMuted }]}>
                 {theme.label} · {diffLabel} · All {totalLevels} done
               </Text>
             </View>
@@ -171,10 +173,12 @@ export function ActivityCompletionOverlay({
               { borderLeftColor: theme.primary, backgroundColor: theme.light },
             ]}
           >
-            <Text style={styles.encourageText}>{theme.encouragement}</Text>
+            <Text style={[styles.encourageText, { color: t.colors.text }]}>
+              {theme.encouragement}
+            </Text>
           </View>
 
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: t.colors.background }]} />
 
           {/* ── Primary action: Play Again ── */}
           <Pressable
@@ -255,7 +259,6 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: colors.surface,
     borderRadius: 22,
     overflow: 'hidden',
     // Top padding is larger to clear the colour strip.
@@ -280,14 +283,12 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelX: {
     fontSize: 13,
     fontWeight: '800',
-    color: colors.textMuted,
     lineHeight: 16,
   },
 
@@ -315,13 +316,11 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: typography.heading,
     fontWeight: '900',
-    color: colors.text,
     lineHeight: 26,
     letterSpacing: typography.trackHeading,
   },
   cardSub: {
     fontSize: typography.caption,
-    color: colors.textMuted,
     marginTop: 2,
     fontWeight: '600',
   },
@@ -348,14 +347,12 @@ const styles = StyleSheet.create({
   },
   encourageText: {
     fontSize: typography.callout,
-    color: colors.text,
     fontWeight: '600',
     lineHeight: 22,
   },
 
   divider: {
     height: 1,
-    backgroundColor: colors.background,
     marginHorizontal: -spacing.xl,
   },
 

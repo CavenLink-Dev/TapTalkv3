@@ -8,9 +8,10 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { animation, colors, radii } from '../../theme/tokens';
+import { animation, radii } from '../../theme/tokens';
 import { timingFill } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { useTheme } from '../../theme/useTheme';
 
 interface SegmentedProgressBarProps {
   /** 1-based index of the step the user is currently on. */
@@ -24,9 +25,12 @@ interface SegmentProps {
   filled: boolean;
   reduceMotion: boolean;
   complete: boolean;
+  progressFill: string;
+  success: string;
+  progressTrack: string;
 }
 
-function Segment({ index, filled, reduceMotion, complete }: SegmentProps) {
+function Segment({ index, filled, reduceMotion, complete, progressFill, success, progressTrack }: SegmentProps) {
   const progress = useSharedValue(filled ? 1 : 0);
   const done = useSharedValue(complete ? 1 : 0);
 
@@ -44,12 +48,12 @@ function Segment({ index, filled, reduceMotion, complete }: SegmentProps) {
   }, [complete, done]);
 
   const fillStyle = useAnimatedStyle(() => {
-    const fill = interpolateColor(done.value, [0, 1], [colors.progressFill, colors.success]);
+    const fill = interpolateColor(done.value, [0, 1], [progressFill, success]);
     return { width: `${progress.value * 100}%`, backgroundColor: fill };
-  });
+  }, [progressFill, success]);
 
   return (
-    <View style={styles.segment}>
+    <View style={[styles.segment, { backgroundColor: progressTrack }]}>
       <Animated.View style={[styles.fill, fillStyle]} />
     </View>
   );
@@ -69,6 +73,7 @@ function Segment({ index, filled, reduceMotion, complete }: SegmentProps) {
  */
 export function SegmentedProgressBar({ currentStep, totalSteps }: SegmentedProgressBarProps) {
   const reduceMotion = useReduceMotion();
+  const t = useTheme();
   const complete = currentStep >= totalSteps;
   const pulse = useSharedValue(1);
 
@@ -101,6 +106,9 @@ export function SegmentedProgressBar({ currentStep, totalSteps }: SegmentedProgr
           filled={i < currentStep}
           reduceMotion={reduceMotion}
           complete={complete}
+          progressFill={t.colors.progressFill}
+          success={t.colors.success}
+          progressTrack={t.colors.progressTrack}
         />
       ))}
     </Animated.View>
@@ -118,12 +126,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 7,
     borderRadius: radii.pill,
-    backgroundColor: colors.progressTrack,
     overflow: 'hidden',
   },
   fill: {
     height: '100%',
     borderRadius: radii.pill,
-    backgroundColor: colors.progressFill,
   },
 });

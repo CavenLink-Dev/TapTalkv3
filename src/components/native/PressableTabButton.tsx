@@ -30,21 +30,26 @@ export function PressableTabButton({
   accessibilityState,
 }: TabButtonProps) {
   const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReduceMotion();
 
   const handlePressIn = useCallback(() => {
     hapticSelection();
-    if (reduceMotion) return;
+    if (reduceMotion) {
+      Animated.timing(opacity, { toValue: 0.85, duration: 120, useNativeDriver: true }).start();
+      return;
+    }
     Animated.spring(scale, {
       toValue: 0.82,
       speed: 60,
       bounciness: 0,
       useNativeDriver: true,
     }).start();
-  }, [reduceMotion, scale]);
+  }, [reduceMotion, scale, opacity]);
 
   const handlePressOut = useCallback(() => {
     if (reduceMotion) {
+      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
       scale.setValue(1);
       return;
     }
@@ -54,7 +59,7 @@ export function PressableTabButton({
       bounciness: 10,
       useNativeDriver: true,
     }).start();
-  }, [reduceMotion, scale]);
+  }, [reduceMotion, scale, opacity]);
 
   return (
     <Pressable
@@ -68,7 +73,7 @@ export function PressableTabButton({
       accessibilityState={accessibilityState}
       style={[style, styles.hitTarget]}
     >
-      <Animated.View style={{ transform: [{ scale }] }}>
+      <Animated.View style={{ transform: [{ scale }], opacity }}>
         {children}
       </Animated.View>
     </Pressable>

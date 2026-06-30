@@ -5,7 +5,8 @@ import Animated_Re, { FadeIn } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSuccess } from '../../src/utils/haptics';
 
@@ -19,6 +20,7 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 export default function RegStep7Verified() {
   const router = useRouter();
+  const t = useTheme();
   const reduceMotion = useReduceMotion();
 
   const [showContinue, setShowContinue] = useState(reduceMotion);
@@ -29,8 +31,8 @@ export default function RegStep7Verified() {
 
     if (reduceMotion) {
       // Snap state; navigate after a calm pause so the heading is readable.
-      const t = setTimeout(() => router.replace(nextRoute), 1400);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => router.replace(nextRoute), 1400);
+      return () => clearTimeout(timer);
     }
 
     // Stroke draw — 380ms per spec.
@@ -52,7 +54,7 @@ export default function RegStep7Verified() {
   }, [reduceMotion, offset, router]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.content}>
         <Animated_Re.View
           entering={FadeIn.duration(220)}
@@ -60,10 +62,10 @@ export default function RegStep7Verified() {
           accessibilityElementsHidden
         >
           <Svg width={120} height={120} viewBox="0 0 96 96">
-            <Circle cx={48} cy={48} r={46} fill={colors.success} />
+            <Circle cx={48} cy={48} r={46} fill={t.colors.success} />
             <AnimatedPath
               d={CHECK_PATH}
-              stroke={colors.surface}
+              stroke={t.colors.surface}
               strokeWidth={8}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -76,7 +78,7 @@ export default function RegStep7Verified() {
 
         <Animated_Re.Text
           entering={FadeIn.duration(260).delay(120)}
-          style={styles.title}
+          style={[styles.title, { color: t.colors.text }]}
           accessibilityRole="header"
           accessibilityLiveRegion="polite"
         >
@@ -84,7 +86,7 @@ export default function RegStep7Verified() {
         </Animated_Re.Text>
         <Animated_Re.Text
           entering={FadeIn.duration(260).delay(220)}
-          style={styles.subtitle}
+          style={[styles.subtitle, { color: t.colors.textMuted }]}
         >
           Your account is ready. Let's tune the experience for you next.
         </Animated_Re.Text>
@@ -99,7 +101,7 @@ export default function RegStep7Verified() {
             hitSlop={8}
             style={styles.continueBtn}
           >
-            <Text style={styles.continueLabel}>Continue</Text>
+            <Text style={[styles.continueLabel, { color: t.colors.primary }]}>Continue</Text>
           </Pressable>
         </Animated_Re.View>
       ) : null}
@@ -108,7 +110,7 @@ export default function RegStep7Verified() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1 },
   content: {
     flex: 1,
     alignItems: 'center',
@@ -126,14 +128,12 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.title,
-    color: colors.text,
     letterSpacing: typography.trackTitle,
     textAlign: 'center',
   },
   subtitle: {
     fontFamily: fonts.body,
     fontSize: typography.body,
-    color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 24,
     maxWidth: 320,
@@ -149,6 +149,5 @@ const styles = StyleSheet.create({
   continueLabel: {
     fontFamily: fonts.displayBold,
     fontSize: typography.body,
-    color: colors.primary,
   },
 });

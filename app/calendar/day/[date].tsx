@@ -25,7 +25,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { colors, spacing, typography } from '../../../src/theme/tokens';
+import { spacing, typography } from '../../../src/theme/tokens';
 import { hapticSelection } from '../../../src/utils/haptics';
 import {
   PlanStep,
@@ -35,6 +35,7 @@ import {
   toggleStepDone,
   usePlansForDate,
 } from '../../../src/features/calendar/store';
+import { useTheme } from '../../../src/theme/useTheme';
 
 const HOUR_HEIGHT = 96;
 const TIMELINE_HEIGHT = HOUR_HEIGHT * 24;
@@ -153,6 +154,7 @@ function StepCard({
 }
 
 export default function DayTimelineScreen() {
+  const t = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
   const dateKey = params.date ?? '';
@@ -201,7 +203,7 @@ export default function DayTimelineScreen() {
   const dayLabel = `${DOW_LONG[dayDate.getDay()]}, ${MONTHS[dayDate.getMonth()]} ${dayDate.getDate()}`;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
@@ -212,12 +214,12 @@ export default function DayTimelineScreen() {
           accessibilityLabel="Back to calendar"
           accessibilityRole="button"
         >
-          <Ionicons name="chevron-back" size={28} color={colors.primary} />
+          <Ionicons name="chevron-back" size={28} color={t.colors.primary} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title} accessibilityRole="header">{dayLabel}</Text>
+          <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">{dayLabel}</Text>
           {plans.length > 0 ? (
-            <Text style={styles.subtitle}>
+            <Text style={[styles.subtitle, { color: t.colors.textMuted }]}>
               {plans.length} plan{plans.length === 1 ? '' : 's'} · {allSteps.length} step{allSteps.length === 1 ? '' : 's'}
             </Text>
           ) : null}
@@ -227,9 +229,9 @@ export default function DayTimelineScreen() {
 
       {plans.length === 0 ? (
         <View style={styles.emptyWrap}>
-          <Ionicons name="calendar-outline" size={64} color={colors.textTertiary} />
-          <Text style={styles.emptyTitle}>No plans for this day</Text>
-          <Text style={styles.emptySub}>
+          <Ionicons name="calendar-outline" size={64} color={t.colors.textTertiary} />
+          <Text style={[styles.emptyTitle, { color: t.colors.text }]}>No plans for this day</Text>
+          <Text style={[styles.emptySub, { color: t.colors.textMuted }]}>
             Tap “+ New Plan” on the Calendar to add one.
           </Text>
         </View>
@@ -247,7 +249,7 @@ export default function DayTimelineScreen() {
             <View style={styles.rail}>
               {Array.from({ length: 24 }).map((_, h) => (
                 <View key={h} style={styles.railHour}>
-                  <Text style={styles.railLabel}>{fmtClock(h * 60).replace(' ', '\n')}</Text>
+                  <Text style={[styles.railLabel, { color: t.colors.textMuted }]}>{fmtClock(h * 60).replace(' ', '\n')}</Text>
                 </View>
               ))}
             </View>
@@ -283,27 +285,23 @@ export default function DayTimelineScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1},
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    gap: spacing.md,
-  },
+    gap: spacing.md},
   headerIconBtn: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: {
     fontSize: typography.heading,
     fontWeight: '900',
-    color: colors.text,
-    letterSpacing: typography.trackHeading,
-  },
+
+    letterSpacing: typography.trackHeading},
   subtitle: {
     marginTop: 2,
-    fontSize: typography.caption,
-    color: colors.textMuted,
-  },
+    fontSize: typography.caption},
   headerSpacer: { width: 36 },
 
   emptyWrap: {
@@ -311,102 +309,84 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.md,
-    paddingHorizontal: spacing.xl,
-  },
+    paddingHorizontal: spacing.xl},
   emptyTitle: {
     fontSize: typography.subheading,
-    fontWeight: '800',
-    color: colors.text,
-  },
+    fontWeight: '800'},
   emptySub: {
     fontSize: typography.body,
-    color: colors.textMuted,
+
     textAlign: 'center',
-    lineHeight: 24,
-  },
+    lineHeight: 24},
 
   timelineWrap: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
+    paddingBottom: spacing.xxl},
   timeline: {
     flexDirection: 'row',
-    minHeight: TIMELINE_HEIGHT,
-  },
+    minHeight: TIMELINE_HEIGHT},
   rail: {
-    width: TIME_RAIL_WIDTH,
-  },
+    width: TIME_RAIL_WIDTH},
   railHour: {
     height: HOUR_HEIGHT,
-    justifyContent: 'flex-start',
-  },
+    justifyContent: 'flex-start'},
   railLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textMuted,
+
     letterSpacing: 0.4,
     textAlign: 'right',
     paddingRight: spacing.sm,
-    lineHeight: 13,
-  },
+    lineHeight: 13},
 
   body: {
     flex: 1,
-    position: 'relative',
-  },
+    position: 'relative'},
   rule: {
     position: 'absolute',
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: '#E0E5EA',
-  },
+    backgroundColor: '#E0E5EA'},
   halfRule: {
     position: 'absolute',
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: '#F2F5F8',
-  },
+    backgroundColor: '#F2F5F8'},
 
   card: {
     position: 'absolute',
     borderRadius: 5,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   cardInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
-    flex: 1,
-  },
+    flex: 1},
   cardChip: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   cardName: {
     fontSize: typography.body,
     fontWeight: '800',
-    color: '#FFFFFF',
-  },
+    color: '#FFFFFF'},
   cardTime: {
     marginTop: 1,
     fontSize: typography.caption,
     color: 'rgba(255, 255, 255, 0.85)',
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   cardDesc: {
     marginTop: 3,
     fontSize: typography.caption,
     color: 'rgba(255, 255, 255, 0.85)',
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   tick: {
     width: 28,
     height: 28,
@@ -414,10 +394,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.6)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   tickDone: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
-  },
+    borderColor: '#FFFFFF'},
 });

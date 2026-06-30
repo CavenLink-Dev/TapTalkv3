@@ -41,9 +41,10 @@ import {
   ACTIVITY_THEMES,
 } from '../../src/components/activities/ActivityCompletionOverlay';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
 import { playSound, playStreakSound } from '../../src/utils/sounds';
+import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Shapes ────────────────────────────────────────────────────────────────────
 
@@ -683,6 +684,7 @@ function StartOverlay({
   onCancel: () => void;
   onStart: () => void;
 }) {
+  const t = useTheme();
   const row = (d: Difficulty, label: string) => {
     const active = difficulty === d;
     return (
@@ -699,9 +701,9 @@ function StartOverlay({
         ]}
       >
         <View style={[styles.radio, active && styles.radioActive]}>
-          {active ? <View style={styles.radioDot} /> : null}
+          {active ? <View style={[styles.radioDot, { backgroundColor: t.colors.primary }]} /> : null}
         </View>
-        <Text style={styles.diffLabel}>{label}</Text>
+        <Text style={[styles.diffLabel, { color: t.colors.text }]}>{label}</Text>
       </Pressable>
     );
   };
@@ -710,11 +712,11 @@ function StartOverlay({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.overlayBackdrop}>
         <Card style={styles.overlayCard}>
-          <Text style={styles.overlayTitle} accessibilityRole="header">Shape Match</Text>
-          <Text style={styles.overlaySub}>Match each shape to the correct outline.</Text>
+          <Text style={[styles.overlayTitle, { color: t.colors.text }]} accessibilityRole="header">Shape Match</Text>
+          <Text style={[styles.overlaySub, { color: t.colors.textMuted }]}>Match each shape to the correct outline.</Text>
 
           <View style={styles.overlaySection}>
-            <Text style={styles.sectionEyebrow}>DIFFICULTY</Text>
+            <Text style={[styles.sectionEyebrow, { color: t.colors.textMuted }]}>DIFFICULTY</Text>
             {row('easy',   'Easy')}
             {row('medium', 'Medium')}
             {row('hard',   'Hard')}
@@ -727,7 +729,7 @@ function StartOverlay({
               accessibilityLabel="Cancel"
               style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}
             >
-              <Text style={styles.btnGhostText}>Cancel</Text>
+              <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Cancel</Text>
             </Pressable>
             <Pressable
               onPress={onStart}
@@ -755,12 +757,13 @@ function ConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const t = useTheme();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.overlayBackdrop}>
         <Card style={styles.overlayCard}>
-          <Text style={styles.overlayTitle} accessibilityRole="header">Reset this level?</Text>
-          <Text style={styles.overlaySub}>Your progress will be cleared.</Text>
+          <Text style={[styles.overlayTitle, { color: t.colors.text }]} accessibilityRole="header">Reset this level?</Text>
+          <Text style={[styles.overlaySub, { color: t.colors.textMuted }]}>Your progress will be cleared.</Text>
           <View style={styles.overlayActions}>
             <Pressable
               onPress={onCancel}
@@ -768,7 +771,7 @@ function ConfirmModal({
               accessibilityLabel="Keep playing"
               style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}
             >
-              <Text style={styles.btnGhostText}>Keep Playing</Text>
+              <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Keep Playing</Text>
             </Pressable>
             <Pressable
               onPress={onConfirm}
@@ -794,6 +797,7 @@ function HelpModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const t = useTheme();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlayBackdrop}>
@@ -801,11 +805,11 @@ function HelpModal({
           <Ionicons
             name="help-circle"
             size={38}
-            color={colors.primary}
+            color={t.colors.primary}
             style={{ alignSelf: 'center' }}
           />
-          <Text style={styles.overlayTitle} accessibilityRole="header">How to play</Text>
-          <Text style={styles.overlaySub}>
+          <Text style={[styles.overlayTitle, { color: t.colors.text }]} accessibilityRole="header">How to play</Text>
+          <Text style={[styles.overlaySub, { color: t.colors.textMuted }]}>
             Tap a shape below, then tap its matching outline above.
             {'\n\n'}
             You can also drag a shape directly onto its outline.
@@ -855,6 +859,7 @@ function newLevelLayout(difficulty: Difficulty): LevelLayout {
 }
 
 export default function ShapeMatchScreen() {
+  const t = useTheme();
   const router       = useRouter();
   const insets       = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
@@ -1145,7 +1150,7 @@ export default function ShapeMatchScreen() {
             <Ionicons
               name={soundOn ? 'volume-medium-outline' : 'volume-mute-outline'}
               size={22}
-              color={colors.text}
+              color={t.colors.text}
             />
           </Pressable>
           <Pressable
@@ -1155,7 +1160,7 @@ export default function ShapeMatchScreen() {
             accessibilityLabel="Help"
             style={styles.headerIconBtn}
           >
-            <Ionicons name="help-circle-outline" size={24} color={colors.text} />
+            <Ionicons name="help-circle-outline" size={24} color={t.colors.text} />
           </Pressable>
         </View>
       </View>
@@ -1172,18 +1177,18 @@ export default function ShapeMatchScreen() {
                 { transform: [{ scale: levelPillScale }] },
               ]}
             >
-              <Text style={styles.levelPillText}>Level {level} of {totalLevels}</Text>
+              <Text style={[styles.levelPillText, { color: t.colors.primary }]}>Level {level} of {totalLevels}</Text>
             </Animated.View>
           </View>
 
-          <Text style={styles.instruction}>Match each shape to its outline.</Text>
+          <Text style={[styles.instruction, { color: t.colors.text }]}>Match each shape to its outline.</Text>
 
           {/* Cross-fade wrapper — fades between levels */}
           <Animated.View style={{ flex: 1, gap: spacing.md, opacity: contentOpacity }}>
 
             {/* ── Slots zone ── */}
             <View style={styles.zone}>
-              <Text style={styles.zoneLabel}>OUTLINES</Text>
+              <Text style={[styles.zoneLabel, { color: t.colors.textTertiary }]}>OUTLINES</Text>
               <View style={styles.slotsArea}>
                 {renderGrid(
                   layout.slotOrder,
@@ -1210,7 +1215,7 @@ export default function ShapeMatchScreen() {
 
             {/* ── Shapes zone ── */}
             <View style={styles.zone}>
-              <Text style={styles.zoneLabel}>SHAPES</Text>
+              <Text style={[styles.zoneLabel, { color: t.colors.textTertiary }]}>SHAPES</Text>
               <View style={styles.shapesArea}>
                 {renderGrid(
                   layout.shapeOrder,
@@ -1248,8 +1253,8 @@ export default function ShapeMatchScreen() {
                 pressed && canGoBack && { opacity: 0.85 },
               ]}
             >
-              <Ionicons name="chevron-back" size={20} color={canGoBack ? colors.primary : colors.textTertiary} />
-              <Text style={[styles.footerBtnText, { color: canGoBack ? colors.primary : colors.textTertiary }]}>Back</Text>
+              <Ionicons name="chevron-back" size={20} color={canGoBack ? t.colors.primary : t.colors.textTertiary} />
+              <Text style={[styles.footerBtnText, { color: canGoBack ? t.colors.primary : t.colors.textTertiary }]}>Back</Text>
             </Pressable>
 
             <Pressable
@@ -1258,8 +1263,8 @@ export default function ShapeMatchScreen() {
               accessibilityLabel="Reset level"
               style={({ pressed }) => [styles.footerBtn, styles.footerReset, pressed && { opacity: 0.85 }]}
             >
-              <Ionicons name="refresh" size={20} color={colors.textMuted} />
-              <Text style={[styles.footerBtnText, { color: colors.textMuted }]}>Reset</Text>
+              <Ionicons name="refresh" size={20} color={t.colors.textMuted} />
+              <Text style={[styles.footerBtnText, { color: t.colors.textMuted }]}>Reset</Text>
             </Pressable>
 
             <Pressable
@@ -1274,8 +1279,8 @@ export default function ShapeMatchScreen() {
                 pressed && canGoForward && { opacity: 0.85 },
               ]}
             >
-              <Text style={[styles.footerBtnText, { color: canGoForward ? '#FFFFFF' : colors.textTertiary }]}>Forward</Text>
-              <Ionicons name="chevron-forward" size={20} color={canGoForward ? '#FFFFFF' : colors.textTertiary} />
+              <Text style={[styles.footerBtnText, { color: canGoForward ? '#FFFFFF' : t.colors.textTertiary }]}>Forward</Text>
+              <Ionicons name="chevron-forward" size={20} color={canGoForward ? '#FFFFFF' : t.colors.textTertiary} />
             </Pressable>
           </View>
 
@@ -1285,8 +1290,8 @@ export default function ShapeMatchScreen() {
               style={[styles.tryAgain, { bottom: insets.bottom + 90, opacity: tryAgainFade }]}
               pointerEvents="none"
             >
-              <Ionicons name="refresh-circle-outline" size={20} color={colors.primary} />
-              <Text style={styles.tryAgainText}>Try Again</Text>
+              <Ionicons name="refresh-circle-outline" size={20} color={t.colors.primary} />
+              <Text style={[styles.tryAgainText, { color: t.colors.primary }]}>Try Again</Text>
             </Animated.View>
           ) : null}
 
@@ -1355,24 +1360,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     gap: spacing.md,
-    backgroundColor: BG,
-  },
+    backgroundColor: BG},
   headerIconBtn: {
     width: 40, height: 40,
-    alignItems: 'center', justifyContent: 'center',
-  },
+    alignItems: 'center', justifyContent: 'center'},
   headerActions: {
     flexDirection: 'row',
-    gap: 4,
-  },
+    gap: 4},
 
   body: {
     flex: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     gap: spacing.sm,
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
 
   subhead: { alignItems: 'center' },
 
@@ -1380,40 +1381,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: 8,
     backgroundColor: '#E6F4FD',
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
   levelPillText: {
     fontSize: typography.body,
     fontWeight: '900',
-    color: colors.primary,
-    letterSpacing: 0.4,
-  },
+
+    letterSpacing: 0.4},
 
   instruction: {
     fontSize: typography.body,
-    color: colors.text,
+
     textAlign: 'center',
     lineHeight: 24,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
 
   // Zone containers — visual separation between outlines and shapes
   zone: {
-    gap: spacing.xs,
-  },
+    gap: spacing.xs},
   zoneLabel: {
     fontSize: typography.eyebrow ?? 11,
     fontWeight: '800',
-    color: colors.textTertiary,
+
     letterSpacing: 1.2,
     textTransform: 'uppercase',
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   zoneDivider: {
     height: 1,
     backgroundColor: 'rgba(0,0,0,0.07)',
-    marginHorizontal: spacing.lg,
-  },
+    marginHorizontal: spacing.lg},
 
   slotsArea:  { alignItems: 'center', paddingVertical: spacing.sm },
   shapesArea: { alignItems: 'center', paddingVertical: spacing.sm },
@@ -1429,16 +1424,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.07,
     shadowRadius: 3,
-    elevation: 2,
-  },
+    elevation: 2},
   slotAwaiting: { backgroundColor: '#E6F4FD' },
   slotHinted:   { backgroundColor: '#FFF4E0' },
 
   // Shape wells — white card so each draggable shape feels like a pickable tile
   shapeWell: {
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   shapePressable: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1447,13 +1440,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 3,
-    elevation: 2,
-  },
+    elevation: 2},
   shapeSelected: {
     backgroundColor: '#E6F4FD',
-    borderWidth: 3,
-    borderColor: colors.primary,
-  },
+    borderWidth: 3},
 
   footer: { flexDirection: 'row', gap: 8 },
 
@@ -1465,16 +1455,14 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 14,
     borderRadius: radii.pill,
-    minHeight: 50,
-  },
+    minHeight: 50},
   footerBtnDisabled: { opacity: 0.4 },
   footerBtnText: {
     fontSize: typography.callout,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
   footerGhost:   { backgroundColor: '#E6F4FD' },
   footerReset:   { backgroundColor: SLOT_BG },
-  footerForward: { backgroundColor: colors.primary },
+  footerForward: { },
 
   tryAgain: {
     position: 'absolute',
@@ -1486,13 +1474,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     backgroundColor: '#E6F4FD',
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
   tryAgainText: {
     fontSize: typography.body,
-    fontWeight: '800',
-    color: colors.primary,
-  },
+    fontWeight: '800'},
 
   correctToast: {
     position: 'absolute',
@@ -1504,13 +1489,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     backgroundColor: '#D6F0DD',
-    borderRadius: radii.pill,
-  },
+    borderRadius: radii.pill},
   correctToastText: {
     fontSize: typography.body,
     fontWeight: '800',
-    color: '#1A7A3A',
-  },
+    color: '#1A7A3A'},
 
   // ── Modals ──────────────────────────────────────────────────────────────────
   overlayBackdrop: {
@@ -1518,96 +1501,79 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(8, 14, 24, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.lg,
-  },
+    padding: spacing.lg},
   overlayCard: {
     width: '100%',
     maxWidth: 380,
     alignItems: 'stretch',
     gap: spacing.lg,
-    padding: spacing.xl,
-  },
+    padding: spacing.xl},
   overlayTitle: {
     fontSize: typography.title,
     fontWeight: '900',
-    color: colors.text,
+
     textAlign: 'center',
-    letterSpacing: typography.trackTitle,
-  },
+    letterSpacing: typography.trackTitle},
   overlaySub: {
     fontSize: typography.body,
-    color: colors.textMuted,
+
     textAlign: 'center',
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   overlaySection: { gap: spacing.sm },
   sectionEyebrow: {
     fontSize: typography.caption,
     fontWeight: '800',
-    color: colors.textMuted,
+
     letterSpacing: 1.1,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   overlayActions: {
     flexDirection: 'row',
-    gap: spacing.sm,
-  },
+    gap: spacing.sm},
 
   diffRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.md,
-    backgroundColor: colors.background,
+
     borderRadius: radii.card,
-    minHeight: 64,
-  },
+    minHeight: 64},
   diffRowActive: { backgroundColor: '#E6F4FD' },
   radio: {
     width: 24, height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: colors.textTertiary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  radioActive: { borderColor: colors.primary },
+
+    alignItems: 'center', justifyContent: 'center'},
+  radioActive: { },
   radioDot: {
     width: 12, height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.primary,
-  },
+    borderRadius: 6},
   diffLabel: {
     fontSize: typography.body,
-    fontWeight: '800',
-    color: colors.text,
-  },
+    fontWeight: '800'},
 
   btnGhost: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: radii.pill,
-    backgroundColor: colors.background,
+
     alignItems: 'center', justifyContent: 'center',
-    minHeight: 50,
-  },
+    minHeight: 50},
   btnGhostText: {
     fontSize: typography.body,
-    fontWeight: '700',
-    color: colors.text,
-  },
+    fontWeight: '700'},
   btnPrimary: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: radii.pill,
-    backgroundColor: colors.primary,
+
     alignItems: 'center', justifyContent: 'center',
-    minHeight: 50,
-  },
+    minHeight: 50},
   btnPrimaryText: {
     fontSize: typography.body,
     fontWeight: '800',
-    color: '#FFFFFF',
-  },
+    color: '#FFFFFF'},
   // Reset confirm — muted red tint, calm not alarming
   btnReset: {
     flex: 1,
@@ -1615,11 +1581,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: '#FFECEC',
     alignItems: 'center', justifyContent: 'center',
-    minHeight: 50,
-  },
+    minHeight: 50},
   btnResetText: {
     fontSize: typography.body,
     fontWeight: '800',
-    color: '#C0392B',
-  },
+    color: '#C0392B'},
 });

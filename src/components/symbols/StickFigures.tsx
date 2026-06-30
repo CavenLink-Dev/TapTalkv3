@@ -16,11 +16,10 @@
 
 import React from 'react';
 import Svg, { Circle, Line, Path, G, Polyline } from 'react-native-svg';
-import { colors } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 const STROKE       = '#0F0F0F';
 const STROKE_WIDTH = 2.6;
-const ACCENT       = colors.primaryDark; // #006DD3
 
 type IconProps = { size?: number };
 
@@ -43,22 +42,26 @@ function Body({ leftArm, rightArm }: {
 
 // ─── "I" — figure pointing at own chest ───────────────────────────────────────
 export function SymbolI({ size = 64 }: IconProps) {
+  const t = useTheme();
+  const accent = t.colors.primaryDark;
   return (
     <Svg width={size} height={size} viewBox="0 0 64 64">
       <Body leftArm={{ x: 20, y: 36 }} rightArm={{ x: 30, y: 34 }} />
       {/* Index finger pointing at chest */}
-      <Circle cx={30} cy={34} r={2.2} fill={ACCENT} />
+      <Circle cx={30} cy={34} r={2.2} fill={accent} />
     </Svg>
   );
 }
 
 // ─── "you" — figure pointing forward (out of frame) ──────────────────────────
 export function SymbolYou({ size = 64 }: IconProps) {
+  const t = useTheme();
+  const accent = t.colors.primaryDark;
   return (
     <Svg width={size} height={size} viewBox="0 0 64 64">
       <Body leftArm={{ x: 22, y: 36 }} rightArm={{ x: 54, y: 24 }} />
       {/* Pointer arrowhead at outstretched hand */}
-      <G stroke={ACCENT} strokeWidth={STROKE_WIDTH} strokeLinecap="round" fill="none">
+      <G stroke={accent} strokeWidth={STROKE_WIDTH} strokeLinecap="round" fill="none">
         <Polyline points="50,20 56,24 50,28" />
       </G>
     </Svg>
@@ -81,6 +84,8 @@ export function SymbolWant({ size = 64 }: IconProps) {
 
 // ─── "go" — figure mid-stride with a forward arrow ────────────────────────────
 export function SymbolGo({ size = 64 }: IconProps) {
+  const t = useTheme();
+  const accent = t.colors.primaryDark;
   return (
     <Svg width={size} height={size} viewBox="0 0 64 64">
       <G stroke={STROKE} strokeWidth={STROKE_WIDTH} strokeLinecap="round" fill="none">
@@ -96,7 +101,7 @@ export function SymbolGo({ size = 64 }: IconProps) {
         <Line x1={26} y1={40} x2={16} y2={54} />
       </G>
       {/* Motion arrow */}
-      <G stroke={ACCENT} strokeWidth={STROKE_WIDTH} strokeLinecap="round" fill="none">
+      <G stroke={accent} strokeWidth={STROKE_WIDTH} strokeLinecap="round" fill="none">
         <Line x1={42} y1={34} x2={56} y2={34} />
         <Polyline points="52,30 56,34 52,38" />
       </G>
@@ -106,6 +111,8 @@ export function SymbolGo({ size = 64 }: IconProps) {
 
 // ─── "more" — figure plus a "+" sign next to it ───────────────────────────────
 export function SymbolMore({ size = 64 }: IconProps) {
+  const t = useTheme();
+  const accent = t.colors.primaryDark;
   return (
     <Svg width={size} height={size} viewBox="0 0 64 64">
       <G stroke={STROKE} strokeWidth={STROKE_WIDTH} strokeLinecap="round" fill="none">
@@ -117,7 +124,7 @@ export function SymbolMore({ size = 64 }: IconProps) {
         <Line x1={22} y1={40}   x2={30} y2={54} />
       </G>
       {/* "+" sign */}
-      <G stroke={ACCENT} strokeWidth={STROKE_WIDTH + 0.6} strokeLinecap="round" fill="none">
+      <G stroke={accent} strokeWidth={STROKE_WIDTH + 0.6} strokeLinecap="round" fill="none">
         <Line x1={46} y1={24} x2={46} y2={42} />
         <Line x1={37} y1={33} x2={55} y2={33} />
       </G>
@@ -127,11 +134,13 @@ export function SymbolMore({ size = 64 }: IconProps) {
 
 // ─── "help" — figure with both arms raised in SOS posture ─────────────────────
 export function SymbolHelp({ size = 64 }: IconProps) {
+  const t = useTheme();
+  const accent = t.colors.primaryDark;
   return (
     <Svg width={size} height={size} viewBox="0 0 64 64">
       <Body leftArm={{ x: 18, y: 12 }} rightArm={{ x: 46, y: 12 }} />
       {/* Speech mark — small exclamation above head */}
-      <G stroke={ACCENT} strokeWidth={STROKE_WIDTH + 0.4} strokeLinecap="round" fill={ACCENT}>
+      <G stroke={accent} strokeWidth={STROKE_WIDTH + 0.4} strokeLinecap="round" fill={accent}>
         <Line x1={32} y1={2} x2={32} y2={6} />
       </G>
     </Svg>

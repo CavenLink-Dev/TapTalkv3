@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { useTheme } from '../theme/useTheme';
+import { radii, spacing, typography } from '../theme/tokens';
 import { SearchResult } from '../features/symbol-brain/types';
 import { SymbolSuggestionRow } from '../components/aac/symbols/SymbolSuggestionRow';
 import { SymbolResultCard } from '../components/aac/symbols/SymbolResultCard';
@@ -14,20 +15,21 @@ export function SymbolSearchScreen({
   userId = 'local-user',
   onSelectSymbol,
 }: Props) {
+  const t = useTheme();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<SearchResult | null>(null);
   const data = useMemo(() => selected ? [selected] : [], [selected]);
 
   return (
-    <View style={styles.screen}>
-      <Text style={styles.title}>Symbol Search</Text>
+    <View style={[styles.screen, { backgroundColor: t.colors.background, padding: spacing.lg }]}>
+      <Text style={[styles.title, { color: t.colors.text }]}>Symbol Search</Text>
       <TextInput
         accessibilityLabel="Search Mulberry symbols"
         value={query}
         onChangeText={setQuery}
         placeholder="Type a word, phrase, or concept"
-        placeholderTextColor={colors.textTertiary}
-        style={styles.input}
+        placeholderTextColor={t.colors.textTertiary}
+        style={[styles.input, { borderColor: t.colors.border, backgroundColor: t.colors.surface, color: t.colors.text }]}
       />
       <SymbolSuggestionRow
         query={query}
@@ -43,9 +45,9 @@ export function SymbolSearchScreen({
         contentContainerStyle={styles.detailList}
         renderItem={({ item }) => (
           <View>
-            <Text style={styles.sectionLabel}>Selected</Text>
+            <Text style={[styles.sectionLabel, { color: t.colors.textMuted }]}>Selected</Text>
             <SymbolResultCard result={item} onPress={onSelectSymbol} />
-            <Text style={styles.reason}>
+            <Text style={[styles.reason, { color: t.colors.textMuted }]}>
               {item.match_reasons.join(', ')}
             </Text>
           </View>
@@ -58,24 +60,18 @@ export function SymbolSearchScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.background,
-    padding: spacing.lg,
   },
   title: {
     fontSize: typography.heading,
     fontWeight: '900',
-    color: colors.text,
     marginBottom: spacing.md,
   },
   input: {
     minHeight: 52,
     borderRadius: radii.input,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,
     fontSize: typography.body,
-    color: colors.text,
     marginBottom: spacing.md,
   },
   detailList: {
@@ -83,13 +79,11 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: typography.caption,
-    color: colors.textMuted,
     fontWeight: '800',
     marginBottom: spacing.sm,
   },
   reason: {
     marginTop: spacing.sm,
-    color: colors.textMuted,
     fontSize: typography.caption,
   },
 });

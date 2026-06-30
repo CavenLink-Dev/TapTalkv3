@@ -1,50 +1,48 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../theme/useTheme';
+import { ThemedText } from './ThemedText';
 
 interface ScreenProps {
   title?: string;
   subtitle?: string;
   children?: React.ReactNode;
   scroll?: boolean;
+  /** Pull-to-refresh — only active when `scroll` is true. */
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
-export function Screen({ title, subtitle, children, scroll = true }: ScreenProps) {
+export function Screen({
+  title,
+  subtitle,
+  children,
+  scroll = true,
+  refreshing = false,
+  onRefresh,
+}: ScreenProps) {
   const t = useTheme();
 
   const content = (
     <>
       {title ? (
         <View style={styles.header}>
-          <Text
-            style={[
-              styles.title,
-              {
-                color: t.colors.text,
-                fontFamily: t.typography.fontFamilyDisplay,
-                fontSize: t.typography.heading,
-              },
-            ]}
+          <ThemedText
+            variant="title"
             accessibilityRole="header"
           >
             {title}
-          </Text>
+          </ThemedText>
           {subtitle ? (
-            <Text
-              style={[
-                styles.subtitle,
-                {
-                  color: t.colors.textMuted,
-                  fontFamily: t.typography.fontFamily,
-                  fontSize: t.typography.callout,
-                  lineHeight: Math.round(t.typography.callout * 1.4),
-                },
-              ]}
+            <ThemedText
+              variant="callout"
+              color={t.colors.textMuted}
+              style={styles.subtitle}
             >
               {subtitle}
-            </Text>
+            </ThemedText>
           ) : null}
         </View>
       ) : null}
@@ -58,11 +56,19 @@ export function Screen({ title, subtitle, children, scroll = true }: ScreenProps
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          // Rubber-band bounce on iOS even when content fits; matching
-          // overscroll glow on Android. Gives every screen the same feel.
           bounces
           alwaysBounceVertical
           overScrollMode="always"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={t.colors.primary}
+                colors={[t.colors.primary]}
+              />
+            ) : undefined
+          }
         >
           {content}
         </ScrollView>
@@ -90,8 +96,5 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 4,
-  },
-  title: {
-    letterSpacing: -0.4,
   },
 });

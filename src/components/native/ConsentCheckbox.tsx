@@ -7,7 +7,8 @@ import Animated, {
   FadeInDown,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { spacing, typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 interface ConsentCheckboxProps {
   checked: boolean;
@@ -29,6 +30,7 @@ export function ConsentCheckbox({
   label,
   entranceDelay = 0,
 }: ConsentCheckboxProps) {
+  const t = useTheme();
   const checkScale = useSharedValue(checked ? 1 : 0);
 
   const handlePress = () => {
@@ -65,12 +67,18 @@ export function ConsentCheckbox({
         accessibilityState={{ checked }}
         accessibilityLabel={label}
       >
-        <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+        <View
+          style={[
+            styles.checkbox,
+            { borderColor: t.colors.border, backgroundColor: t.colors.surface },
+            checked && { backgroundColor: t.colors.success, borderColor: t.colors.success },
+          ]}
+        >
           <Animated.View style={checkmarkStyle}>
-            <Text style={styles.checkmark}>{'\u2713'}</Text>
+            <Text style={[styles.checkmark, { color: t.colors.surface }]}>{'\u2713'}</Text>
           </Animated.View>
         </View>
-        <Text style={styles.label}>{label}</Text>
+        <Text style={[styles.label, { color: t.colors.text }]}>{label}</Text>
       </Pressable>
     </Animated.View>
   );
@@ -89,27 +97,19 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
     marginTop: 2,
   },
-  checkboxChecked: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
-  },
   checkmark: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.surface,
   },
   label: {
     flex: 1,
     fontSize: typography.callout,
     fontWeight: '600',
-    color: colors.text,
     lineHeight: 22,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   FadeInDown,
   interpolateColor,
@@ -9,10 +9,12 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { animation, colors, radii, spacing, typography } from '../../theme/tokens';
+import { animation, radii, spacing, typography } from '../../theme/tokens';
 import { springPop, timingBase, timingFast, timingFocus } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { useTheme } from '../../theme/useTheme';
 import { hapticLight } from '../../utils/haptics';
+import { ThemedText } from '../native/ThemedText';
 
 interface SelectableCardProps {
   label: string;
@@ -45,6 +47,7 @@ export function SelectableCard({
   entranceIndex = 0,
 }: SelectableCardProps) {
   const reduceMotion = useReduceMotion();
+  const t = useTheme();
   const pressed   = useSharedValue(0);
   const selectedV = useSharedValue(selected ? 1 : 0);
 
@@ -63,12 +66,12 @@ export function SelectableCard({
     const borderColor = interpolateColor(
       selectedV.value,
       [0, 1],
-      [colors.border, colors.primary],
+      [t.colors.border, t.colors.primary],
     );
     const background = interpolateColor(
       selectedV.value,
       [0, 1],
-      [colors.surface, '#EAF5FE'],
+      [t.colors.surface, '#EAF5FE'],
     );
     const scale = reduceMotion ? 1 : 1 - pressed.value * (1 - 0.98);
     // Design rule: no glow on selection — the border + tinted fill
@@ -85,12 +88,12 @@ export function SelectableCard({
     const background = interpolateColor(
       selectedV.value,
       [0, 1],
-      ['rgba(25,154,238,0)', colors.primary],
+      ['rgba(25,154,238,0)', t.colors.primary],
     );
     const border = interpolateColor(
       selectedV.value,
       [0, 1],
-      [colors.border, colors.primary],
+      [t.colors.border, t.colors.primary],
     );
     return { backgroundColor: background, borderColor: border };
   });
@@ -101,7 +104,7 @@ export function SelectableCard({
   }));
 
   const labelStyle = useAnimatedStyle(() => {
-    const color = interpolateColor(selectedV.value, [0, 1], [colors.text, colors.primaryDark]);
+    const color = interpolateColor(selectedV.value, [0, 1], [t.colors.text, t.colors.primaryDark]);
     return { color };
   });
 
@@ -139,12 +142,22 @@ export function SelectableCard({
           style={styles.row}
         >
           <View style={styles.textBlock}>
-            <Animated.Text style={[styles.label, labelStyle]}>{label}</Animated.Text>
-            {description ? <Text style={styles.description}>{description}</Text> : null}
+            <Animated.Text
+              style={[
+                styles.label,
+                { fontFamily: t.fonts.displayHeavy, fontSize: t.typography.body },
+                labelStyle,
+              ]}
+            >
+              {label}
+            </Animated.Text>
+            {description ? (
+              <ThemedText variant="callout" color={t.colors.textMuted}>{description}</ThemedText>
+            ) : null}
           </View>
           <Animated.View style={[styles.checkRing, ringStyle]}>
             <Animated.View style={checkStyle}>
-              <Ionicons name="checkmark" size={16} color={colors.surface} />
+              <Ionicons name="checkmark" size={16} color={t.colors.surface} />
             </Animated.View>
           </Animated.View>
         </Pressable>
@@ -173,14 +186,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   label: {
-    fontSize: typography.body,
     fontWeight: typography.weightCaption,
-  },
-  description: {
-    marginTop: 2,
-    fontSize: typography.callout,
-    color: colors.textMuted,
-    lineHeight: 20,
   },
   checkRing: {
     width: 24,
