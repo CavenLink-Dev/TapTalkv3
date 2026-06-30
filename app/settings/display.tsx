@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
 import type { AppState } from '../../src/context/types';
 
@@ -190,8 +191,8 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     textAlign: 'center',
+    fontFamily: fonts.displayHeavy,
     fontSize: typography.body,
-    fontWeight: '800',
     color: colors.text,
     letterSpacing: -0.2,
   },
@@ -207,12 +208,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sectionTitle: {
+    fontFamily: fonts.bodyHeavy,
     fontSize: typography.caption,
-    fontWeight: '800',
     color: colors.textTertiary,
     letterSpacing: 1.0,
   },
   sectionDesc: {
+    fontFamily: fonts.body,
     fontSize: typography.callout,
     color: colors.textMuted,
     marginBottom: spacing.sm,
@@ -236,7 +238,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EAF6FE',
   },
   previewText: {
-    fontWeight: '700',
+    fontFamily: fonts.displayBold,
     color: colors.text,
   },
   previewSelected: {
@@ -263,8 +265,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#EAF6FE',
   },
   themeLabel: {
+    fontFamily: fonts.displayBold,
     fontSize: typography.caption,
-    fontWeight: '700',
     color: colors.textMuted,
   },
   themeLabelSelected: {
@@ -281,11 +283,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   toggleTitle: {
+    fontFamily: fonts.displayHeavy,
     fontSize: typography.callout,
-    fontWeight: '800',
     color: colors.text,
   },
   toggleDesc: {
+    fontFamily: fonts.body,
     fontSize: typography.caption,
     color: colors.textMuted,
     marginTop: 2,

@@ -79,7 +79,6 @@ export function RegistrationScaffold({
               accessibilityRole="button"
               accessibilityLabel="Go back to the previous step"
               onPress={handleBack}
-              hitSlop={10}
               style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
             >
               <Ionicons name="chevron-back" size={24} color={colors.text} />
@@ -127,13 +126,13 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   backBtn: {
-    width: 32,
-    height: 32,
-    marginLeft: -6,
+    width: 44,
+    height: 44,
+    marginLeft: -10,
     marginRight: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
+    borderRadius: 22,
   },
   backBtnPressed: {
     backgroundColor: colors.inputBg,

@@ -12,6 +12,7 @@ import { Href, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
 
 // Preserved from the previous "tools" tab so the existing voice/display
@@ -158,7 +159,7 @@ export default function SettingsIndexScreen() {
         alwaysBounceVertical
         overScrollMode="always"
       >
-        <Text style={styles.title}>SETTINGS</Text>
+        <Text style={styles.title} accessibilityRole="header">Settings</Text>
 
         <Text style={styles.sectionHeading}>APP</Text>
         <Card style={styles.section}>
@@ -219,16 +220,16 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg, paddingBottom: 40, gap: spacing.lg },
 
   title: {
+    fontFamily: fonts.displayBlack,
     fontSize: typography.title,
-    fontWeight: '900',
     color: colors.text,
     letterSpacing: -0.5,
     marginBottom: spacing.xs,
   },
 
   sectionHeading: {
+    fontFamily: fonts.bodyHeavy,
     fontSize: typography.caption,
-    fontWeight: '800',
     color: colors.textTertiary,
     letterSpacing: 0.8,
     marginBottom: spacing.xs,
@@ -258,11 +259,12 @@ const styles = StyleSheet.create({
   },
   settingCopy: { flex: 1 },
   settingLabel: {
+    fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    fontWeight: '700',
     color: colors.text,
   },
   settingSubtitle: {
+    fontFamily: fonts.body,
     marginTop: 2,
     fontSize: typography.caption,
     color: colors.textMuted,
@@ -277,8 +279,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   premiumText: {
+    fontFamily: fonts.displayBlack,
     fontSize: 10,
-    fontWeight: '900',
     color: colors.surface,
     letterSpacing: 0.4,
   },
@@ -304,8 +306,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   upgradeText: {
+    fontFamily: fonts.displayHeavy,
     fontSize: typography.caption,
-    fontWeight: '800',
     color: colors.surface,
   },
 
@@ -316,11 +318,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F8FF',
   },
   upgradeTitle: {
+    fontFamily: fonts.displayBlack,
     fontSize: typography.subheading,
-    fontWeight: '900',
     color: colors.text,
   },
   upgradeDesc: {
+    fontFamily: fonts.body,
     fontSize: typography.callout,
     color: colors.textMuted,
     textAlign: 'center',

@@ -6,6 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { colors, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 
 const registerRoute = '/registration/01-who' as Href;
 const loginRoute = '/auth/login' as Href;
@@ -95,13 +96,14 @@ const styles = StyleSheet.create({
     height: 72,
   },
   headline: {
+    fontFamily: fonts.displayBlack,
     fontSize: 34,
-    fontWeight: '800',
     color: colors.text,
     letterSpacing: -0.6,
     lineHeight: 40,
   },
   subhead: {
+    fontFamily: fonts.body,
     marginTop: spacing.md,
     fontSize: typography.body,
     color: colors.textMuted,
@@ -125,6 +127,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   highlightText: {
+    fontFamily: fonts.body,
     flex: 1,
     fontSize: typography.callout,
     color: colors.text,
@@ -136,13 +139,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   privacy: {
+    fontFamily: fonts.body,
     textAlign: 'center',
     fontSize: typography.caption,
     color: colors.textTertiary,
     lineHeight: 18,
   },
   privacyLink: {
+    fontFamily: fonts.displayBold,
     color: colors.primary,
-    fontWeight: '700',
   },
 });

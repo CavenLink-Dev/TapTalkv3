@@ -8,6 +8,7 @@ import { Card } from '../../src/components/native/Card';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
 
 const RATE_OPTIONS: { label: string; value: number; description: string }[] = [
@@ -161,8 +162,8 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     textAlign: 'center',
+    fontFamily: fonts.displayHeavy,
     fontSize: typography.body,
-    fontWeight: '800',
     color: colors.text,
     letterSpacing: -0.2,
   },
@@ -178,12 +179,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sectionTitle: {
+    fontFamily: fonts.bodyHeavy,
     fontSize: typography.caption,
-    fontWeight: '800',
     color: colors.textTertiary,
     letterSpacing: 1.0,
   },
   sectionDesc: {
+    fontFamily: fonts.body,
     fontSize: typography.callout,
     color: colors.textMuted,
     marginBottom: spacing.sm,
@@ -208,14 +210,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   optionLabel: {
+    fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    fontWeight: '700',
     color: colors.text,
   },
   optionLabelSelected: {
     color: colors.primary,
   },
   optionDesc: {
+    fontFamily: fonts.body,
     fontSize: typography.caption,
     color: colors.textMuted,
     marginTop: 2,

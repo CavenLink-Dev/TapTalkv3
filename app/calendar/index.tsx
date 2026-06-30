@@ -27,6 +27,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Href, Stack, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
 import {
   Plan,
@@ -358,9 +359,9 @@ const styles = StyleSheet.create({
   },
   headerIconBtn: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: {
+    fontFamily: fonts.displayBlack,
     flex: 1,
     fontSize: typography.title,
-    fontWeight: '900',
     color: colors.text,
     letterSpacing: typography.trackTitle,
   },
@@ -374,9 +375,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
   },
   newPlanText: {
+    fontFamily: fonts.displayHeavy,
     color: colors.surface,
     fontSize: typography.callout,
-    fontWeight: '800',
   },
 
   scroll: {
@@ -404,8 +405,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   monthLabel: {
+    fontFamily: fonts.displayHeavy,
     fontSize: typography.subheading,
-    fontWeight: '800',
     color: colors.text,
     letterSpacing: typography.trackSubhead,
   },
@@ -416,10 +417,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   weekdayLabel: {
+    fontFamily: fonts.displayBold,
     flex: 1,
     textAlign: 'center',
     fontSize: typography.caption,
-    fontWeight: '700',
     color: colors.textMuted,
     letterSpacing: 0.6,
   },
@@ -446,13 +447,13 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   cellText: {
+    fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    fontWeight: '700',
     color: colors.text,
   },
   cellTextMuted: { color: colors.textTertiary },
-  cellTextToday: { color: colors.primary, fontWeight: '900' },
-  cellTextSelected: { color: '#FFFFFF', fontWeight: '900' },
+  cellTextToday: { fontFamily: fonts.displayBlack, color: colors.primary },
+  cellTextSelected: { fontFamily: fonts.displayBlack, color: '#FFFFFF' },
   cellDot: {
     width: 4,
     height: 4,
@@ -463,8 +464,8 @@ const styles = StyleSheet.create({
 
   // Day plans
   sectionTitle: {
+    fontFamily: fonts.displayHeavy,
     fontSize: typography.subheading,
-    fontWeight: '800',
     color: colors.text,
     letterSpacing: typography.trackSubhead,
   },
@@ -490,12 +491,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   planName: {
+    fontFamily: fonts.displayHeavy,
     fontSize: typography.subheading,
-    fontWeight: '800',
     color: colors.text,
     letterSpacing: typography.trackSubhead,
   },
   planMeta: {
+    fontFamily: fonts.body,
     fontSize: typography.caption,
     color: colors.textMuted,
     marginTop: 2,
@@ -508,9 +510,9 @@ const styles = StyleSheet.create({
   },
   progressFill: { height: '100%', borderRadius: 4 },
   progressText: {
+    fontFamily: fonts.displayBold,
     alignSelf: 'flex-end',
     fontSize: typography.caption,
-    fontWeight: '700',
     color: colors.textMuted,
   },
   addMore: {
@@ -523,8 +525,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#E6F4FD',
   },
   addMoreText: {
+    fontFamily: fonts.displayBold,
     fontSize: typography.callout,
-    fontWeight: '700',
     color: colors.primary,
   },
 
@@ -538,8 +540,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   emptyHeading: {
+    fontFamily: fonts.displayBlack,
     fontSize: typography.heading,
-    fontWeight: '900',
     color: colors.text,
     letterSpacing: typography.trackHeading,
   },
@@ -552,6 +554,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptySub: {
+    fontFamily: fonts.body,
     fontSize: typography.callout,
     color: colors.textMuted,
     textAlign: 'center',

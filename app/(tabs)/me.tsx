@@ -12,6 +12,7 @@ import { listStyles } from '../../src/styles/listStyles';
 import { verifyPin } from '../../src/utils/pin';
 import { hapticSelection } from '../../src/utils/haptics';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 
 const documents = [
   'Welcome to TapTalk',
@@ -272,9 +273,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   avatarText: {
+    fontFamily: fonts.displayBlack,
     color: colors.surface,
     fontSize: 28,
-    fontWeight: '900',
   },
   docIcon: {
     width: 24,
@@ -288,12 +289,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   docText: {
+    fontFamily: fonts.displayBold,
     flex: 1,
     color: colors.text,
     fontSize: typography.callout,
-    fontWeight: '700',
   },
   email: {
+    fontFamily: fonts.body,
     marginTop: 2,
     color: colors.textMuted,
     fontSize: typography.caption,
@@ -307,15 +309,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   mascotText: {
+    fontFamily: fonts.body,
     marginTop: spacing.sm,
     color: colors.textMuted,
     fontSize: typography.caption,
     textAlign: 'center',
   },
   name: {
+    fontFamily: fonts.displayBlack,
     color: colors.text,
     fontSize: typography.subheading,
-    fontWeight: '900',
   },
   parentDetails: {
     marginTop: spacing.md,
@@ -324,9 +327,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   parentText: {
+    fontFamily: fonts.displayBold,
     color: colors.textMuted,
     fontSize: typography.caption,
-    fontWeight: '700',
   },
   profileCard: {
     flexDirection: 'row',
@@ -338,10 +341,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   fieldLabel: {
+    fontFamily: fonts.displayBold,
     marginTop: spacing.md,
     marginBottom: 6,
     fontSize: typography.caption,
-    fontWeight: '700',
     color: colors.textMuted,
     letterSpacing: 0.2,
   },
@@ -359,14 +362,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingSubtitle: {
+    fontFamily: fonts.body,
     marginTop: 2,
     color: colors.textMuted,
     fontSize: typography.caption,
   },
   settingTitle: {
+    fontFamily: fonts.displayHeavy,
     color: colors.text,
     fontSize: typography.callout,
-    fontWeight: '800',
   },
   pinPrompt: {
     marginTop: spacing.md,
@@ -375,9 +379,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   pinPromptLabel: {
+    fontFamily: fonts.displayHeavy,
     color: colors.text,
     fontSize: typography.caption,
-    fontWeight: '800',
     marginBottom: spacing.sm,
   },
   pinInputRow: {
@@ -396,9 +400,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pinError: {
+    fontFamily: fonts.displayBold,
     color: colors.danger,
     fontSize: typography.caption,
-    fontWeight: '700',
     marginBottom: spacing.sm,
   },
   pinActions: {
@@ -421,16 +425,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   statNum: {
+    fontFamily: fonts.displayBlack,
     fontSize: typography.heading,
-    fontWeight: '900',
     color: colors.primary,
     letterSpacing: -0.5,
   },
   statLabel: {
+    fontFamily: fonts.displayBold,
     marginTop: 2,
     fontSize: typography.caption,
     color: colors.textMuted,
-    fontWeight: '700',
     textAlign: 'center',
   },
 });

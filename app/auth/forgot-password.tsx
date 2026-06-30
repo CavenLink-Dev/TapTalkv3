@@ -16,6 +16,7 @@ import { TextField } from '../../src/components/native/TextField';
 import { authFormStyles } from '../../src/styles/authFormStyles';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
 import { colors, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 
 export default function ForgotPassword() {
   const router = useRouter();
@@ -113,10 +114,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     minHeight: 40,
   },
-  backBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
-  title: { fontSize: 30, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
+  title: { fontFamily: fonts.displayBlack, fontSize: 30, color: colors.text, letterSpacing: -0.5 },
   subtitle: {
+    fontFamily: fonts.body,
     marginTop: spacing.sm,
     fontSize: typography.body,
     color: colors.textMuted,
@@ -132,6 +134,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
-  confirmText: { flex: 1, fontSize: typography.callout, color: colors.text, lineHeight: 21 },
+  confirmText: { fontFamily: fonts.body, flex: 1, fontSize: typography.callout, color: colors.text, lineHeight: 21 },
   footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
 });
