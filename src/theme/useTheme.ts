@@ -9,15 +9,16 @@
  * Responds to:
  *   • textSize   → scales all font sizes proportionally
  *   • buttonSize → scales min-height + icon size of interactive controls
- *   • theme      → switches between light / dark / system palettes
+ *   • theme      → switches between light / dark palettes
  *   • highContrast → bumps text-to-background contrast ratios
  */
 
 import { useMemo } from 'react';
-import { useColorScheme } from 'react-native';
 import { useAppContext } from '../hooks/useAppContext';
+import type { ColorTokens } from './tokens';
 import {
-  colors as lightColors,
+  colorsLight as lightColors,
+  colorsDark,
   symbolColors,
   typography,
   spacing,
@@ -26,6 +27,19 @@ import {
   animation,
 } from './tokens';
 import { fonts } from './fonts';
+
+type ScaledTypographyKey =
+  | 'display'
+  | 'title'
+  | 'heading'
+  | 'subheading'
+  | 'body'
+  | 'callout'
+  | 'caption'
+  | 'eyebrow'
+  | 'tab';
+
+type ScaledTypography = Omit<typeof typography, ScaledTypographyKey> & Record<ScaledTypographyKey, number>;
 
 // ─── Text-size multipliers ──────────────────────────────────────────────────
 
@@ -48,57 +62,9 @@ const BUTTON_ICON_SCALE: Record<string, number> = {
   large:    1.25,
 };
 
-// ─── Dark palette ───────────────────────────────────────────────────────────
-
-const darkColors: typeof lightColors = {
-  ...lightColors,
-
-  // UI foundation
-  background:      '#000000',
-  surface:         '#1C1C1E',
-  navBackground:   '#1C1C1E',
-
-  // Brand / interactive (keep brand hue, lighten for dark bg)
-  primary:         '#4DB8FF',
-  primaryDark:     '#66BFFF',
-  primaryPressed:  '#2E9AEE',
-  softBlue:        '#1E3A5F',
-
-  // Text
-  text:            '#F5F5F7',
-  textMuted:       '#A1A1A6',
-  textTertiary:    '#8E8E93',
-  textOnDark:      '#FFFFFF',
-
-  // Inputs / surfaces
-  inputBg:         '#2C2C2E',
-  inputBgWhite:    '#2C2C2E',
-  input:           '#2C2C2E',
-
-  // Progress
-  progressFill:    '#4DB8FF',
-  progressTrack:   '#2C3E50',
-
-  // Borders
-  border:          '#48484A',
-  symbolOutline:   '#A1A1A6',
-  borderBlue:      '#48484A',
-
-  // Status
-  danger:          '#FF6961',
-  success:         '#32D74B',
-  warning:         '#FFD60A',
-  disabled:        '#3A3A3C',
-
-  // Folders
-  folderBg:        '#B8A830',
-  folderFlap:      'rgba(255,255,255,0.12)',
-  folderFlapSecondary: '#3A3820',
-};
-
 // ─── High-contrast overrides ────────────────────────────────────────────────
 
-const highContrastLight: Partial<typeof lightColors> = {
+const highContrastLight: Partial<ColorTokens> = {
   text:          '#000000',
   textMuted:     '#1C1C1E',
   textTertiary:  '#3C3C43',
@@ -108,23 +74,21 @@ const highContrastLight: Partial<typeof lightColors> = {
   primaryDark:   '#003E82',
 };
 
-const highContrastDark: Partial<typeof lightColors> = {
+const highContrastDark: Partial<ColorTokens> = {
   text:          '#FFFFFF',
-  textMuted:     '#E5E5EA',
-  textTertiary:  '#D1D1D6',
-  border:        '#D1D1D6',
-  borderBlue:    '#D1D1D6',
-  primary:       '#64D2FF',
-  primaryDark:   '#99E6FF',
+  textMuted:     '#FFFFFF',
+  textTertiary:  '#E6E6E6',
+  border:        '#FFFFFF',
+  borderBlue:    '#FFFFFF',
 };
 
 // ─── Return type ────────────────────────────────────────────────────────────
 
 export interface ThemeValues {
   /** Effective colors (light/dark + high-contrast applied). */
-  colors: typeof lightColors;
+  colors: ColorTokens;
   /** Scaled typography sizes. Font families and weights are unchanged. */
-  typography: typeof typography;
+  typography: ScaledTypography;
   /** Text scale factor (1 = default). */
   textScale: number;
   /** Minimum height for primary action buttons. */
@@ -148,18 +112,17 @@ export interface ThemeValues {
 
 export function useTheme(): ThemeValues {
   const { state } = useAppContext();
-  const systemScheme = useColorScheme();
   const { textSize, buttonSize, theme, highContrast } = state.accessibility;
 
   return useMemo(() => {
     // 1. Resolve effective colour scheme
-    const effectiveScheme =
-      theme === 'system' ? (systemScheme ?? 'light') : theme;
-    const isDark = effectiveScheme === 'dark';
+    // Keep this deterministic: old saved "system" preferences resolve to
+    // light so the app does not bounce between OS appearance and app tokens.
+    const isDark = theme === 'dark';
 
     // 2. Compute colors
-    let effectiveColors: typeof lightColors = isDark
-      ? { ...darkColors }
+    let effectiveColors: ColorTokens = isDark
+      ? { ...colorsDark }
       : { ...lightColors };
 
     if (highContrast) {
@@ -171,7 +134,7 @@ export function useTheme(): ThemeValues {
     const scale = TEXT_SCALE[textSize] ?? 1;
 
     // 4. Compute scaled typography
-    const scaledTypography = {
+    const scaledTypography: ScaledTypography = {
       ...typography,
       display:    Math.round(typography.display * scale),
       title:      Math.round(typography.title * scale),
@@ -203,5 +166,6 @@ export function useTheme(): ThemeValues {
       fonts,
       symbolColors,
     };
-  }, [textSize, buttonSize, theme, highContrast, systemScheme]);
+  }, [textSize, buttonSize, theme, highContrast]);
+
 }

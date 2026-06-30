@@ -34,10 +34,11 @@ import Svg, { Polyline } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, useRouter } from 'expo-router';
 import { BackspaceIcon, BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
-import { MulberrySymbol } from '../../src/components/symbols/MulberrySymbol';
+import { MulberrySymbol, prewarmMulberryAssets } from '../../src/components/symbols/MulberrySymbol';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
 import { animation, colors, spacing } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import {
@@ -230,7 +231,7 @@ const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
 const BACK_TILE: BoardTile = { id: 'back', label: 'Back', kind: 'action', color: '#6B7580' };
 const HOME_TILE: BoardTile = { id: 'home', label: 'Home', kind: 'action', color: '#6B7580' };
 
-function BoardNavTile({ tile, size }: { tile: BoardTile; size: number }) {
+const BoardNavTile = React.memo(function BoardNavTile({ tile, size }: { tile: BoardTile; size: number }) {
   return (
     <View style={[styles.navTileShell, { width: size, height: size }]}>
       <View style={styles.navTileIconMount}>
@@ -241,7 +242,7 @@ function BoardNavTile({ tile, size }: { tile: BoardTile; size: number }) {
       </Text>
     </View>
   );
-}
+});
 
 // Mulberry pictograms render inside the `symbolMount` region at ~52% of
 // the tile size, which keeps them comfortably below the label without
@@ -670,6 +671,33 @@ function BoardTileButton({
   return inner;
 }
 
+const MemoBoardTileButton = React.memo(BoardTileButton);
+
+const BoardTileCell = React.memo(function BoardTileCell({
+  tile,
+  size,
+  resolved,
+  onTilePress,
+}: {
+  tile: BoardTile;
+  size: number;
+  resolved?: ResolvedSymbol;
+  onTilePress: (tile: BoardTile, rect: WindowRect | null) => void;
+}) {
+  const handlePress = useCallback(
+    (rect: WindowRect | null) => onTilePress(tile, rect),
+    [onTilePress, tile],
+  );
+  return (
+    <MemoBoardTileButton
+      tile={tile}
+      size={size}
+      onPress={handlePress}
+      resolved={resolved}
+    />
+  );
+});
+
 function TopNavTab({
   tab,
   active,
@@ -682,6 +710,9 @@ function TopNavTab({
   const meta = TOP_TAB_META[tab];
   // Items 3 & 4 — RM: zero duration + no scale lift (principle 18).
   const reduceMotion = useReduceMotion();
+  const t = useTheme();
+  const idleColor = t.isDark ? t.colors.textTertiary : TOP_TAB_IDLE_COLOR;
+  const activeColor = t.isDark ? t.colors.symbolOutline : TOP_TAB_ACTIVE_COLOR;
 
   // Single shared value drives both colour and scale so the active tab
   // brightens and lifts together. JS-driver because of the colour
@@ -699,7 +730,7 @@ function TopNavTab({
 
   const tintColor = activeAnim.interpolate({
     inputRange:  [0, 1],
-    outputRange: [TOP_TAB_IDLE_COLOR, TOP_TAB_ACTIVE_COLOR],
+    outputRange: [idleColor, activeColor],
   });
   const scale = activeAnim.interpolate({
     inputRange:  [0, 1],
@@ -727,13 +758,13 @@ function TopNavTab({
           size={28}
           // Animated.Color can't pass directly into Ionicons' color prop, so
           // we let the parent View tint via animated text-style trick.
-          color={TOP_TAB_IDLE_COLOR}
+          color={idleColor}
           // Replace the static icon with an absolute-positioned overlay that
           // fades in the active tint on top.
         />
         {/* Active-coloured overlay icon — opacity tracks activeAnim. */}
         <RNAnimated.View style={[styles.topTabIconOverlay, { opacity: activeAnim }]}>
-          <Ionicons name={meta.icon} size={28} color={TOP_TAB_ACTIVE_COLOR} />
+          <Ionicons name={meta.icon} size={28} color={activeColor} />
         </RNAnimated.View>
         <RNAnimated.Text style={[styles.topTabLabel, { color: tintColor }]}>
           {meta.label}
@@ -746,7 +777,10 @@ function TopNavTab({
 function ToggleChevron({ open, active }: { open: boolean; active: boolean }) {
   // Arrow darkens (rather than lights blue) when the nav is open or pressed,
   // so the chevron lives in the same neutral family as the top-tab icons.
-  const stroke = active ? colors.symbolOutline : '#9A9A9A';
+  const t = useTheme();
+  const stroke = active
+    ? t.colors.symbolOutline
+    : t.isDark ? t.colors.textTertiary : '#9A9A9A';
   return (
     <Svg width={36} height={16} viewBox="0 0 36 16">
       <Polyline
@@ -774,6 +808,7 @@ function TopNav({
 }) {
   // Item 3 — RM: collapse/expand at duration 0 (principle 18).
   const reduceMotion = useReduceMotion();
+  const t = useTheme();
   const anim = useRef(new RNAnimated.Value(visible ? 1 : 0)).current;
 
   useEffect(() => {
@@ -795,10 +830,22 @@ function TopNav({
   });
 
   return (
-    <RNAnimated.View style={[styles.topNavSlot, { height: slotHeight }]}>
+    <RNAnimated.View
+      style={[
+        styles.topNavSlot,
+        { height: slotHeight, backgroundColor: t.colors.background },
+      ]}
+    >
       <RNAnimated.View
         pointerEvents={visible ? 'auto' : 'none'}
-        style={[styles.topNavPanel, { opacity: panelOpacity }]}
+        style={[
+          styles.topNavPanel,
+          {
+            opacity: panelOpacity,
+            backgroundColor: t.isDark ? t.colors.navBackground : '#FFFFFF',
+            borderColor: t.isDark ? t.colors.border : '#9A9A9A',
+          },
+        ]}
       >
         {(['taptalk', 'quick', 'edit', 'clear'] as TopTab[]).map(tab => (
           <TopNavTab
@@ -815,8 +862,18 @@ function TopNav({
         onPress={onToggle}
         style={({ pressed }) => [
           styles.navToggle,
+          {
+            backgroundColor: t.isDark ? t.colors.input : t.colors.softBlue,
+            borderColor: t.isDark ? t.colors.border : t.colors.primaryDark,
+          },
           visible ? styles.navToggleOpen : styles.navToggleClosed,
-          !(visible || pressed) && styles.navToggleIdle,
+          !(visible || pressed) && [
+            styles.navToggleIdle,
+            {
+              backgroundColor: t.isDark ? t.colors.navBackground : '#FFFFFF',
+              borderColor: t.isDark ? t.colors.border : '#9A9A9A',
+            },
+          ],
         ]}
       >
         {({ pressed }) => <ToggleChevron open={visible} active={visible || pressed} />}
@@ -833,6 +890,7 @@ export default function TalkScreen() {
   const { state, dispatch } = useAppContext();
   const { speak, lastError, clearError } = useSpeech();
   const router = useRouter();
+  const t = useTheme();
   // Default to closed — board is the hero, top nav stays out of the way
   // until the user explicitly taps the chevron to open it.
   const [showTopNav, setShowTopNav] = useState(false);
@@ -844,6 +902,8 @@ export default function TalkScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const scrollPositions = useRef<Partial<Record<BoardMode, number>>>({});
   const reduceMotion = useReduceMotion();
+  const messageWordsRef = useRef(state.messageWords);
+  messageWordsRef.current = state.messageWords;
   const hapticIfEnabled = useCallback(() => {
     if (state.accessibility.hapticsEnabled !== false) hapticSelection();
   }, [state.accessibility.hapticsEnabled]);
@@ -990,7 +1050,7 @@ export default function TalkScreen() {
     }
 
     const targetIndex = Math.min(
-      state.messageWords.length + ghostsRef.current.length,
+      messageWordsRef.current.length + ghostsRef.current.length,
       MESSAGE_SLOT_COUNT - 1,
     );
     const targetRef = messageSlotRefs.current[targetIndex];
@@ -1021,7 +1081,25 @@ export default function TalkScreen() {
         });
       });
     });
-  }, [addGhost, appendWord, state.messageWords.length, tileSize]);
+  }, [addGhost, appendWord, tileSize]);
+
+  useEffect(() => {
+    prewarmMulberryAssets({
+      symbolIds: tiles
+        .map(tile => tile.mulberrySymbolId)
+        .filter((id): id is string => Boolean(id)),
+      names: tiles
+        .map(tile => tile.mulberryName)
+        .filter((name): name is string => Boolean(name)),
+    });
+  }, [tiles]);
+
+  useEffect(() => {
+    if (resolvedSymbols.size === 0) return;
+    prewarmMulberryAssets({
+      symbolIds: [...resolvedSymbols.values()].map(result => result.symbol.id),
+    });
+  }, [resolvedSymbols]);
 
   const navigateTo = useCallback((target: BoardMode) => {
     setPreviousMode(activeMode);
@@ -1152,8 +1230,8 @@ export default function TalkScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <View ref={rootRef} style={styles.screenRoot}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.surface }]} edges={['top']}>
+      <View ref={rootRef} style={[styles.screenRoot, { backgroundColor: t.colors.background }]}>
         {/* Item 8 — shake wrapper lets the banner animate on error
             while the inner Pressable stays the dismiss hit target. */}
         {lastError ? (
@@ -1169,7 +1247,15 @@ export default function TalkScreen() {
           </Reanimated.View>
         ) : null}
 
-        <View style={styles.messageArea}>
+        <View
+          style={[
+            styles.messageArea,
+            {
+              backgroundColor: t.colors.surface,
+              borderBottomColor: t.colors.border,
+            },
+          ]}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={hasWords ? `Speak ${messageText}` : 'Tap symbols to build a sentence'}
@@ -1177,7 +1263,14 @@ export default function TalkScreen() {
             style={styles.messageButton}
           >
             {!hasWords && ghosts.length === 0 ? (
-              <Text style={[styles.messageText, styles.messagePlaceholder]} numberOfLines={1}>
+              <Text
+                style={[
+                  styles.messageText,
+                  styles.messagePlaceholder,
+                  { color: t.colors.textTertiary },
+                ]}
+                numberOfLines={1}
+              >
                 Tap to speak....
               </Text>
             ) : null}
@@ -1236,7 +1329,7 @@ export default function TalkScreen() {
 
         <ScrollView
           ref={scrollRef}
-          style={styles.board}
+          style={[styles.board, { backgroundColor: t.colors.background }]}
           contentContainerStyle={[
             styles.boardContent,
             {
@@ -1253,11 +1346,11 @@ export default function TalkScreen() {
           scrollEventThrottle={50}
         >
           {tiles.map(tile => (
-            <BoardTileButton
+            <BoardTileCell
               key={tile.id}
               tile={tile}
               size={tileSize}
-              onPress={rect => handleTilePress(tile, rect)}
+              onTilePress={handleTilePress}
               resolved={resolvedSymbols.get(tile.id)}
             />
           ))}
@@ -1272,15 +1365,15 @@ export default function TalkScreen() {
                 },
               ]}
             >
-              <BoardTileButton
+              <BoardTileCell
                 tile={BACK_TILE}
                 size={tileSize}
-                onPress={rect => handleTilePress(BACK_TILE, rect)}
+                onTilePress={handleTilePress}
               />
-              <BoardTileButton
+              <BoardTileCell
                 tile={HOME_TILE}
                 size={tileSize}
-                onPress={rect => handleTilePress(HOME_TILE, rect)}
+                onTilePress={handleTilePress}
               />
             </View>
           ) : null}

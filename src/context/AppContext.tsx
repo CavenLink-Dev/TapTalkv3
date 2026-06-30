@@ -1,10 +1,14 @@
 import React, { createContext, useReducer, useEffect, useCallback, useRef, useState, ReactNode } from 'react';
+import { AppState as RNAppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, Action } from './types';
+import { seedSymbolBrainDatabase } from '../data/sqlite/seedSymbolBrain';
 import { setHapticsEnabled } from '../utils/haptics';
 
 const STORAGE_KEY = '@TapTalk_state';
 const MAX_SAVE_RETRIES = 2;
+/** Batch rapid dispatches (e.g. board taps) into one AsyncStorage write. */
+const SAVE_DEBOUNCE_MS = 400;
 
 export const initialState: AppState = {
   onboardingComplete: false,
@@ -17,7 +21,7 @@ export const initialState: AppState = {
   accessibility: {
     textSize: 'default',
     buttonSize: 'standard',
-    theme: 'system',
+    theme: 'light',
     highContrast: false,
     colorScheme: 'fitzgerald',
     speechRate: 0.9,
@@ -55,6 +59,9 @@ export const initialState: AppState = {
 };
 
 function mergeStoredState(storedState: Partial<AppState>): AppState {
+  const storedAccessibility: Partial<AppState['accessibility']> = storedState.accessibility ?? {};
+  const theme = storedAccessibility.theme === 'system' ? 'light' : storedAccessibility.theme;
+
   return {
     ...initialState,
     ...storedState,
@@ -68,7 +75,8 @@ function mergeStoredState(storedState: Partial<AppState>): AppState {
     },
     accessibility: {
       ...initialState.accessibility,
-      ...storedState.accessibility,
+      ...storedAccessibility,
+      theme: theme ?? initialState.accessibility.theme,
     },
     boardLayouts: {
       ...initialState.boardLayouts,
@@ -296,13 +304,40 @@ export function appReducer(state: AppState, action: Action): AppState {
   }
 }
 
+async function persistState(payload: AppState, attempt: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch (e: unknown) {
+    if (attempt < MAX_SAVE_RETRIES) {
+      await persistState(payload, attempt + 1);
+      return;
+    }
+    throw e;
+  }
+}
+
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [hydrated, setHydrated] = useState(false);
   const [hydrationError, setHydrationError] = useState<HydrationError | null>(null);
   const saveRetries = useRef(0);
+  const stateRef = useRef(state);
+  const hydratedRef = useRef(false);
+  stateRef.current = state;
 
   const clearHydrationError = useCallback(() => setHydrationError(null), []);
+
+  const flushSave = useCallback(async () => {
+    try {
+      await persistState(stateRef.current, 0);
+      saveRetries.current = 0;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Unknown save error';
+      if (__DEV__) console.error('Failed to save state after retries:', message);
+      saveRetries.current = MAX_SAVE_RETRIES;
+      setHydrationError({ phase: 'save', message });
+    }
+  }, []);
 
   useEffect(() => {
     const loadState = async () => {
@@ -322,33 +357,49 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           // Storage may be entirely unavailable; nothing more to do.
         }
       } finally {
+        hydratedRef.current = true;
         setHydrated(true);
       }
     };
     loadState();
   }, []);
 
+  // Warm the symbol DB while the splash plays so Talk never pays the seed
+  // cost on first tile resolve.
+  useEffect(() => {
+    if (!hydrated) return;
+    seedSymbolBrainDatabase().catch(() => {});
+  }, [hydrated]);
+
   useEffect(() => {
     if (!hydrated) return;
 
-    const saveState = async (attempt: number) => {
-      try {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        saveRetries.current = 0;
-      } catch (e: unknown) {
-        if (attempt < MAX_SAVE_RETRIES) {
-          saveState(attempt + 1);
-          return;
-        }
-        const message = e instanceof Error ? e.message : 'Unknown save error';
-        if (__DEV__) console.error('Failed to save state after retries:', message);
-        saveRetries.current = attempt;
-        setHydrationError({ phase: 'save', message });
+    const timer = setTimeout(() => {
+      flushSave();
+    }, SAVE_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [state, hydrated, flushSave]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const sub = RNAppState.addEventListener('change', (status) => {
+      if (status === 'background' || status === 'inactive') {
+        flushSave();
+      }
+    });
+
+    return () => sub.remove();
+  }, [hydrated, flushSave]);
+
+  useEffect(() => {
+    return () => {
+      if (hydratedRef.current) {
+        persistState(stateRef.current, 0).catch(() => {});
       }
     };
-
-    saveState(0);
-  }, [state, hydrated]);
+  }, []);
 
   // Sync the user's "Haptic Feedback" preference into the haptics helper so
   // every hapticSelection/hapticLight/etc call respects it without each

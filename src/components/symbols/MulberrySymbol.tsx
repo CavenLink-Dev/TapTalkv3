@@ -32,6 +32,10 @@ export type MulberrySymbolProps = {
   size?: number;
 };
 
+// Session cache — each bundled SVG resolves once, then every tile reuses the URI.
+const uriCache = new Map<number, string>();
+const inflight = new Map<number, Promise<string | null>>();
+
 // Memoised lookup for the legacy `name` prop. The asset-map keys are
 // `mulberry_<slug>_<hash>`, so we strip the trailing hash to find the
 // first match for a given name. Built lazily, once.
@@ -61,20 +65,63 @@ function resolveModuleId(symbolId?: string, name?: string): number | undefined {
   return undefined;
 }
 
-export function MulberrySymbol({ symbolId, name, size = 56 }: MulberrySymbolProps) {
-  const [uri, setUri] = useState<string | null>(null);
+async function resolveMulberryUri(moduleId: number): Promise<string | null> {
+  const cached = uriCache.get(moduleId);
+  if (cached) return cached;
+
+  let pending = inflight.get(moduleId);
+  if (!pending) {
+    pending = (async () => {
+      const asset = Asset.fromModule(moduleId);
+      await asset.downloadAsync();
+      const uri = asset.localUri ?? asset.uri;
+      if (uri) uriCache.set(moduleId, uri);
+      inflight.delete(moduleId);
+      return uri ?? null;
+    })();
+    inflight.set(moduleId, pending);
+  }
+  return pending;
+}
+
+/** Pre-resolve visible board symbols so tiles paint without staggered pop-in. */
+export function prewarmMulberryAssets(
+  props: { symbolIds?: string[]; names?: string[] },
+): void {
+  const moduleIds = new Set<number>();
+  for (const symbolId of props.symbolIds ?? []) {
+    const id = resolveModuleId(symbolId, undefined);
+    if (id != null) moduleIds.add(id);
+  }
+  for (const name of props.names ?? []) {
+    const id = resolveModuleId(undefined, name);
+    if (id != null) moduleIds.add(id);
+  }
+  moduleIds.forEach((moduleId) => {
+    resolveMulberryUri(moduleId).catch(() => {});
+  });
+}
+
+function MulberrySymbolInner({ symbolId, name, size = 56 }: MulberrySymbolProps) {
   const moduleId = useMemo(() => resolveModuleId(symbolId, name), [symbolId, name]);
+  const [uri, setUri] = useState<string | null>(
+    () => (moduleId != null ? uriCache.get(moduleId) ?? null : null),
+  );
 
   useEffect(() => {
     let cancelled = false;
     async function resolveAsset() {
-      if (!moduleId) {
+      if (moduleId == null) {
         setUri(null);
         return;
       }
-      const asset = Asset.fromModule(moduleId);
-      await asset.downloadAsync();
-      if (!cancelled) setUri(asset.localUri ?? asset.uri);
+      const cached = uriCache.get(moduleId);
+      if (cached) {
+        setUri(cached);
+        return;
+      }
+      const resolved = await resolveMulberryUri(moduleId);
+      if (!cancelled) setUri(resolved);
     }
     resolveAsset();
     return () => {
@@ -100,6 +147,8 @@ export function MulberrySymbol({ symbolId, name, size = 56 }: MulberrySymbolProp
     </View>
   );
 }
+
+export const MulberrySymbol = React.memo(MulberrySymbolInner);
 
 /** Returns true iff the asset map can resolve this id or short name. */
 export function hasMulberrySymbol(idOrName: string): boolean {

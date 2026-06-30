@@ -8,7 +8,7 @@ import { fonts } from './fonts';
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
 
-export const colors = {
+export const colorsLight = {
   // ── UI foundation
   /** main_background_colour — VariableID:1:1123 */
   background:         '#F1F5F9',
@@ -83,6 +83,65 @@ export const colors = {
   /** folder_flap_secondary_main — VariableID:45:523 */
   folderFlapSecondary:'#FFFED7',
 } as const;
+
+export type ColorTokens = Record<keyof typeof colorsLight, string>;
+
+// ─── Dark Colours ─────────────────────────────────────────────────────────────
+// User-edited dark palette. Keep this central so screens can read the active
+// `colors` token instead of carrying one-off dark overrides.
+
+export const colorsDark: ColorTokens = {
+  ...colorsLight,
+
+  // UI foundation
+  background:         '#1D1F20',
+  surface:            '#111112',
+  navBackground:      '#111112',
+
+  // Brand / interactive
+  primary:            '#199AEE',
+  primaryDark:        '#006DD3',
+  primaryPressed:     '#62C1FF',
+  softBlue:           '#D5E1E8',
+
+  // Mascot palette
+  mascot:             '#54ACFF',
+  mascotOutline:      '#000000',
+  mascotWhite:        '#FEFEFE',
+
+  // Text
+  text:               '#EDEDED',
+  textMuted:          '#E6E6E6',
+  textTertiary:       '#D4D4D4',
+  textOnDark:         '#000000',
+
+  // Inputs / surfaces
+  inputBg:            '#616161',
+  inputBgWhite:       '#0D0C0C',
+  input:              '#3E3E3E',
+
+  // Progress bar
+  progressFill:       '#199AEE',
+  progressTrack:      '#D5E1E8',
+
+  // Strokes / borders
+  border:             '#73787E',
+  symbolOutline:      '#BFBFBF',
+  borderBlue:         '#70757B',
+
+  // Status
+  danger:             '#F3312A',
+  success:            '#30D158',
+  warning:            '#FF9500',
+  disabled:           '#D5E1E8',
+
+  // Folder cells
+  folderBg:           '#EDE070',
+  folderFlap:         'rgba(255,255,255,0.81)',
+  folderFlapSecondary:'#FFFED7',
+} as const;
+
+export const colors = colorsLight;
 
 // ─── Word-type symbol colours (AAC board) ─────────────────────────────────────
 

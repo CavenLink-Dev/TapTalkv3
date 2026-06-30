@@ -107,7 +107,7 @@ const INITIAL_DATA: RegistrationData = {
   accessibility: {
     textSize: 'default',
     buttonSize: 'standard',
-    theme: 'system',
+    theme: 'light',
     highContrast: false,
     colorScheme: 'fitzgerald',
   },

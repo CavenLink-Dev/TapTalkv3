@@ -43,6 +43,7 @@ import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { verifyPin } from '../../src/utils/pin';
 import { hapticSelection } from '../../src/utils/haptics';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -87,7 +88,7 @@ interface RowProps {
 
 function SettingsRow({
   icon,
-  iconColor = colors.primary,
+  iconColor,
   iconBg = '#E6F4FD',
   label,
   value,
@@ -98,21 +99,26 @@ function SettingsRow({
   info,
   showDivider = true,
 }: RowProps) {
+  const t = useTheme();
+  const resolvedIconColor = iconColor ?? t.colors.primary;
   const spokenLabel = value ? `${label}, ${value}` : label;
 
   const body = (
     <>
       <View style={[styles.rowIcon, { backgroundColor: iconBg }]}>
-        <Ionicons name={icon} size={19} color={iconColor} />
+        <Ionicons name={icon} size={19} color={resolvedIconColor} />
       </View>
       <Text
-        style={[styles.rowLabel, destructive && styles.rowLabelDestructive]}
+        style={[
+          styles.rowLabel,
+          { color: destructive ? t.colors.danger : t.colors.text },
+        ]}
         numberOfLines={2}
       >
         {label}
       </Text>
       {value ? (
-        <Text style={styles.rowValue} numberOfLines={1}>
+        <Text style={[styles.rowValue, { color: t.colors.textTertiary }]} numberOfLines={1}>
           {value}
         </Text>
       ) : null}
@@ -120,16 +126,16 @@ function SettingsRow({
         <View pointerEvents="none" importantForAccessibility="no">
           <Switch
             value={toggle.value}
-            trackColor={{ false: colors.disabled, true: colors.success }}
-            thumbColor={colors.surface}
-            ios_backgroundColor={colors.disabled}
+            trackColor={{ false: t.colors.disabled, true: t.colors.success }}
+            thumbColor={t.colors.surface}
+            ios_backgroundColor={t.colors.disabled}
           />
         </View>
       ) : info ? null : (
         <Ionicons
           name="chevron-forward"
           size={17}
-          color={colors.textTertiary}
+          color={t.colors.textTertiary}
           accessibilityElementsHidden
           importantForAccessibility="no"
         />
@@ -137,7 +143,9 @@ function SettingsRow({
     </>
   );
 
-  const divider = showDivider ? <View style={styles.rowDivider} /> : null;
+  const divider = showDivider ? (
+    <View style={[styles.rowDivider, { backgroundColor: t.colors.input }]} />
+  ) : null;
 
   if (toggle) {
     return (
@@ -151,7 +159,10 @@ function SettingsRow({
             hapticSelection();
             toggle.onValueChange();
           }}
-          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          style={({ pressed }) => [
+            styles.row,
+            pressed && { backgroundColor: t.colors.background },
+          ]}
         >
           {body}
         </Pressable>
@@ -181,7 +192,10 @@ function SettingsRow({
           hapticSelection();
           onPress();
         }}
-        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          style={({ pressed }) => [
+            styles.row,
+            pressed && { backgroundColor: t.colors.background },
+          ]}
       >
         {body}
       </Pressable>
@@ -201,6 +215,7 @@ interface SectionProps {
 }
 
 function CollapsibleSection({ title, expanded, onToggle, reduceMotion, children }: SectionProps) {
+  const t = useTheme();
   const chevron = useRef(new Animated.Value(expanded ? 1 : 0)).current;
 
   const handle = () => {
@@ -226,7 +241,11 @@ function CollapsibleSection({ title, expanded, onToggle, reduceMotion, children 
 
   return (
     <View style={styles.sectionWrap}>
-      <Text style={styles.sectionEyebrow} accessibilityElementsHidden importantForAccessibility="no">
+      <Text
+        style={[styles.sectionEyebrow, { color: t.colors.textTertiary }]}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      >
         {title.toUpperCase()}
       </Text>
       <Card style={styles.sectionCard}>
@@ -236,11 +255,14 @@ function CollapsibleSection({ title, expanded, onToggle, reduceMotion, children 
           accessibilityState={{ expanded }}
           accessibilityHint={expanded ? 'Collapses this section' : 'Expands this section'}
           onPress={handle}
-          style={({ pressed }) => [styles.sectionHeader, pressed && styles.rowPressed]}
+          style={({ pressed }) => [
+            styles.sectionHeader,
+            pressed && { backgroundColor: t.colors.background },
+          ]}
         >
-          <Text style={styles.sectionHeaderTitle}>{title}</Text>
+          <Text style={[styles.sectionHeaderTitle, { color: t.colors.text }]}>{title}</Text>
           <Animated.View style={{ transform: [{ rotate }] }}>
-            <Ionicons name="chevron-down" size={20} color={colors.textTertiary} />
+            <Ionicons name="chevron-down" size={20} color={t.colors.textTertiary} />
           </Animated.View>
         </Pressable>
         {expanded ? <View style={styles.sectionBody}>{children}</View> : null}
@@ -255,6 +277,7 @@ export default function MeScreen() {
   const router = useRouter();
   const reduceMotion = useReduceMotion();
   const { state, dispatch } = useAppContext();
+  const t = useTheme();
 
   const [open, setOpen] = useState({
     profile: true,
@@ -307,7 +330,9 @@ export default function MeScreen() {
         hapticSelection();
         return;
       }
-      comingSoon(options[index]);
+      const option = options[index];
+      if (!option) return;
+      comingSoon(option);
     };
 
     if (Platform.OS === 'ios') {
@@ -363,7 +388,9 @@ export default function MeScreen() {
     const cancelButtonIndex = options.length - 1;
     const pick = (index: number) => {
       if (index === cancelButtonIndex) return;
-      dispatch({ type: 'SET_USER', payload: { role: roles[index].role } });
+      const role = roles[index]?.role;
+      if (!role) return;
+      dispatch({ type: 'SET_USER', payload: { role } });
     };
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -442,20 +469,20 @@ export default function MeScreen() {
       >
         <Card style={styles.userCard}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
+            <Text style={[styles.avatarText, { color: t.colors.surface }]}>{initial}</Text>
           </View>
           <View style={styles.userCopy}>
-            <Text style={styles.userName} numberOfLines={1}>
+            <Text style={[styles.userName, { color: t.colors.text }]} numberOfLines={1}>
               {name}
             </Text>
-            <Text style={styles.userMeta} numberOfLines={1}>
+            <Text style={[styles.userMeta, { color: t.colors.textMuted }]} numberOfLines={1}>
               Voice and AAC profile ready
             </Text>
           </View>
           <Ionicons
             name="chevron-forward"
             size={18}
-            color={colors.textTertiary}
+            color={t.colors.textTertiary}
             accessibilityElementsHidden
             importantForAccessibility="no"
           />
@@ -608,7 +635,7 @@ export default function MeScreen() {
         onToggle={() => toggleSection('privacy')}
         reduceMotion={reduceMotion}
       >
-        <Text style={styles.sectionNote}>
+        <Text style={[styles.sectionNote, { color: t.colors.textMuted }]}>
           TapTalk keeps your profile and AAC choices private. Photos are only used when you choose
           them. You can export or delete your profile data anytime.
         </Text>
@@ -621,8 +648,10 @@ export default function MeScreen() {
           toggle={{ value: caregiverLocked, onValueChange: toggleLock }}
         />
         {pinPromptVisible ? (
-          <View style={styles.pinPrompt}>
-            <Text style={styles.pinPromptLabel}>Enter your 6-digit PIN to disable lock</Text>
+          <View style={[styles.pinPrompt, { backgroundColor: t.colors.input }]}>
+            <Text style={[styles.pinPromptLabel, { color: t.colors.text }]}>
+              Enter your 6-digit PIN to disable lock
+            </Text>
             <View style={styles.pinInputRow}>
               <TextField
                 accessibilityLabel="Enter PIN to disable lock"
@@ -644,12 +673,16 @@ export default function MeScreen() {
                 <Ionicons
                   name={showPin ? 'eye-off-outline' : 'eye-outline'}
                   size={22}
-                  color={colors.textMuted}
+                  color={t.colors.textMuted}
                 />
               </Pressable>
             </View>
             {pinError ? (
-              <Text style={styles.pinError} accessibilityLiveRegion="polite" accessibilityRole="alert">
+              <Text
+                style={[styles.pinError, { color: t.colors.danger }]}
+                accessibilityLiveRegion="polite"
+                accessibilityRole="alert"
+              >
                 {pinError}
               </Text>
             ) : null}
@@ -699,7 +732,7 @@ export default function MeScreen() {
         />
         <SettingsRow
           icon="trash-outline"
-          iconColor={colors.danger}
+          iconColor={t.colors.danger}
           iconBg="#FDECEC"
           label="Delete Profile Data"
           destructive
@@ -785,7 +818,9 @@ export default function MeScreen() {
 
       <View style={styles.mascotRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <TapTalkMascot variant="business" style={styles.mascot} />
-        <Text style={styles.mascotText}>Built with care for everyone who deserves to be heard.</Text>
+        <Text style={[styles.mascotText, { color: t.colors.textMuted }]}>
+          Built with care for everyone who deserves to be heard.
+        </Text>
       </View>
 
       <PrimaryButton

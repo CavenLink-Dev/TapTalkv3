@@ -21,6 +21,9 @@ DefaultTextInput.defaultProps.style = [{ fontFamily: typography.fontFamily }, De
 
 function ThemeShell() {
   const t = useTheme();
+
+  // Splash is the first route and already waits for hydration before
+  // navigating — no need to block the stack on a blank frame here.
   return (
     <>
       <Stack screenOptions={{ headerShown: false }} />

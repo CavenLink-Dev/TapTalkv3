@@ -10,7 +10,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LoadingDots } from '../LoadingDots';
-import { animation, colors as staticColors, radii, typography } from '../../theme/tokens';
+import { animation, radii, typography } from '../../theme/tokens';
+import type { ColorTokens } from '../../theme/tokens';
 import { springPop, timingFast, timingReduced } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { useTheme } from '../../theme/useTheme';
@@ -38,12 +39,12 @@ type Palette = {
   border: string | null;
 };
 
-function makePalettes(colors: typeof staticColors): Record<Variant, Palette> {
+function makePalettes(colors: ColorTokens): Record<Variant, Palette> {
   return {
     primary:   { base: colors.primary,  pressed: colors.primaryPressed, label: colors.surface,     border: null          },
-    secondary: { base: colors.softBlue, pressed: '#C2D5E2',             label: colors.primaryDark, border: null          },
+    secondary: { base: colors.softBlue, pressed: colors.progressTrack,  label: colors.primaryDark, border: null          },
     danger:    { base: colors.danger,   pressed: '#FF6A66',             label: colors.surface,     border: null          },
-    ghost:     { base: 'rgba(0,0,0,0)', pressed: 'rgba(0,0,0,0.04)',    label: colors.text,        border: colors.border },
+    ghost:     { base: 'rgba(0,0,0,0)', pressed: colors.input,          label: colors.text,        border: colors.border },
   };
 }
 
