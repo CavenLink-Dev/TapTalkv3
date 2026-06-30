@@ -564,11 +564,6 @@ function ToolCard({
             ) : null}
 
             <View style={styles.copy}>
-              <View style={[styles.tag, { backgroundColor: tool.accentBg }]}>
-                <Text style={[styles.tagText, { color: tool.accent }]}>
-                  {tool.tag}
-                </Text>
-              </View>
               <Text style={styles.name}>{tool.title}</Text>
               <Text style={styles.description} numberOfLines={2}>
                 {tool.subtitle}
@@ -609,6 +604,30 @@ function ToolCard({
                   />
                 </Animated.View>
                 <StarParticles trigger={particleTrigger} />
+              </Pressable>
+
+              {/* Play button */}
+              <Pressable
+                onPress={event => {
+                  event.stopPropagation();
+                  hapticSelection();
+                  onOpen();
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${tool.title}`}
+                style={[
+                  styles.iconButton,
+                  styles.playButton,
+                  { backgroundColor: tool.accent },
+                ]}
+              >
+                <Ionicons
+                  name="play"
+                  size={15}
+                  color="#fff"
+                  style={styles.playIcon}
+                />
               </Pressable>
             </View>
           </View>
@@ -896,6 +915,21 @@ const styles = StyleSheet.create({
   },
   starButton: {
     borderRadius: 22,
+  },
+  playButton: {
+    width:          38,
+    height:         38,
+    borderRadius:   19,
+    alignItems:     'center',
+    justifyContent: 'center',
+    shadowColor:    '#000',
+    shadowOffset:   { width: 0, height: 2 },
+    shadowOpacity:  0.18,
+    shadowRadius:   3,
+    elevation:      3,
+  },
+  playIcon: {
+    marginLeft: 2,
   },
   // Golden halo — only visible (opacity > 0) when card is favourited
   starGlow: {

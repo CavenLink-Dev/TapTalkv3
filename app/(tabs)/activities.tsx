@@ -1,344 +1,696 @@
-import React, { useEffect, useState } from 'react';
+/**
+ * Activities — game selection screen.
+ *
+ * Mirrors the Tools screen precisely:
+ *   • Spring-entrance animations, shimmer, press-depth illusion
+ *   • Star favourites with glow halo + particle burst
+ *   • Accent play button (filled circle, ▶ icon)
+ *   • Favourites section with golden tint strip when any activity is starred
+ *   • No tags — clean, professional, disability-first
+ */
+
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   ImageBackground,
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/native/Screen';
+import { animation as anim, colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { hapticLight, hapticSelection } from '../../src/utils/haptics';
+import {
+  ActivityId,
+  toggleFavourite,
+  useFavouriteActivities,
+} from '../../src/features/activities/favourites-store';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
-import { hapticSelection } from '../../src/utils/haptics';
 
-// ─── Activity content ───────────────────────────────────────────────────────
-// Each card flips to reveal a short description + Start. Start routes into the
-// game's own start overlay (per activity_implementation_rules.md §1 — every
-// game must show its difficulty picker before play begins).
+// --- Data ---
 
-interface ActivityCard {
-  id: string;
+interface Activity {
+  id: ActivityId;
   route: Href;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  iconColor: string;
-  iconBg: string;
-  name: string;
-  image?: number;
-  description: string;
+  title: string;
+  subtitle: string;
+  accent: string;
+  heroBg: string;  // hero image band background
+  bodyBg: string;  // card body background — distinctly lighter than hero
+  image: number;
 }
 
-const ACTIVITY_LIST: ActivityCard[] = [
+const ACTIVITIES: Activity[] = [
   {
     id: 'shape-match',
     route: '/activities/shape-match' as Href,
-    icon: 'shapes-outline',
-    iconColor: '#34C759',
-    iconBg: '#E8FAE8',
-    name: 'Shape Match',
-    image: require('../../assets/activities/shape-match.png'),
-    description: 'Drag each shape into its matching outline.',
+    title: 'Shape Match',
+    subtitle: 'Drag each shape into its matching outline.',
+    accent:  '#1B8A4A',
+    heroBg:  '#E8FAE8',   // soft green hero band
+    bodyBg:  '#F3FBF5',   // much lighter mint — clearly distinct from hero
+    image:   require('../../assets/activities/shape-match-logo.png'),
   },
   {
     id: 'colour-pop',
     route: '/activities/colour-pop' as Href,
-    icon: 'color-palette-outline',
-    iconColor: '#A855F7',
-    iconBg: '#E9D5FF',
-    name: 'Colour Pop',
-    description: 'Tap each shape that matches the colour word.',
-  },
-  {
-    id: 'memory-match',
-    route: '/activities/memory-match' as Href,
-    icon: 'eye-outline',
-    iconColor: colors.primary,
-    iconBg: '#E6F4FD',
-    name: 'Memory Match',
-    image: require('../../assets/activities/memory-match.png'),
-    description: 'Watch the shape, then tap the one you saw.',
-  },
-  {
-    id: 'picture-match',
-    route: '/activities/picture-match' as Href,
-    icon: 'text-outline',
-    iconColor: '#BD73FF',
-    iconBg: '#F3EAFF',
-    name: 'Picture Match',
-    description: 'Read the word, then tap the matching picture.',
-  },
-  {
-    id: 'count-along',
-    route: '/activities/count-along' as Href,
-    icon: 'calculator-outline',
-    iconColor: '#FF9500',
-    iconBg: '#FFF4E0',
-    name: 'Count Along',
-    description: 'Count the dots, then choose the right number.',
+    title: 'Colour Pop',
+    subtitle: 'Tap every shape that matches the colour word.',
+    accent:  '#7C3AED',
+    heroBg:  '#E0D9FF',   // slightly richer light purple for the hero band
+    bodyBg:  '#EDE9FE',   // the soft whitish-lavender the user approved
+    image:   require('../../assets/activities/colour-pop-logo.png'),
   },
 ];
 
-const CARD_GAP = spacing.sm;
-const SIDE_PADDING = spacing.lg * 2;
-const CARD_HEIGHT = 260;
-const HERO_HEIGHT = 140;
-const FLIP_DURATION = 420;
-const FLIP_REDUCED_DURATION = 180;
+const CARD_HEIGHT = 214;
+const HERO_HEIGHT = 112;
+const CARD_GAP    = spacing.sm;
 
-export default function ActivitiesScreen() {
-  const router = useRouter();
-  const { width: screenWidth } = useWindowDimensions();
-  const cardWidth = (screenWidth - SIDE_PADDING - CARD_GAP) / 2;
-  const [flippedId, setFlippedId] = useState<string | null>(null);
+const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300] as const;
 
-  return (
-    <Screen title="Activities" subtitle="Practice focus, memory, language, and numbers.">
-      <View style={styles.grid}>
-        {ACTIVITY_LIST.map((activity) => (
-          <ActivityFlipCard
-            key={activity.id}
-            activity={activity}
-            width={cardWidth}
-            isFlipped={flippedId === activity.id}
-            onToggle={() =>
-              setFlippedId((prev) => (prev === activity.id ? null : activity.id))
-            }
-            onStart={() => {
-              hapticSelection();
-              router.push(activity.route);
-            }}
-          />
-        ))}
-      </View>
-    </Screen>
-  );
-}
+// --- StarParticles ---
 
-// ─── Flip card ──────────────────────────────────────────────────────────────
+function StarParticles({ trigger }: { trigger: number }) {
+  const particles = useRef(
+    PARTICLE_ANGLES.map(() => ({
+      opacity:  new Animated.Value(0),
+      progress: new Animated.Value(0),
+    }))
+  ).current;
 
-interface FlipCardProps {
-  activity: ActivityCard;
-  width: number;
-  isFlipped: boolean;
-  onToggle: () => void;
-  onStart: () => void;
-}
-
-function ActivityFlipCard({ activity, width, isFlipped, onToggle, onStart }: FlipCardProps) {
-  const reduceMotion = useReduceMotion();
-  const progress = useSharedValue(0);
+  const lastTrigger = useRef(0);
 
   useEffect(() => {
-    progress.value = withTiming(isFlipped ? 1 : 0, {
-      duration: reduceMotion ? FLIP_REDUCED_DURATION : FLIP_DURATION,
-      easing: Easing.bezier(0.4, 0, 0.2, 1),
+    if (trigger === 0 || trigger === lastTrigger.current) return;
+    lastTrigger.current = trigger;
+
+    particles.forEach(p => {
+      p.opacity.setValue(0);
+      p.progress.setValue(0);
     });
-  }, [isFlipped, reduceMotion, progress]);
 
-  const frontStyle = useAnimatedStyle(() => {
-    if (reduceMotion) return { opacity: 1 - progress.value };
-    return {
-      transform: [
-        { perspective: 1000 },
-        { rotateY: `${progress.value * 180}deg` },
-      ],
-    };
-  });
+    const anims = particles.map(p =>
+      Animated.parallel([
+        Animated.timing(p.progress, {
+          toValue: 1,
+          duration: 320,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.timing(p.opacity, {
+            toValue: 1,
+            duration: 55,
+            useNativeDriver: true,
+          }),
+          Animated.timing(p.opacity, {
+            toValue: 0,
+            duration: 240,
+            delay: 50,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
 
-  const backStyle = useAnimatedStyle(() => {
-    if (reduceMotion) return { opacity: progress.value };
-    return {
-      transform: [
-        { perspective: 1000 },
-        { rotateY: `${180 + progress.value * 180}deg` },
-      ],
-    };
-  });
-
-  const handleToggle = () => {
-    hapticSelection();
-    onToggle();
-  };
+    Animated.stagger(18, anims).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trigger]);
 
   return (
-    <View style={[styles.cardOuter, { width, height: CARD_HEIGHT }]}>
-      {/* Front face — hero band + title */}
-      <Animated.View
-        pointerEvents={isFlipped ? 'none' : 'auto'}
-        style={[styles.face, frontStyle]}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${activity.name}. Tap for details.`}
-          accessibilityState={{ expanded: false }}
-          onPress={handleToggle}
-          style={({ pressed }) => [styles.faceInner, pressed && styles.pressed]}
-        >
-          {activity.image ? (
-            <ImageBackground
-              source={activity.image}
-              style={[styles.hero, { backgroundColor: activity.iconBg }]}
-              imageStyle={styles.heroImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.hero, styles.heroFallback, { backgroundColor: activity.iconBg }]}>
-              <Ionicons
-                name={activity.icon}
-                size={56}
-                color={activity.iconColor}
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-              />
-            </View>
-          )}
-          <View style={styles.frontFooter}>
-            <Text style={styles.frontName} numberOfLines={1}>
-              {activity.name}
-            </Text>
-          </View>
-        </Pressable>
-      </Animated.View>
-
-      {/* Back face — title, description, Start */}
-      <Animated.View
-        pointerEvents={isFlipped ? 'auto' : 'none'}
-        style={[styles.face, backStyle]}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${activity.name} details. Tap to close.`}
-          accessibilityState={{ expanded: true }}
-          onPress={handleToggle}
-          style={({ pressed }) => [
-            styles.faceInner,
-            styles.backFace,
-            { backgroundColor: activity.iconBg },
-            pressed && styles.pressed,
-          ]}
-        >
-          <View style={styles.backTop}>
-            <Text style={styles.backName} numberOfLines={1}>
-              {activity.name}
-            </Text>
-            <Text style={styles.backDescription} numberOfLines={3}>
-              {activity.description}
-            </Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Start ${activity.name}`}
-            onPress={onStart}
-            style={({ pressed }) => [styles.startBtn, pressed && styles.startBtnPressed]}
-            hitSlop={8}
-          >
-            <Text
-              style={styles.startBtnText}
-              maxFontSizeMultiplier={1.4}
-              numberOfLines={1}
-            >
-              Start
-            </Text>
-          </Pressable>
-        </Pressable>
-      </Animated.View>
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {PARTICLE_ANGLES.map((angle, i) => {
+        const rad    = (angle * Math.PI) / 180;
+        const radius = 20;
+        const p      = particles[i];
+        if (!p) return null;
+        return (
+          <Animated.View
+            key={angle}
+            style={{
+              position:    'absolute',
+              top:         '50%',
+              left:        '50%',
+              width:       5,
+              height:      5,
+              marginTop:   -2.5,
+              marginLeft:  -2.5,
+              borderRadius: 2.5,
+              backgroundColor: '#F5B400',
+              opacity: p.opacity,
+              transform: [
+                {
+                  translateX: p.progress.interpolate({
+                    inputRange:  [0, 1],
+                    outputRange: [0, Math.cos(rad) * radius],
+                  }),
+                },
+                {
+                  translateY: p.progress.interpolate({
+                    inputRange:  [0, 1],
+                    outputRange: [0, Math.sin(rad) * radius],
+                  }),
+                },
+                {
+                  scale: p.progress.interpolate({
+                    inputRange:  [0, 0.3, 1],
+                    outputRange: [0.4, 1, 0.5],
+                  }),
+                },
+              ],
+            }}
+          />
+        );
+      })}
     </View>
   );
 }
 
+// --- SectionHeader ---
+
+function SectionHeader({
+  icon,
+  label,
+  entryDelay = 0,
+  isFavourites = false,
+}: {
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  entryDelay?: number;
+  isFavourites?: boolean;
+}) {
+  const reduceMotion  = useReduceMotion();
+  const mountProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduceMotion) { mountProgress.setValue(1); return; }
+    Animated.sequence([
+      Animated.delay(entryDelay),
+      Animated.timing(mountProgress, {
+        toValue: 1,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const translateY = mountProgress.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [6, 0],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.sectionHeader,
+        { opacity: mountProgress, transform: [{ translateY }] },
+      ]}
+    >
+      {icon ? <Ionicons name={icon} size={15} color="#F5B400" /> : null}
+      <Text
+        style={[
+          styles.sectionTitle,
+          isFavourites && styles.sectionTitleFavourites,
+        ]}
+      >
+        {label}
+      </Text>
+    </Animated.View>
+  );
+}
+
+// --- ActivityCard ---
+
+function ActivityCard({
+  activity,
+  favourite,
+  index,
+  onPress,
+  onToggleStar,
+}: {
+  activity: Activity;
+  favourite: boolean;
+  index: number;
+  onPress: () => void;
+  onToggleStar: () => void;
+}) {
+  const reduceMotion = useReduceMotion();
+
+  const mountProgress   = useRef(new Animated.Value(0)).current;
+  const pressScale      = useRef(new Animated.Value(1)).current;
+  const heroScale       = useRef(new Animated.Value(1)).current;
+  const shimmerProgress = useRef(new Animated.Value(0)).current;
+  const starScale       = useRef(new Animated.Value(1)).current;
+  const starGlow        = useRef(new Animated.Value(favourite ? 1 : 0)).current;
+  const [particleTrigger, setParticleTrigger] = useState(0);
+
+  // Mount entrance
+  useEffect(() => {
+    if (reduceMotion) { mountProgress.setValue(1); return; }
+    Animated.sequence([
+      Animated.delay(index * anim.stagRow),
+      Animated.spring(mountProgress, {
+        toValue:   1,
+        useNativeDriver: true,
+        damping:   22,
+        stiffness: 260,
+        mass:      1,
+      }),
+    ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Shimmer loop
+  useEffect(() => {
+    if (reduceMotion) return;
+    let timeout: ReturnType<typeof setTimeout>;
+    const runShimmer = () => {
+      shimmerProgress.setValue(0);
+      Animated.timing(shimmerProgress, {
+        toValue:  1,
+        duration: 680,
+        easing:   Easing.inOut(Easing.sin),
+        useNativeDriver: true,
+      }).start(() => {
+        timeout = setTimeout(runShimmer, 9_000 + Math.random() * 7_000);
+      });
+    };
+    timeout = setTimeout(runShimmer, 2_600 + index * 800 + Math.random() * 2_000);
+    return () => clearTimeout(timeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduceMotion]);
+
+  // Star bounce + glow + particles
+  const isMounted    = useRef(false);
+  const wasFavourite = useRef(favourite);
+
+  useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      starGlow.setValue(favourite ? 1 : 0);
+      return;
+    }
+    const wasFav = wasFavourite.current;
+    wasFavourite.current = favourite;
+
+    if (reduceMotion) {
+      starGlow.setValue(favourite ? 1 : 0);
+      return;
+    }
+
+    Animated.parallel([
+      Animated.sequence([
+        Animated.spring(starScale, {
+          toValue: favourite ? 1.3 : 0.8,
+          useNativeDriver: true,
+          damping: 8, stiffness: 380, mass: 0.7,
+        }),
+        Animated.spring(starScale, {
+          toValue: 1,
+          useNativeDriver: true,
+          damping: 14, stiffness: 300, mass: 1,
+        }),
+      ]),
+      Animated.timing(starGlow, {
+        toValue:  favourite ? 1 : 0,
+        duration: 240,
+        easing:   Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    if (favourite && !wasFav) {
+      setParticleTrigger(t => t + 1);
+    }
+  }, [favourite, reduceMotion]);
+
+  const handlePressIn = () => {
+    if (reduceMotion) return;
+    Animated.parallel([
+      Animated.spring(pressScale, {
+        toValue: anim.scalePressMd, useNativeDriver: true,
+        damping: 14, stiffness: 460, mass: 0.8,
+      }),
+      Animated.spring(heroScale, {
+        toValue: 1.05, useNativeDriver: true,
+        damping: 18, stiffness: 360, mass: 0.8,
+      }),
+    ]).start();
+  };
+
+  const handlePressOut = () => {
+    if (reduceMotion) return;
+    Animated.parallel([
+      Animated.spring(pressScale, {
+        toValue: 1, useNativeDriver: true,
+        damping: 16, stiffness: 340, mass: 1,
+      }),
+      Animated.spring(heroScale, {
+        toValue: 1, useNativeDriver: true,
+        damping: 20, stiffness: 380, mass: 1,
+      }),
+    ]).start();
+  };
+
+  const mountTranslateY = mountProgress.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [18, 0],
+  });
+  const shimmerTranslateX = shimmerProgress.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [-160, 380],
+  });
+  const starGlowOpacity = starGlow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0, 0.7],
+  });
+  const starGlowScale = starGlow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.5, 1],
+  });
+
+  return (
+    <Animated.View
+      style={{
+        opacity:   mountProgress,
+        transform: [{ translateY: mountTranslateY }, { scale: pressScale }],
+      }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${activity.title}. ${activity.subtitle}`}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={onPress}
+        style={styles.card}
+      >
+        {/* Hero image band */}
+        <View style={[styles.cardHero, { backgroundColor: activity.heroBg }]}>
+          <Animated.View
+            style={[StyleSheet.absoluteFill, { transform: [{ scale: heroScale }] }]}
+          >
+            <ImageBackground
+              source={activity.image}
+              style={StyleSheet.absoluteFill}
+              imageStyle={styles.cardHeroImage}
+              resizeMode="cover"
+            />
+          </Animated.View>
+
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              { transform: [{ translateX: shimmerTranslateX }] },
+            ]}
+          >
+            <View style={styles.shimmerStripe} />
+          </Animated.View>
+        </View>
+
+        {/* Card body — tinted with the activity's accent background */}
+        <View style={[styles.cardBody, { backgroundColor: activity.bodyBg }]}>
+          <View style={styles.cardContentRow}>
+            <View style={styles.copy}>
+              <Text style={styles.cardName}>{activity.title}</Text>
+              <Text style={styles.cardSubtitle} numberOfLines={2}>
+                {activity.subtitle}
+              </Text>
+            </View>
+
+            <View style={styles.actions}>
+              {/* Star — favourites */}
+              <Pressable
+                onPress={event => {
+                  event.stopPropagation();
+                  hapticLight();
+                  onToggleStar();
+                }}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  favourite
+                    ? `Remove ${activity.title} from favourites`
+                    : `Add ${activity.title} to favourites`
+                }
+                accessibilityState={{ selected: favourite }}
+                style={[styles.iconButton, styles.starButton]}
+              >
+                <Animated.View
+                  style={[
+                    styles.starGlow,
+                    { opacity: starGlowOpacity, transform: [{ scale: starGlowScale }] },
+                  ]}
+                />
+                <Animated.View style={{ transform: [{ scale: starScale }] }}>
+                  <Ionicons
+                    name={favourite ? 'star' : 'star-outline'}
+                    size={22}
+                    color={favourite ? '#F5B400' : colors.textTertiary}
+                  />
+                </Animated.View>
+                <StarParticles trigger={particleTrigger} />
+              </Pressable>
+
+              {/* Play button */}
+              <Pressable
+                onPress={event => {
+                  event.stopPropagation();
+                  hapticSelection();
+                  onPress();
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Play ${activity.title}`}
+                style={[
+                  styles.iconButton,
+                  styles.playButton,
+                  { backgroundColor: activity.accent },
+                ]}
+              >
+                <Ionicons
+                  name="play"
+                  size={15}
+                  color="#fff"
+                  style={styles.playIcon}
+                />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// --- ActivitiesScreen ---
+
+export default function ActivitiesScreen() {
+  const router = useRouter();
+  const favs   = useFavouriteActivities();
+
+  const favouriteActivities = ACTIVITIES.filter(a => favs.includes(a.id));
+  const regularActivities   = ACTIVITIES.filter(a => !favs.includes(a.id));
+
+  const open = (activity: Activity) => {
+    hapticSelection();
+    router.push(activity.route);
+  };
+
+  return (
+    <Screen title="Activities" subtitle="Tap an activity to begin.">
+      {favouriteActivities.length > 0 ? (
+        <View style={[styles.section, styles.favouritesSection]}>
+          <SectionHeader icon="star" label="Favourites" entryDelay={0} isFavourites />
+          <View style={styles.list}>
+            {favouriteActivities.map((activity, i) => (
+              <ActivityCard
+                key={activity.id}
+                activity={activity}
+                favourite
+                index={i}
+                onPress={() => open(activity)}
+                onToggleStar={() => toggleFavourite(activity.id)}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {regularActivities.length > 0 ? (
+        <View style={styles.section}>
+          {favouriteActivities.length > 0 ? (
+            <SectionHeader
+              label="Activities"
+              entryDelay={favouriteActivities.length * anim.stagRow}
+            />
+          ) : null}
+          <View style={styles.list}>
+            {regularActivities.map((activity, i) => (
+              <ActivityCard
+                key={activity.id}
+                activity={activity}
+                favourite={false}
+                index={favouriteActivities.length + i}
+                onPress={() => open(activity)}
+                onToggleStar={() => toggleFavourite(activity.id)}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
+    </Screen>
+  );
+}
+
+// --- Styles ---
+
 const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  list: {
     gap: CARD_GAP,
   },
-  cardOuter: {
-    // 3D scene root — children rotate around its centre.
-  },
-  face: {
-    ...StyleSheet.absoluteFillObject,
-    backfaceVisibility: 'hidden',
-  },
-  faceInner: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    overflow: 'hidden',
-  },
-  pressed: {
-    opacity: 0.88,
+
+  section: {
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
 
-  // ── Front face ──
-  hero: {
-    height: HERO_HEIGHT,
-    width: '100%',
+  favouritesSection: {
+    backgroundColor:  'rgba(245, 180, 0, 0.06)',
+    borderRadius:     radii.card,
+    padding:          spacing.sm,
+    marginHorizontal: -spacing.sm,
+    paddingBottom:    spacing.md,
   },
-  heroFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
+
+  sectionHeader: {
+    minHeight:         24,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               6,
+    paddingHorizontal: spacing.xs,
   },
-  heroImage: {
-    borderTopLeftRadius: radii.card,
+
+  sectionTitle: {
+    fontSize:      typography.caption,
+    fontWeight:    '800',
+    color:         colors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+
+  sectionTitleFavourites: {
+    color: '#C68A00',
+  },
+
+  card: {
+    height:          CARD_HEIGHT,
+    backgroundColor: colors.surface,
+    borderRadius:    radii.card,
+    overflow:        'hidden',
+  },
+
+  cardHero: {
+    height:               HERO_HEIGHT,
+    width:                '100%',
+    overflow:             'hidden',
+    borderTopLeftRadius:  radii.card,
     borderTopRightRadius: radii.card,
   },
-  frontFooter: {
-    flex: 1,
-    paddingHorizontal: spacing.md,
-    justifyContent: 'center',
-  },
-  frontName: {
-    fontSize: typography.subheading,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.3,
+
+  cardHeroImage: {
+    borderTopLeftRadius:  radii.card,
+    borderTopRightRadius: radii.card,
   },
 
-  // ── Back face ── one tinted surface, no header band, no labels
-  backFace: {
-    padding: spacing.lg,
-    justifyContent: 'space-between',
+  shimmerStripe: {
+    position:        'absolute',
+    top:             -20,
+    left:            0,
+    width:           54,
+    height:          200,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    transform:       [{ rotate: '18deg' }],
   },
-  backTop: {
-    gap: spacing.sm,
+
+  cardBody: {
+    flex:              1,
+    paddingHorizontal: spacing.md,
+    paddingVertical:   spacing.sm,
+    justifyContent:    'center',
   },
-  backName: {
-    fontSize: typography.subheading,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.3,
+
+  cardContentRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           spacing.sm,
   },
-  backDescription: {
-    fontSize: typography.callout,
-    color: colors.text,
-    lineHeight: 20,
-    opacity: 0.78,
+
+  copy: {
+    flex: 1,
+    gap:  4,
   },
-  startBtn: {
-    alignSelf: 'flex-end',
-    minHeight: 44,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: 10,
-    borderRadius: radii.pill,
-    backgroundColor: colors.success,
-    alignItems: 'center',
+
+  cardName: {
+    fontSize:      typography.body,
+    fontWeight:    '800',
+    color:         colors.text,
+    letterSpacing: -0.2,
+  },
+
+  cardSubtitle: {
+    fontSize:   typography.caption,
+    color:      colors.textMuted,
+    lineHeight: 17,
+  },
+
+  actions: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           spacing.xs,
+  },
+
+  iconButton: {
+    minWidth:       44,
+    minHeight:      44,
+    alignItems:     'center',
     justifyContent: 'center',
   },
-  startBtnPressed: {
-    opacity: 0.85,
+
+  starButton: {
+    borderRadius: 22,
   },
-  startBtnText: {
-    fontSize: typography.callout,
-    fontWeight: '800',
-    color: colors.textOnDark,
-    letterSpacing: -0.2,
+
+  starGlow: {
+    position:        'absolute',
+    width:           34,
+    height:          34,
+    borderRadius:    17,
+    backgroundColor: '#FFF0B3',
+  },
+
+  playButton: {
+    width:          38,
+    height:         38,
+    borderRadius:   19,
+    alignItems:     'center',
+    justifyContent: 'center',
+    shadowColor:    '#000',
+    shadowOffset:   { width: 0, height: 2 },
+    shadowOpacity:  0.18,
+    shadowRadius:   3,
+    elevation:      3,
+  },
+
+  playIcon: {
+    marginLeft: 2,
   },
 });
