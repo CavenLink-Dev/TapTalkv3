@@ -1,4 +1,4 @@
-# TapTalk — Pending Tasks
+# TapTalk — Current State
 
 > **Read `RULES.md` first. Then `git status` / `git log -10`. Then start here.**
 > Completed architecture + locked decisions → `NEXT-ARCHIVE.md`.
@@ -6,24 +6,32 @@
 
 ---
 
-## Pending tasks
+## Current status
 
 ### Step 9 — Polish pass
 
-- [ ] **Animations audit** — walk every screen that uses `Reanimated` or `Animated`; verify spring vs. linear is used intentionally, no gratuitous motion (Rule 15).
-- [ ] **Haptics audit** — verify all haptic calls go through `src/utils/haptics.ts` helpers, not raw `expo-haptics` imports. Check no over-use (Rule 19).
-- [ ] **Reduce Motion sweep** — `app/onboarding/splash.tsx`, `src/components/activities/ActivityProgressBar.tsx`, and `app/activities/shape-match.tsx` already handle `useReduceMotion`. Audit every other animated screen and add `reduceMotion` fallbacks where missing (Rule 18).
+- [x] **Animations audit** - activity screens, onboarding, registration, Visual Timer, and Step by Step motion have been reviewed for purposeful motion (Rule 15).
+- [x] **Haptics audit** - strict import check confirms raw `expo-haptics` is only imported by `src/utils/haptics.ts`; callers use helpers including `hapticWarning` (Rule 19).
+- [x] **Speech audit** - strict import check confirms raw `expo-speech` is only imported by `src/hooks/useSpeech.ts`; Quick Talk and Voice Settings now use `useSpeech`.
+- [x] **Reduce Motion sweep** - registration/onboarding animation points now use `useReduceMotion`; previously completed screens keep their existing reduced-motion fallbacks (Rule 18).
+- [x] **Activity completion overlay** - final game overlay uses the soft-corner square card pattern with stats, easy Again access, and Cancel.
 
-### Tech debt (resolve during polish)
+### Completed cleanup
 
-- [ ] **17 typecheck errors in `app/activities/*`** — `noUncheckedIndexedAccess` + `borderColor` literal typing. Pre-existing; address during the activities polish round. Do not introduce more.
-- [ ] **`wordBackgroundForTile` undefined in `app/(tabs)/talk.tsx`** (~line 218) — introduced during rebuild. Do **not** silently rip it out. Define the function or replace the code path in the talk screen polish pass.
-- [ ] **`src/data/aacBoards.ts` is stale + unimported** — either delete it, or wire it up to the Letters ↔ Symbols toggle on the keyboard surface. Do not leave it dangling.
+- [x] `wordBackgroundForTile` exists in `app/(tabs)/talk.tsx`.
+- [x] `src/data/aacBoards.ts` has been removed.
+- [x] `@taptalk/tools/favourites/v1` is the AsyncStorage key in `src/features/tools/favourites-store.ts`.
 
 ### Verification
 
-- [ ] Run `npx tsc --noEmit` — baseline should be ~18 errors. Do not introduce more.
-- [ ] Confirm `@taptalk/tools/favourites/v1` AsyncStorage key is read correctly in `src/features/tools/favourites-store.ts`.
+- [x] `npx tsc --noEmit` run on 2026-07-02. Current baseline is **4 pre-existing errors**, none in files touched by the polish pass:
+  - `app/(tabs)/me.tsx(998,11)` - `PrimaryButtonProps` does not accept `accessibilityHint`.
+  - `src/features/symbol-brain/__tests__/resolveSymbolForKeyword.test.ts(453,12)` - object possibly undefined.
+  - `src/features/symbol-brain/__tests__/resolveSymbolForKeyword.test.ts(454,47)` - object possibly undefined.
+  - `src/features/symbol-brain/resolveSymbolForKeyword.ts(116,12)` - `string | undefined` assigned to `string`.
+- [x] Strict raw import checks pass:
+  - `expo-speech` import: `src/hooks/useSpeech.ts` only.
+  - `expo-haptics` import: `src/utils/haptics.ts` only.
 
 ---
 
@@ -65,5 +73,3 @@
 ## Branching and pushing
 
 User pushes from their own editor. Make local edits only. Do **not** run `git push`, do **not** create commits unless explicitly asked.
-
-now i want you to focus on the last screen the last point screen . Game statistics etc. what do you think it should show i want a square soft corner overlay with easy "Again" access. Cancel, 

@@ -19,12 +19,14 @@ import { createAuthFormStyles } from '../../src/styles/authFormStyles';
 import { spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 
 const nextRoute = '/registration/03-contact' as Href;
 
 export default function RegStep2AacUser() {
   const router = useRouter();
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
   const authFormStyles = useMemo(() => createAuthFormStyles(t), [t]);
   const { data, update } = useRegistration();
   const monthRef = useRef<TextInput>(null);
@@ -43,6 +45,9 @@ export default function RegStep2AacUser() {
   const blocked = gate.kind === 'blocked_under_15';
 
   const canContinue = namesOk && dobOk && !blocked;
+  const blockEntering = reduceMotion
+    ? FadeInDown.duration(160).withInitialValues({ transform: [{ translateY: 0 }] })
+    : FadeInDown.duration(260);
 
   const handleContinue = () => {
     setShowError(true);
@@ -172,7 +177,7 @@ export default function RegStep2AacUser() {
 
         {/* ── Block banner (under-15 + myself path) ── */}
         {blocked && showError ? (
-          <Animated.View entering={FadeInDown.duration(260)} style={styles.block}>
+          <Animated.View entering={blockEntering} style={styles.block}>
             <Ionicons
               name="alert-circle"
               size={22}

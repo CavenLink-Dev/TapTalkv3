@@ -15,6 +15,7 @@ import { Pill } from '../../src/components/native/Pill';
 import { RegistrationScaffold } from '../../src/components/registration/RegistrationScaffold';
 import { useRegistration } from '../../src/context/RegistrationContext';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
@@ -49,6 +50,7 @@ const SCHEME_PREVIEW = {
 export default function RegStep8Accessibility() {
   const router = useRouter();
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
   const { data, updateAccessibility } = useRegistration();
   const { dispatch } = useAppContext();
   const a11y = data.accessibility;
@@ -87,6 +89,9 @@ export default function RegStep8Accessibility() {
   const previewTextColor = isDark ? colors.surface : colors.text;
 
   const skip = () => router.replace(nextRoute);
+  const bannerEntering = reduceMotion
+    ? FadeInDown.duration(160).withInitialValues({ transform: [{ translateY: 0 }] })
+    : FadeInDown.duration(220);
 
   return (
     <RegistrationScaffold
@@ -166,7 +171,7 @@ export default function RegStep8Accessibility() {
 
         {/* ── VoiceOver banner ── */}
         {voiceOverOn ? (
-          <Animated.View entering={FadeInDown.duration(220)} style={styles.banner}>
+          <Animated.View entering={bannerEntering} style={styles.banner}>
             <Ionicons name="ear" size={22} color={t.colors.primaryDark} />
             <Text style={[styles.bannerText, { color: t.colors.text }]}>
               VoiceOver is on. TapTalk labels every button and tile for screen readers.

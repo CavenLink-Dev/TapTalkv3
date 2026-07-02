@@ -6,6 +6,7 @@ import Animated, {
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { radii, spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/useTheme';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 
 interface GuardianBlockPanelProps {
   /**
@@ -20,7 +21,8 @@ interface GuardianBlockPanelProps {
 
 /**
  * Red guardian-block panel shown when a user under 15 tries to self-setup.
- * Animates in with a fade + slide, and triggers a warning haptic.
+ * Animates in with a fade + slide, reducing to fade-only when needed, and
+ * triggers a warning haptic.
  * Matches the fourth PNG design exactly.
  */
 export function GuardianBlockPanel({
@@ -28,6 +30,12 @@ export function GuardianBlockPanel({
   onCopyLink,
 }: GuardianBlockPanelProps) {
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
+  const entering = reduceMotion
+    ? FadeInDown.duration(180)
+        .delay(Math.min(entranceDelay, 80))
+        .withInitialValues({ transform: [{ translateY: 0 }] })
+    : FadeInDown.duration(350).delay(entranceDelay);
 
   // Trigger warning haptic when component mounts
   useEffect(() => {
@@ -44,7 +52,7 @@ export function GuardianBlockPanel({
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(350).delay(entranceDelay)}
+      entering={entering}
       style={styles.container}
     >
       {/* Red warning message */}

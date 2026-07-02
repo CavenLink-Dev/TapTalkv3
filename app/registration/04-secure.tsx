@@ -11,6 +11,7 @@ import { createAuthFormStyles } from '../../src/styles/authFormStyles';
 import { radii, shadows, spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { hapticSelection, hapticSuccess } from '../../src/utils/haptics';
 
 const nextRoute = '/registration/05-consent' as Href;
@@ -24,6 +25,7 @@ type Mode = 'idle' | 'passkey' | 'password';
 export default function RegStep4Secure() {
   const router = useRouter();
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
   const authFormStyles = useMemo(() => createAuthFormStyles(t), [t]);
   const { data, update } = useRegistration();
 
@@ -58,6 +60,9 @@ export default function RegStep4Secure() {
   const strengthColors  = [t.colors.progressTrack, t.colors.danger, t.colors.warning, t.colors.success];
 
   const ready = mode === 'passkey' || (mode === 'password' && confirmOk);
+  const revealEntering = reduceMotion
+    ? FadeInDown.duration(160).withInitialValues({ transform: [{ translateY: 0 }] })
+    : FadeInDown.duration(260);
 
   useEffect(() => {
     update({ biometricsEnabled: biometricsOn });
@@ -128,7 +133,7 @@ export default function RegStep4Secure() {
 
         {/* ── Password fields ── */}
         {mode === 'password' ? (
-          <Animated.View entering={FadeInDown.duration(260)} style={styles.passwordBlock}>
+          <Animated.View entering={revealEntering} style={styles.passwordBlock}>
             <View>
               <Text style={authFormStyles.label}>Password</Text>
               <TextField
@@ -191,7 +196,7 @@ export default function RegStep4Secure() {
         {/* ── Biometrics opt-in ── */}
         {ready ? (
           <Animated.View
-            entering={FadeInDown.duration(260)}
+            entering={revealEntering}
             style={[
               styles.bioCard,
               { backgroundColor: t.colors.surface, borderColor: t.colors.border },

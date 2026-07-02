@@ -17,6 +17,7 @@ import { EMAIL_PATTERN } from '../../src/utils/validation';
 import { spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 
 const nextRoute = '/registration/04-secure' as Href;
 
@@ -34,6 +35,7 @@ const RELATIONSHIPS: { id: GuardianRelationship; label: string }[] = [
 export default function RegStep3Contact() {
   const router = useRouter();
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
   const authFormStyles = useMemo(() => createAuthFormStyles(t), [t]);
   const { data, update } = useRegistration();
   const gate = ageGate(data);
@@ -82,6 +84,9 @@ export default function RegStep3Contact() {
     emailValid && !emailKnown && phoneValid && guardianNameOk && relationshipOk;
 
   const phoneRef = useRef<TextInput>(null);
+  const noteEntering = reduceMotion
+    ? FadeInDown.duration(160).withInitialValues({ transform: [{ translateY: 0 }] })
+    : FadeInDown.duration(260).delay(60);
 
   const goLogin = () => {
     router.replace('/auth/login' as Href);
@@ -192,7 +197,7 @@ export default function RegStep3Contact() {
         </View>
 
         {!isPathA ? (
-          <Animated.View entering={FadeInDown.duration(260).delay(60)} style={styles.note}>
+          <Animated.View entering={noteEntering} style={styles.note}>
             <Ionicons
               name="shield-checkmark-outline"
               size={20}

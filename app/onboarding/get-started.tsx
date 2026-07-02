@@ -8,6 +8,7 @@ import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 
 const registerRoute = '/registration/01-who' as Href;
 const loginRoute = '/auth/login' as Href;
@@ -21,11 +22,17 @@ const HIGHLIGHTS = [
 export default function GetStarted() {
   const router = useRouter();
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
+  const entrance = (delay = 0) => reduceMotion
+    ? FadeInDown.duration(180)
+        .delay(Math.min(delay, 80))
+        .withInitialValues({ transform: [{ translateY: 0 }] })
+    : FadeInDown.duration(400).delay(delay);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: t.colors.background }]}>
       <View style={styles.hero}>
-        <Animated.View entering={FadeInDown.duration(400)} style={styles.logoWrap}>
+        <Animated.View entering={entrance()} style={styles.logoWrap}>
           <Image
             source={require('../../assets/taptalk_logo.png')}
             style={styles.logo}
@@ -34,10 +41,10 @@ export default function GetStarted() {
           />
         </Animated.View>
 
-        <Animated.Text entering={FadeInDown.duration(400).delay(80)} style={[styles.headline, { color: t.colors.text }]}>
+        <Animated.Text entering={entrance(80)} style={[styles.headline, { color: t.colors.text }]}>
           Everyone deserves a voice
         </Animated.Text>
-        <Animated.Text entering={FadeInDown.duration(400).delay(140)} style={[styles.subhead, { color: t.colors.textMuted }]}>
+        <Animated.Text entering={entrance(140)} style={[styles.subhead, { color: t.colors.textMuted }]}>
           A clear, dependable communication tool built for adults who use AAC.
         </Animated.Text>
 
@@ -45,7 +52,7 @@ export default function GetStarted() {
           {HIGHLIGHTS.map((h, i) => (
             <Animated.View
               key={h.text}
-              entering={FadeInDown.duration(400).delay(220 + i * 70)}
+              entering={entrance(220 + i * 70)}
               style={styles.highlightRow}
             >
               <View style={styles.highlightIcon}>

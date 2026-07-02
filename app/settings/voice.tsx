@@ -2,11 +2,11 @@ import React, { useCallback } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Speech from 'expo-speech';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { useSpeech } from '../../src/hooks/useSpeech';
 import { useTheme } from '../../src/theme/useTheme';
 import { radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
@@ -29,6 +29,7 @@ const SAMPLE_PHRASE = 'Hello, I use TapTalk to communicate.';
 export default function VoiceSettingsScreen() {
   const router = useRouter();
   const { state, dispatch } = useAppContext();
+  const { speak, stop } = useSpeech();
   const t = useTheme();
   const { speechRate, speechPitch } = state.accessibility;
 
@@ -43,9 +44,9 @@ export default function VoiceSettingsScreen() {
   }, [dispatch]);
 
   const testVoice = useCallback(() => {
-    Speech.stop();
-    Speech.speak(SAMPLE_PHRASE, { rate: speechRate, pitch: speechPitch });
-  }, [speechRate, speechPitch]);
+    stop();
+    speak(SAMPLE_PHRASE, { rate: speechRate, pitch: speechPitch });
+  }, [speak, speechRate, speechPitch, stop]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>

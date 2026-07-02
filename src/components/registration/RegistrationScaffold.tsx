@@ -17,6 +17,7 @@ import { REGISTRATION_TOTAL_STEPS } from '../../context/RegistrationContext';
 import { spacing, typography } from '../../theme/tokens';
 import { fonts } from '../../theme/fonts';
 import { useTheme } from '../../theme/useTheme';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { hapticSelection } from '../../utils/haptics';
 
 interface RegistrationScaffoldProps {
@@ -52,7 +53,14 @@ export function RegistrationScaffold({
 }: RegistrationScaffoldProps) {
   const router = useRouter();
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
   const canGoBack = step > 1;
+  const bodyEntering = reduceMotion
+    ? FadeIn.duration(180)
+    : FadeInDown.duration(320);
+  const footerEntering = reduceMotion
+    ? FadeIn.duration(180)
+    : FadeIn.duration(320).delay(120);
 
   const handleBack = () => {
     hapticSelection();
@@ -60,7 +68,7 @@ export function RegistrationScaffold({
   };
 
   const body = (
-    <Animated.View style={styles.body} entering={FadeInDown.duration(320)}>
+    <Animated.View style={styles.body} entering={bodyEntering}>
       <Text style={[styles.title, { color: t.colors.text }]} accessibilityRole="header">
         {title}
       </Text>
@@ -112,7 +120,7 @@ export function RegistrationScaffold({
           body
         )}
 
-        <Animated.View style={styles.footer} entering={FadeIn.duration(320).delay(120)}>
+        <Animated.View style={styles.footer} entering={footerEntering}>
           {footer}
         </Animated.View>
       </KeyboardAvoidingView>

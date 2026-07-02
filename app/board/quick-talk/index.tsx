@@ -1,9 +1,9 @@
 /**
  * Quick Talk — saved phrases.
  *
- * Default view: a list of every saved phrase. Tap a phrase → speaks it via
- * expo-speech. Long-press → action sheet (Edit / Delete / Move up / Move
- * down) per principle 11.
+ * Default view: a list of every saved phrase. Tap a phrase -> stops any
+ * current speech and speaks it through the shared useSpeech hook. Long-press
+ * -> action sheet (Edit / Delete / Move up / Move down) per principle 11.
  *
  * Edit Mode (toggled via "Edit" in the header, principle 25): each row gains
  * up/down arrow buttons + an inline X delete. Edit Mode hides the long-press
@@ -30,9 +30,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
-import * as Speech from 'expo-speech';
 import { radii, spacing, typography } from '../../../src/theme/tokens';
 import { hapticSelection } from '../../../src/utils/haptics';
+import { useAppContext } from '../../../src/hooks/useAppContext';
+import { useSpeech } from '../../../src/hooks/useSpeech';
 import {
   QUICK_TALK_MAX,
   QuickTalkItem,
@@ -43,11 +44,6 @@ import {
   useQuickTalk,
 } from '../../../src/features/quick-talk/store';
 import { useTheme } from '../../../src/theme/useTheme';
-
-function speakPhrase(text: string): void {
-  Speech.stop();
-  Speech.speak(text);
-}
 
 // ─── Row ────────────────────────────────────────────────────────────────────
 
@@ -205,12 +201,15 @@ function EditPhraseSheet({
 export default function QuickTalkScreen() {
   const t = useTheme();
   const router = useRouter();
+  const { state } = useAppContext();
+  const { speak, stop } = useSpeech();
   const items = useQuickTalk();
   const [editMode, setEditMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const editingItem = items.find(i => i.id === editingId);
   const total = items.length;
+  const { speechRate, speechPitch } = state.accessibility;
 
   const showRowMenu = (item: QuickTalkItem, index: number) => {
     if (editMode) return; // Edit mode owns the actions.
@@ -321,7 +320,8 @@ export default function QuickTalkScreen() {
                 editMode={editMode}
                 onTap={() => {
                   hapticSelection();
-                  speakPhrase(it.text);
+                  stop();
+                  speak(it.text, { rate: speechRate, pitch: speechPitch });
                 }}
                 onLongPress={() => {
                   hapticSelection();

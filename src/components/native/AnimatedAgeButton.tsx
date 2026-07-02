@@ -9,6 +9,7 @@ import Animated, {
 import { hapticLight } from '../../utils/haptics';
 import { radii, shadows, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/useTheme';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 
 export type AgeRange = 'under-13' | '13-to-15' | '16-to-17' | '18-or-older';
 
@@ -44,12 +45,17 @@ export function AnimatedAgeButton({
   showChevron = true,
 }: AnimatedAgeButtonProps) {
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
   const scale = useSharedValue(1);
   const chevronRotation = useSharedValue(selected ? 1 : 0);
 
   useEffect(() => {
+    if (reduceMotion) {
+      chevronRotation.value = selected ? 1 : 0;
+      return;
+    }
     chevronRotation.value = withTiming(selected ? 1 : 0, { duration: 200 });
-  }, [selected, chevronRotation]);
+  }, [selected, chevronRotation, reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -60,11 +66,14 @@ export function AnimatedAgeButton({
   }));
 
   const handlePressIn = () => {
-    scale.value = withTiming(0.985, { duration: 100 });
+    if (!reduceMotion) {
+      scale.value = withTiming(0.985, { duration: 100 });
+    }
     hapticLight();
   };
 
   const handlePressOut = () => {
+    if (reduceMotion) return;
     scale.value = withTiming(1, { duration: 100 });
   };
 
@@ -81,10 +90,15 @@ export function AnimatedAgeButton({
       : 'transparent';
 
   const labelColor = selected ? t.colors.surface : t.colors.text;
+  const entering = reduceMotion
+    ? FadeInDown.duration(180)
+        .delay(Math.min(entranceDelay, 80))
+        .withInitialValues({ transform: [{ translateY: 0 }] })
+    : FadeInDown.duration(280).delay(entranceDelay);
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(280).delay(entranceDelay)}
+      entering={entering}
       style={styles.stretch}
     >
       <Animated.View style={animatedStyle}>
@@ -101,6 +115,7 @@ export function AnimatedAgeButton({
             selected && styles.buttonSelected,
           ]}
           accessibilityRole="button"
+          accessibilityLabel={label}
           accessibilityState={{ selected }}
         >
           <Text style={[styles.label, { color: labelColor }]}>

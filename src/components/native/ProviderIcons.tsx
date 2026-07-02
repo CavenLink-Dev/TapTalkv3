@@ -9,6 +9,7 @@ import Animated, {
 import { hapticLight } from '../../utils/haptics';
 import { spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/useTheme';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 
 type Provider = 'phone' | 'outlook' | 'google' | 'facebook';
 
@@ -26,10 +27,16 @@ interface ProviderIconsProps {
  */
 export function ProviderIcons({ onProviderPress, entranceDelay = 0 }: ProviderIconsProps) {
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
+  const entering = reduceMotion
+    ? FadeInDown.duration(180)
+        .delay(Math.min(entranceDelay, 80))
+        .withInitialValues({ transform: [{ translateY: 0 }] })
+    : FadeInDown.duration(300).delay(entranceDelay);
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(300).delay(entranceDelay)}
+      entering={entering}
       style={styles.container}
     >
       <Text style={[styles.title, { color: t.colors.text }]}>CONTINUE USING YOUR EMAIL</Text>
@@ -39,6 +46,7 @@ export function ProviderIcons({ onProviderPress, entranceDelay = 0 }: ProviderIc
           label="Phone"
           color={t.colors.primary}
           surfaceColor={t.colors.surface}
+          reduceMotion={reduceMotion}
           onPress={() => onProviderPress('phone')}
         />
         <ProviderIcon
@@ -46,6 +54,7 @@ export function ProviderIcons({ onProviderPress, entranceDelay = 0 }: ProviderIc
           label="Outlook"
           color="#0078D4"
           surfaceColor={t.colors.surface}
+          reduceMotion={reduceMotion}
           onPress={() => onProviderPress('outlook')}
         />
         <ProviderIcon
@@ -53,6 +62,7 @@ export function ProviderIcons({ onProviderPress, entranceDelay = 0 }: ProviderIc
           label="Google"
           color="#4285F4"
           surfaceColor={t.colors.surface}
+          reduceMotion={reduceMotion}
           onPress={() => onProviderPress('google')}
         />
         <ProviderIcon
@@ -60,6 +70,7 @@ export function ProviderIcons({ onProviderPress, entranceDelay = 0 }: ProviderIc
           label="Facebook"
           color="#1877F2"
           surfaceColor={t.colors.surface}
+          reduceMotion={reduceMotion}
           onPress={() => onProviderPress('facebook')}
         />
       </View>
@@ -72,22 +83,26 @@ interface ProviderIconProps {
   label: string;
   color: string;
   surfaceColor: string;
+  reduceMotion: boolean;
   onPress: () => void;
 }
 
-function ProviderIcon({ icon, label, color, surfaceColor, onPress }: ProviderIconProps) {
+function ProviderIcon({ icon, label, color, surfaceColor, reduceMotion, onPress }: ProviderIconProps) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [{ scale: reduceMotion ? 1 : scale.value }],
   }));
 
   const handlePressIn = () => {
-    scale.value = withTiming(0.985, { duration: 100 });
+    if (!reduceMotion) {
+      scale.value = withTiming(0.985, { duration: 100 });
+    }
     hapticLight();
   };
 
   const handlePressOut = () => {
+    if (reduceMotion) return;
     scale.value = withTiming(1, { duration: 100 });
   };
 

@@ -4,11 +4,13 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
   FadeInDown,
 } from 'react-native-reanimated';
 import { hapticLight } from '../../utils/haptics';
 import { spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/useTheme';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 
 interface ConsentCheckboxProps {
   checked: boolean;
@@ -22,7 +24,8 @@ interface ConsentCheckboxProps {
 
 /**
  * Animated consent checkbox with green checkmark.
- * Checkmark scales in with a spring when toggled on, and haptic feedback is triggered.
+ * Checkmark scales in with a spring when toggled on, reduces to a short fade
+ * when needed, and haptic feedback is triggered.
  */
 export function ConsentCheckbox({
   checked,
@@ -31,33 +34,46 @@ export function ConsentCheckbox({
   entranceDelay = 0,
 }: ConsentCheckboxProps) {
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
   const checkScale = useSharedValue(checked ? 1 : 0);
 
   const handlePress = () => {
     const newChecked = !checked;
-    checkScale.value = withSpring(newChecked ? 1 : 0, {
-      damping: 12,
-      stiffness: 300,
-    });
+    checkScale.value = reduceMotion
+      ? withTiming(newChecked ? 1 : 0, { duration: 120 })
+      : withSpring(newChecked ? 1 : 0, {
+          damping: 12,
+          stiffness: 300,
+        });
     hapticLight();
     onToggle();
   };
 
-  const checkmarkStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: checkScale.value }],
-  }));
+  const checkmarkStyle = useAnimatedStyle(() => (
+    reduceMotion
+      ? { opacity: checkScale.value, transform: [{ scale: 1 }] }
+      : { transform: [{ scale: checkScale.value }] }
+  ));
 
   // Update the shared value when checked prop changes externally
   React.useEffect(() => {
-    checkScale.value = withSpring(checked ? 1 : 0, {
-      damping: 12,
-      stiffness: 300,
-    });
-  }, [checked, checkScale]);
+    checkScale.value = reduceMotion
+      ? withTiming(checked ? 1 : 0, { duration: 120 })
+      : withSpring(checked ? 1 : 0, {
+          damping: 12,
+          stiffness: 300,
+        });
+  }, [checked, checkScale, reduceMotion]);
+
+  const entering = reduceMotion
+    ? FadeInDown.duration(180)
+        .delay(Math.min(entranceDelay, 80))
+        .withInitialValues({ transform: [{ translateY: 0 }] })
+    : FadeInDown.duration(300).delay(entranceDelay);
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(300).delay(entranceDelay)}
+      entering={entering}
       style={styles.container}
     >
       <Pressable
