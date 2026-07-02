@@ -5,7 +5,7 @@
  *   1. User Card (always visible — not collapsible)
  *   2. User Profile & Settings  (Profile + Settings + Accessibility)
  *   3. Privacy & Data
- *   4. About Us & Guide         (Tour + About + mascot tagline)
+ *   4. About Us & Guide         (Tour + About)
  *   5. Sign Out button (centred, horizontally compact)
  *
  * Design principles applied: 1 (simple first), 3 (expandable sections),
@@ -23,6 +23,7 @@ import {
   Easing,
   Image,
   LayoutAnimation,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -36,6 +37,7 @@ import {
 import { Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
+import { HelperCaption } from '../../src/components/native/HelperCaption';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { Screen } from '../../src/components/native/Screen';
 import { TextField } from '../../src/components/native/TextField';
@@ -54,13 +56,18 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const APP_VERSION = '0.1.0';
+const SUPPORT_EMAIL = 'hello@taptalk.app';
 const voiceRoute = '/settings/voice' as Href;
 const displayRoute = '/settings/display' as Href;
 const attributionRoute = '/symbol-attribution' as Href;
+const privacyPolicyRoute = '/legal/privacy-policy' as Href;
+const dataChoicesRoute = '/legal/data-choices' as Href;
+const termsRoute = '/legal/terms-of-use' as Href;
+const medicalDisclaimerRoute = '/legal/medical-disclaimer' as Href;
 const tourRoute = '/onboarding/tour' as Href;
 const splashRoute = '/onboarding/splash' as Href;
 
-const MASCOT_HAPPY = require('../../assets/mascot_happy_looking_up.png');
+const MASCOT_HAPPY = require('../../assets/mascot_library/png_mascot/mascot_happy_looking_up.png');
 
 const USER_TYPE_LABELS: Record<string, string> = {
   myself: 'AAC user',
@@ -248,6 +255,7 @@ interface SectionProps {
   expanded: boolean;
   onToggle: () => void;
   reduceMotion: boolean;
+  style?: object;
   children: React.ReactNode;
 }
 
@@ -257,6 +265,7 @@ function CollapsibleSection({
   expanded,
   onToggle,
   reduceMotion,
+  style,
   children,
 }: SectionProps) {
   const t = useTheme();
@@ -284,7 +293,7 @@ function CollapsibleSection({
   const rotate = chevron.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
 
   return (
-    <View style={styles.sectionWrap}>
+    <View style={[styles.sectionWrap, style]}>
       <Text
         style={[styles.sectionEyebrow, { color: t.colors.textTertiary }]}
         accessibilityElementsHidden
@@ -524,17 +533,21 @@ export default function MeScreen() {
   }, [dispatch, state.accessibility.highContrast]);
 
   const signOut = useCallback(() => {
-    Alert.alert('Sign out?', 'You can sign back in any time with your email.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: () => {
-          dispatch({ type: 'SIGN_OUT' });
-          router.replace(splashRoute);
+    Alert.alert(
+      'Sign Out?',
+      'You can sign back in anytime with your credentials.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: () => {
+            dispatch({ type: 'SIGN_OUT' });
+            router.replace(splashRoute);
+          },
         },
-      },
-    ]);
+      ],
+    );
   }, [dispatch, router]);
 
   const exportProfileData = useCallback(async () => {
@@ -562,6 +575,19 @@ export default function MeScreen() {
       );
     }
   }, [state]);
+
+  const contactSupport = useCallback(() => {
+    hapticSelection();
+    Linking.openURL(
+      `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('TapTalk Support')}`,
+    ).catch(() => {
+      Alert.alert(
+        'Contact Support',
+        `Email us at ${SUPPORT_EMAIL} for help or privacy questions.`,
+        [{ text: 'OK', style: 'cancel' }],
+      );
+    });
+  }, []);
 
   const deleteProfileData = useCallback(() => {
     Alert.alert(
@@ -803,11 +829,18 @@ export default function MeScreen() {
         onToggle={() => toggleSection('privacy')}
         reduceMotion={reduceMotion}
       >
-        <Text style={[styles.sectionNote, { color: t.colors.textMuted }]}>
-          TapTalk stores your profile and AAC choices on this device using local storage. Nothing
-          is sent to a cloud server by default.
-        </Text>
+        <SubSectionLabel label="Privacy" />
+        <SettingsRow
+          icon="shield-checkmark-outline"
+          iconColor="#199AEE"
+          iconBg="#E6F4FD"
+          label="Privacy Policy"
+          hint="How TapTalk stores, uses, and protects your data"
+          onPress={() => router.push(privacyPolicyRoute)}
+          showDivider={false}
+        />
 
+        <SubSectionLabel label="Device & Access" />
         <SettingsRow
           icon="lock-closed-outline"
           label="Caregiver Lock"
@@ -871,7 +904,6 @@ export default function MeScreen() {
             </View>
           </View>
         ) : null}
-
         <SettingsRow
           icon="camera-outline"
           iconColor="#5CD65C"
@@ -899,7 +931,10 @@ export default function MeScreen() {
               [{ text: 'OK', style: 'cancel' }],
             )
           }
+          showDivider={false}
         />
+
+        <SubSectionLabel label="Your Data" />
         <SettingsRow
           icon="phone-portrait-outline"
           label="Local Data"
@@ -914,12 +949,12 @@ export default function MeScreen() {
           }
         />
         <SettingsRow
-          icon="ribbon-outline"
-          iconColor="#FF9500"
-          iconBg="#FFF4E0"
-          label="Mulberry Symbols (CC BY-SA 4.0)"
-          hint="View symbol licence and attribution"
-          onPress={() => router.push(attributionRoute)}
+          icon="options-outline"
+          iconColor="#BD73FF"
+          iconBg="#F3EAFF"
+          label="Data & Privacy Choices"
+          hint="Manage, export, delete, or request changes to your data"
+          onPress={() => router.push(dataChoicesRoute)}
         />
         <SettingsRow
           icon="download-outline"
@@ -935,8 +970,20 @@ export default function MeScreen() {
           destructive
           hint="Removes profile data from this device. Cannot be undone."
           onPress={deleteProfileData}
+        />
+        <SettingsRow
+          icon="ribbon-outline"
+          iconColor="#FF9500"
+          iconBg="#FFF4E0"
+          label="Mulberry Symbols (CC BY-SA 4.0)"
+          hint="View symbol licence and attribution"
+          onPress={() => router.push(attributionRoute)}
           showDivider={false}
         />
+
+        <HelperCaption style={styles.sectionFooterCaption}>
+          Learn how TapTalk stores, protects, exports, and deletes your data.
+        </HelperCaption>
       </CollapsibleSection>
 
       {/* ── 4 · About Us & Guide ── */}
@@ -945,6 +992,7 @@ export default function MeScreen() {
         expanded={open.about}
         onToggle={() => toggleSection('about')}
         reduceMotion={reduceMotion}
+        style={styles.sectionWrapLast}
       >
         {/* Guide sub-section */}
         <SubSectionLabel label="Guide" />
@@ -958,6 +1006,34 @@ export default function MeScreen() {
           showDivider={false}
         />
 
+        {/* Legal sub-section */}
+        <SubSectionLabel label="Legal" />
+        <SettingsRow
+          icon="document-text-outline"
+          iconColor="#434343"
+          iconBg="#EAEEF2"
+          label="Terms of Use"
+          hint="Plain-English rules for using TapTalk safely"
+          onPress={() => router.push(termsRoute)}
+        />
+        <SettingsRow
+          icon="medkit-outline"
+          iconColor="#5CD65C"
+          iconBg="#E8FAE8"
+          label="Medical & Therapy Disclaimer"
+          hint="TapTalk supports communication but does not replace professional advice"
+          onPress={() => router.push(medicalDisclaimerRoute)}
+        />
+        <SettingsRow
+          icon="ribbon-outline"
+          iconColor="#FF9500"
+          iconBg="#FFF4E0"
+          label="Licences & Attribution"
+          hint="Symbol, icon, sound, font, and open-source credits"
+          onPress={() => router.push(attributionRoute)}
+          showDivider={false}
+        />
+
         {/* About sub-section */}
         <SubSectionLabel label="About" />
         <Text style={[styles.sectionNote, { color: t.colors.textMuted }]}>
@@ -966,15 +1042,24 @@ export default function MeScreen() {
         </Text>
         <SettingsRow icon="information-circle-outline" label="App Version" value={APP_VERSION} info />
         <SettingsRow
-          icon="ribbon-outline"
-          label="Mulberry Symbols"
-          hint="Licences and attribution for AAC symbols"
-          onPress={() => router.push(attributionRoute)}
+          icon="mail-outline"
+          iconColor="#199AEE"
+          iconBg="#E6F4FD"
+          label="Contact Support"
+          hint="Email the developer for help or privacy questions"
+          onPress={contactSupport}
           showDivider={false}
         />
+
+        <HelperCaption style={styles.sectionFooterCaption}>
+          © 2026 TapTalk. All rights reserved.
+        </HelperCaption>
+        <HelperCaption>
+          Replay the guide, view app information, and learn about TapTalk.
+        </HelperCaption>
       </CollapsibleSection>
 
-      {/* ── Mascot & tagline ── */}
+      {/* ── Mascot ── */}
       <View
         style={styles.mascotRow}
         accessibilityElementsHidden
@@ -986,21 +1071,21 @@ export default function MeScreen() {
           resizeMode="contain"
           accessibilityIgnoresInvertColors
         />
-        <Text style={[styles.mascotText, { color: t.colors.textMuted }]}>
-          Built with care for those who deserve to be heard.
-        </Text>
       </View>
 
       {/* ── 5 · Sign Out ── */}
       <View style={styles.signOutContainer}>
         <PrimaryButton
           accessibilityLabel="Sign out of TapTalk"
-          accessibilityHint="You can sign back in any time with your email"
+          accessibilityHint="You can sign back in anytime with your credentials"
           label="Sign Out"
           onPress={signOut}
           variant="danger"
           style={styles.signOutButton}
         />
+        <HelperCaption>
+          Only sign out if you are finished using TapTalk on this device.
+        </HelperCaption>
       </View>
 
       {/* Display name modal */}
@@ -1103,6 +1188,9 @@ const styles = StyleSheet.create({
   sectionWrap: {
     marginBottom: spacing.xxl,
   },
+  sectionWrapLast: {
+    marginBottom: 0,
+  },
   sectionEyebrow: {
     fontFamily: fonts.bodyHeavy,
     fontSize: typography.caption,
@@ -1184,19 +1272,11 @@ const styles = StyleSheet.create({
   // ── Mascot ──
   mascotRow: {
     alignItems: 'center',
-    gap: spacing.sm,
-    marginVertical: spacing.xxl,
-    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
   },
   mascotImage: {
-    width: 88,
-    height: 88,
-  },
-  mascotText: {
-    fontFamily: fonts.body,
-    fontSize: typography.caption,
-    textAlign: 'center',
-    lineHeight: 18,
+    width: 140,
+    height: 140,
   },
 
   // ── Sign Out ──
@@ -1206,6 +1286,10 @@ const styles = StyleSheet.create({
   },
   signOutButton: {
     width: 240,
+  },
+  sectionFooterCaption: {
+    marginTop: spacing.sm,
+    paddingBottom: spacing.xs,
   },
 
   // ── PIN prompt ──

@@ -44,6 +44,8 @@ import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticLight, hapticSelection } from '../../src/utils/haptics';
 import { playSound } from '../../src/utils/sounds';
+import { setActivitySfxEnabled, useActivitySfx } from '../../src/features/activities/sound-settings';
+import { recordActivitySession } from '../../src/features/activities/progress-store';
 import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Shapes ────────────────────────────────────────────────────────────────────
@@ -635,7 +637,7 @@ function StartOverlay({
               onPress={onCancel}
               accessibilityRole="button"
               accessibilityLabel="Cancel"
-              style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.btnGhost, { backgroundColor: '#F1F5F9' }, pressed && { opacity: 0.85 }]}
             >
               <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Cancel</Text>
             </Pressable>
@@ -687,8 +689,9 @@ export default function ShapeMatchScreen() {
   const [selectedShapeId,setSelectedShapeId]= useState<string | null>(null);
   const [hintedShapeId,  setHintedShapeId]  = useState<string | null>(null);
   const [tryAgainVisible,setTryAgainVisible]= useState(false);
-  // Sound defaults OFF — the user opts in (activity_implementation_rules §3).
-  const [soundOn,        setSoundOn]        = useState(false);
+  // Sound effects default ON (shared across all activities, persisted).
+  // Turning them off in any game turns them off everywhere.
+  const soundOn = useActivitySfx();
   const [levelPillFlash, setLevelPillFlash] = useState(false);
 
   // V3 additions
@@ -699,6 +702,9 @@ export default function ShapeMatchScreen() {
   const contentOpacity   = useRef(new Animated.Value(1)).current; // level cross-fade
   const slotRects        = useRef<Map<ShapeKind, Rect>>(new Map());
   const wrongShapeTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Progress logging (one record per completed difficulty run)
+  const runStartRef      = useRef<number>(Date.now());
+  const incorrectRef     = useRef(0);
 
   const count      = layout.shapes.length;
   const config     = gridConfig(count);
@@ -718,6 +724,13 @@ export default function ShapeMatchScreen() {
     // Advance level with cross-fade
     const t = setTimeout(() => {
       if (level >= totalLevels) {
+        recordActivitySession({
+          activityId: 'shape-match',
+          difficulty,
+          totalLevels,
+          incorrectCount: incorrectRef.current,
+          durationMs: Date.now() - runStartRef.current,
+        });
         setPhase('won');
         return;
       }
@@ -786,6 +799,7 @@ export default function ShapeMatchScreen() {
         setSelectedShapeId(null);
         setHintedShapeId(null);
       } else {
+        incorrectRef.current += 1;
         playSound('incorrect', soundOn);
         showTryAgain();
         setSelectedShapeId(null);
@@ -898,6 +912,8 @@ export default function ShapeMatchScreen() {
     setHintedShapeId(null);
     setPhase('play');
     setGameStartedAt(Date.now());
+    runStartRef.current = Date.now();
+    incorrectRef.current = 0;
     slotRects.current.clear();
   }, [difficulty, contentOpacity]);
 
@@ -911,6 +927,8 @@ export default function ShapeMatchScreen() {
     setSelectedShapeId(null);
     setPhase('play');
     setGameStartedAt(Date.now());
+    runStartRef.current = Date.now();
+    incorrectRef.current = 0;
   }, [difficulty, contentOpacity]);
 
   const onNextActivity  = useCallback(() => router.replace('/activities/colour-pop' as never), [router]);
@@ -960,7 +978,7 @@ export default function ShapeMatchScreen() {
         />
         <View style={styles.headerActions}>
           <Pressable
-            onPress={() => { hapticSelection(); setSoundOn(v => !v); }}
+            onPress={() => { hapticSelection(); setActivitySfxEnabled(!soundOn); }}
             hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel={soundOn ? 'Turn sound off' : 'Turn sound on'}

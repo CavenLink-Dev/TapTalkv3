@@ -36,6 +36,8 @@ export interface Plan {
   date: string;
   description?: string;
   steps: PlanStep[];
+  /** Favourite plans surface first in day lists. */
+  favorite?: boolean;
 }
 
 export function formatDateKey(d: Date): string {
@@ -117,6 +119,31 @@ export function updatePlan(id: string, patch: Partial<Plan>): void {
   emit();
 }
 
+export function toggleFavoritePlan(id: string): void {
+  plans = plans.map(p => (p.id === id ? { ...p, favorite: !p.favorite } : p));
+  emit();
+}
+
+/**
+ * Move a plan up (-1) or down (+1) within its own date's list.
+ * Reordering is manual-order only; favourites still float first in views.
+ */
+export function movePlan(id: string, delta: -1 | 1): void {
+  const target = plans.find(p => p.id === id);
+  if (!target) return;
+  const sameDay = plans.filter(p => p.date === target.date);
+  const idx = sameDay.findIndex(p => p.id === id);
+  const swapWith = sameDay[idx + delta];
+  if (!swapWith) return;
+  const a = plans.indexOf(target);
+  const b = plans.indexOf(swapWith);
+  const next = [...plans];
+  next[a] = swapWith;
+  next[b] = target;
+  plans = next;
+  emit();
+}
+
 export function toggleStepDone(planId: string, stepId: string): void {
   plans = plans.map(p =>
     p.id !== planId
@@ -143,7 +170,24 @@ export function usePlans(): Plan[] {
 
 export function usePlansForDate(dateKey: string): Plan[] {
   const all = usePlans();
-  return all.filter(p => p.date === dateKey);
+  const forDate = all.filter(p => p.date === dateKey);
+  // Favourites first, manual order preserved within each group.
+  return [...forDate.filter(p => p.favorite), ...forDate.filter(p => !p.favorite)];
+}
+
+/**
+ * Plan symbol colours per date (in plan order) — used by the month grid to
+ * draw one small coloured indicator per plan instead of a generic dot.
+ */
+export function usePlanColorsByDate(): Map<string, string[]> {
+  usePlans();
+  const m = new Map<string, string[]>();
+  plans.forEach(p => {
+    const list = m.get(p.date) ?? [];
+    list.push(p.symbolColor);
+    m.set(p.date, list);
+  });
+  return m;
 }
 
 export function countPlansByDate(): Map<string, number> {

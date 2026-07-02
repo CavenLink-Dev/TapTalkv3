@@ -463,7 +463,7 @@ function RunnerStepCard({
   const opacity = isCurrent ? 1 : isPast ? 0.4 : 0.55;
   return (
     <View style={[styles.runnerCard, { opacity }]}>
-      <View style={[styles.runnerWordPill, !isCurrent && { backgroundColor: '#9AA0A6' }]}>
+      <View style={[styles.runnerWordPill, { backgroundColor: t.colors.primary }, !isCurrent && { backgroundColor: '#9AA0A6' }]}>
         <Text style={styles.runnerWordPillText}>{positionWord}</Text>
       </View>
       <View style={styles.runnerCardInner}>
@@ -629,7 +629,7 @@ export default function StepByStepScreen() {
             hapticSelection();
             router.push(addStepRoute);
           }}
-          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
+          style={({ pressed }) => [styles.addBtn, { backgroundColor: t.colors.primary }, pressed && { backgroundColor: t.colors.primaryPressed }]}
           accessibilityLabel="Add a step"
           accessibilityRole="button"
         >

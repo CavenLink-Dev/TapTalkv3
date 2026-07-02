@@ -100,7 +100,19 @@ The instruction line sits directly below the level pill/pill. It must be:
 
 ## 3. Voice and sound
 
-- **Default OFF.** The sound toggle in the header starts silent. The user must opt in. Speech is overwhelming for many in the audience and unsolicited audio kills trust.
+> **Updated 2026-07-02 (user decision):** sound effects and voice/TTS are now
+> **two separate controls**.
+>
+> - **Sound effects (MP3 cues)** default **ON**. The header sound toggle
+>   (volume icon) controls them. The choice is shared across all activities
+>   and persisted via `src/features/activities/sound-settings.ts`
+>   (`useActivitySfx()` / `setActivitySfxEnabled()`). Every game — current and
+>   future — must read this shared setting, never a local default.
+> - **Voice / TTS** stays **opt-in, default OFF, per game session** (a second
+>   header toggle, chatbubble icon, only in games that speak — e.g. Memory
+>   Match). Nothing below about speech restrictions has changed.
+
+- **Voice default OFF.** The voice toggle starts silent. The user must opt in. Speech is overwhelming for many in the audience and unsolicited audio kills trust.
 - When ON, speech is **strictly limited to one cue per game**:
   - Shape Match → speak the shape name when its tile is tapped.
   - Memory Match → speak the symbol name when it's revealed.
@@ -221,7 +233,7 @@ The four-element header is the same on every activity:
 
 - Back chevron always navigates `router.back()`. No confirm — the game state is ephemeral.
 - Title is the activity name, heading weight.
-- Sound toggle switches between `volume-medium-outline` and `volume-mute-outline`. Defaults to **off**. Updates `accessibilityState.selected`.
+- Sound toggle switches between `volume-medium-outline` and `volume-mute-outline`. Controls **sound effects only** and defaults to **on** (shared + persisted via `useActivitySfx()`). Updates `accessibilityState.selected`. Games with a voice cue add a separate chatbubble voice toggle (default off).
 - Help opens an `Alert.alert` with the game's "How to play" copy. One paragraph max, "Got it" button.
 
 ---

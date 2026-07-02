@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BackspaceIcon } from '../../components/icons/FigmaIcons';
 import { useAppContext } from '../../hooks/useAppContext';
 import { useTheme } from '../../theme/useTheme';
-import { spacing } from '../../theme/tokens';
+import { CHROME_SEPARATOR_WIDTH, spacing } from '../../theme/tokens';
 import { hapticError, hapticSelection } from '../../utils/haptics';
 import type { ImageSourcePropType } from 'react-native';
 
@@ -147,7 +147,7 @@ export const TalkMessageStrip = React.memo(function TalkMessageStrip({
         {
           backgroundColor: t.colors.surface,
           borderBottomColor: t.colors.border,
-          borderBottomWidth: 1.2,
+          borderBottomWidth: CHROME_SEPARATOR_WIDTH,
         },
       ]}
     >

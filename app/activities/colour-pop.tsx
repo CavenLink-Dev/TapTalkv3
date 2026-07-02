@@ -38,6 +38,8 @@ import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticLight, hapticSelection } from '../../src/utils/haptics';
 import { playSound } from '../../src/utils/sounds';
+import { setActivitySfxEnabled, useActivitySfx } from '../../src/features/activities/sound-settings';
+import { recordActivitySession } from '../../src/features/activities/progress-store';
 import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -93,17 +95,31 @@ const TOTAL_COLOURS = 10;
 /** Correct taps to trigger sparkle → next colour. */
 const GOAL: Record<Difficulty, number> = { easy: 3, medium: 4, hard: 5 };
 
-/** Max simultaneous shapes in the air. */
-const MAX_ACTIVE: Record<Difficulty, number> = { easy: 2, medium: 3, hard: 4 };
-
 /** Easy = big, Hard = small. */
 const SHAPE_SIZE: Record<Difficulty, number> = { easy: 90, medium: 70, hard: 54 };
 
+/**
+ * Speed controls how fast shapes move (arc up/down), how fast they
+ * return/hide (arcDownMs), and how often the launcher checks for room
+ * (launchCheckMs). `extraCorrect` lets the top speed field one more
+ * target-colour shape after the early window — total stays ≤ MAX_TOTAL_ACTIVE
+ * so the game never gets overwhelming.
+ */
 const SPEED_CONFIG = {
-  slow:    { arcUpMs: 1350, arcDownMs: 1700, launchCheckMs: 1200 },
-  fast:    { arcUpMs: 880,  arcDownMs: 1100, launchCheckMs: 800  },
-  fastest: { arcUpMs: 580,  arcDownMs: 720,  launchCheckMs: 520  },
+  slow:    { arcUpMs: 1350, arcDownMs: 1700, launchCheckMs: 1200, extraCorrect: 0 },
+  fast:    { arcUpMs: 880,  arcDownMs: 1100, launchCheckMs: 800,  extraCorrect: 0 },
+  fastest: { arcUpMs: 580,  arcDownMs: 720,  launchCheckMs: 520,  extraCorrect: 1 },
 } as const;
+
+// ── Spawn balance quotas ──
+// First 10 s of each colour: at most 1 correct + 1 incorrect shape active.
+// After 10 s: at most 2 correct + 1 incorrect (plus speed's extraCorrect).
+// Random-looking but bounded and fair — never a field full of the target.
+const SPAWN_EARLY_MS     = 10_000;
+const EARLY_CORRECT_CAP  = 1;
+const LATE_CORRECT_CAP   = 2;
+const WRONG_CAP          = 1;
+const MAX_TOTAL_ACTIVE   = 5;
 
 const COLOUR_TIMER_MS = 30_000;
 
@@ -428,23 +444,24 @@ function SparkleOverlay({ visible, colour, reduceMotion, onDone }: {
 }
 
 // ─── Start overlay ────────────────────────────────────────────────────────────
-// Difficulty only — no Speed section, no settings panel (§1). The in-game
-// Settings modal was removed for the same reason; speed is fixed calm.
+// Difficulty + Speed radios only — no in-game settings panel (§1). Speed is
+// a controlled pre-game choice (Rule 9 — pickers for choosing one option).
 
 function StartOverlay({
-  visible, difficulty,
-  onSelectDifficulty, onCancel, onStart,
+  visible, difficulty, speed,
+  onSelectDifficulty, onSelectSpeed, onCancel, onStart,
 }: {
-  visible: boolean; difficulty: Difficulty;
+  visible: boolean; difficulty: Difficulty; speed: Speed;
   onSelectDifficulty: (d: Difficulty) => void;
+  onSelectSpeed: (s: Speed) => void;
   onCancel: () => void; onStart: () => void;
 }) {
   const t = useTheme();
-  const Row = ({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) => (
+  const Row = ({ label, a11ySuffix, active, onPress }: { label: string; a11ySuffix: string; active: boolean; onPress: () => void }) => (
     <Pressable
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityLabel={`${label} difficulty`}
+      accessibilityLabel={`${label} ${a11ySuffix}`}
       accessibilityState={{ selected: active }}
       style={({ pressed }) => [styles.diffRow, active && styles.diffRowActive, pressed && { opacity: 0.88 }]}
     >
@@ -466,9 +483,16 @@ function StartOverlay({
 
           <View style={styles.section}>
             <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>DIFFICULTY</Text>
-            <Row label="Easy"   active={difficulty === 'easy'}   onPress={() => { hapticSelection(); onSelectDifficulty('easy'); }} />
-            <Row label="Medium" active={difficulty === 'medium'} onPress={() => { hapticSelection(); onSelectDifficulty('medium'); }} />
-            <Row label="Hard"   active={difficulty === 'hard'}   onPress={() => { hapticSelection(); onSelectDifficulty('hard'); }} />
+            <Row label="Easy"   a11ySuffix="difficulty" active={difficulty === 'easy'}   onPress={() => { hapticSelection(); onSelectDifficulty('easy'); }} />
+            <Row label="Medium" a11ySuffix="difficulty" active={difficulty === 'medium'} onPress={() => { hapticSelection(); onSelectDifficulty('medium'); }} />
+            <Row label="Hard"   a11ySuffix="difficulty" active={difficulty === 'hard'}   onPress={() => { hapticSelection(); onSelectDifficulty('hard'); }} />
+          </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>SPEED</Text>
+            <Row label="Slow"    a11ySuffix="speed" active={speed === 'slow'}    onPress={() => { hapticSelection(); onSelectSpeed('slow'); }} />
+            <Row label="Fast"    a11ySuffix="speed" active={speed === 'fast'}    onPress={() => { hapticSelection(); onSelectSpeed('fast'); }} />
+            <Row label="Fastest" a11ySuffix="speed" active={speed === 'fastest'} onPress={() => { hapticSelection(); onSelectSpeed('fastest'); }} />
           </View>
 
           <View style={styles.overlayActions}>
@@ -503,9 +527,12 @@ export default function ColourPopScreen() {
   const insets       = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
 
-  // Settings — difficulty only; speed is fixed calm (§1, no settings panels)
+  // Settings — chosen once on the start overlay (§1, no in-game panels)
   const [difficulty,      setDifficulty]      = useState<Difficulty>('easy');
-  const speed: Speed = 'slow';
+  // Progress logging (one record per completed run)
+  const runStartRef  = useRef<number>(Date.now());
+  const incorrectRef = useRef(0);
+  const [speed,           setSpeed]           = useState<Speed>('slow');
 
   // Game state
   const [phase,        setPhase]        = useState<Phase>('select');
@@ -516,8 +543,8 @@ export default function ColourPopScreen() {
   const [tappedIds,    setTappedIds]    = useState<Set<string>>(new Set());
   const [sparkleOn,    setSparkleOn]    = useState(false);
   const [fieldSize,    setFieldSize]    = useState<FieldSize>({ width: 0, height: 0 });
-  // Sound defaults OFF — the user opts in (§3).
-  const [soundOn,      setSoundOn]      = useState(false);
+  // Sound effects default ON (shared across all activities, persisted).
+  const soundOn = useActivitySfx();
   const [gameStartedAt, setGameStartedAt] = useState<number | null>(null);
   const [tryAgainVisible, setTryAgainVisible] = useState(false);
 
@@ -529,6 +556,10 @@ export default function ColourPopScreen() {
   fieldSizeRef.current = fieldSize;
   const advancingRef   = useRef(false);
   const launcherFrozen = useRef(false);
+  // When the current colour started — drives the early/late spawn quotas.
+  // Set on every fresh colour (init, advance, restart); NOT reset by the
+  // 30 s timer refresh on correct taps.
+  const colourStartedAtRef = useRef(Date.now());
   const timerTimeout   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerBarAnim   = useRef<Animated.CompositeAnimation | null>(null);
 
@@ -541,7 +572,6 @@ export default function ColourPopScreen() {
 
   // Derived
   const goal        = GOAL[difficulty];
-  const maxActive   = MAX_ACTIVE[difficulty];
   const shapeSize   = SHAPE_SIZE[difficulty];
   const speedCfg    = SPEED_CONFIG[speed];
   const distractors = useMemo(() => COLOURS.filter(c => c.key !== target.key), [target]);
@@ -551,7 +581,17 @@ export default function ColourPopScreen() {
 
   // ── Colour advance ────────────────────────────────────────────────────
   const applyNextColour = useCallback((nextIdx: number) => {
-    if (nextIdx >= TOTAL_COLOURS) { setPhase('won'); return; }
+    if (nextIdx >= TOTAL_COLOURS) {
+      recordActivitySession({
+        activityId: 'colour-pop',
+        difficulty,
+        totalLevels: TOTAL_COLOURS,
+        incorrectCount: incorrectRef.current,
+        durationMs: Date.now() - runStartRef.current,
+      });
+      setPhase('won');
+      return;
+    }
 
     Animated.timing(colourFade, { toValue: 0, duration: 160, useNativeDriver: true }).start(() => {
       setColourIdx(nextIdx);
@@ -562,6 +602,7 @@ export default function ColourPopScreen() {
       setSparkleOn(false);
       advancingRef.current   = false;
       launcherFrozen.current = false;
+      colourStartedAtRef.current = Date.now();
 
       // Pill bounce in — skipped under Reduce Motion (Rule 18)
       if (!reduceMotion) {
@@ -570,7 +611,7 @@ export default function ColourPopScreen() {
       }
       Animated.timing(colourFade, { toValue: 1, duration: reduceMotion ? 120 : 200, useNativeDriver: true }).start();
     });
-  }, [colourFade, pillScale, reduceMotion]);
+  }, [colourFade, pillScale, reduceMotion, difficulty]);
 
   const advanceColour = useCallback((withSparkle: boolean) => {
     if (advancingRef.current) return;
@@ -635,15 +676,28 @@ export default function ColourPopScreen() {
   }, [phase, target, startColourTimer]);
 
   // ── Shape launcher ────────────────────────────────────────────────────
+  // Quota-based spawning (bounded and fair): counts active correct vs
+  // incorrect shapes and only spawns whichever quota has room. Timing
+  // jitter on each arc keeps it random-looking.
   useEffect(() => {
     if (phase !== 'play' || fieldSize.width === 0) return;
 
     const interval = setInterval(() => {
       if (advancingRef.current || launcherFrozen.current) return;
       setActiveItems(prev => {
-        if (prev.length >= maxActive) return prev;
-        const hasWrong  = prev.some(i => !i.isCorrect);
-        const makeWrong = !hasWrong && Math.random() < 0.48;
+        if (prev.length >= MAX_TOTAL_ACTIVE) return prev;
+        const early = Date.now() - colourStartedAtRef.current < SPAWN_EARLY_MS;
+        const correctCap = early
+          ? EARLY_CORRECT_CAP
+          : LATE_CORRECT_CAP + speedCfg.extraCorrect;
+        const activeCorrect = prev.reduce((n, i) => n + (i.isCorrect ? 1 : 0), 0);
+        const activeWrong   = prev.length - activeCorrect;
+        const canCorrect = activeCorrect < correctCap;
+        const canWrong   = activeWrong < WRONG_CAP;
+        if (!canCorrect && !canWrong) return prev;
+        // When both quotas have room, lean toward the target colour so the
+        // goal stays reachable, but keep the mix feeling organic.
+        const makeWrong = canWrong && (!canCorrect || Math.random() < 0.4);
         const colour    = makeWrong ? randomItem(distractors) : targetRef.current;
         const { width, height } = fieldSizeRef.current;
         const traj  = makeTraj(shapeSize, width, height);
@@ -667,7 +721,7 @@ export default function ColourPopScreen() {
     }, speedCfg.launchCheckMs);
 
     return () => clearInterval(interval);
-  }, [phase, fieldSize.width, maxActive, difficulty, shapeSize, speedCfg, distractors]);
+  }, [phase, fieldSize.width, difficulty, shapeSize, speedCfg, distractors]);
 
   // ── Tap handler ───────────────────────────────────────────────────────
   const onShapePress = useCallback((item: FlyingItem) => {
@@ -687,6 +741,7 @@ export default function ColourPopScreen() {
 
     } else {
       // Gentle response — soft cue + amber toast, no flash, no shake (§4).
+      incorrectRef.current += 1;
       playSound('incorrect', soundOn);
       setTryAgainVisible(true);
       tryAgainFade.setValue(0);
@@ -715,6 +770,7 @@ export default function ColourPopScreen() {
     setSparkleOn(false);
     advancingRef.current   = false;
     launcherFrozen.current = false;
+    colourStartedAtRef.current = Date.now();
     colourFade.setValue(1);
   }, [colourFade]);
 
@@ -723,12 +779,16 @@ export default function ColourPopScreen() {
     initGame();
     setPhase('play');
     setGameStartedAt(Date.now());
+    runStartRef.current = Date.now();
+    incorrectRef.current = 0;
   }, [initGame]);
 
   const onPlayAgain = useCallback(() => {
     initGame();
     setPhase('play');
     setGameStartedAt(Date.now());
+    runStartRef.current = Date.now();
+    incorrectRef.current = 0;
   }, [initGame]);
 
   const restartCurrentColour = useCallback(() => {
@@ -739,6 +799,7 @@ export default function ColourPopScreen() {
     setTappedIds(new Set());
     advancingRef.current   = false;
     launcherFrozen.current = false;
+    colourStartedAtRef.current = Date.now();
     startColourTimer();
   }, [startColourTimer]);
 
@@ -809,7 +870,7 @@ export default function ColourPopScreen() {
         />
         <View style={styles.headerActions}>
           <Pressable
-            onPress={() => { hapticSelection(); setSoundOn(v => !v); }}
+            onPress={() => { hapticSelection(); setActivitySfxEnabled(!soundOn); }}
             hitSlop={10} accessibilityRole="button"
             accessibilityLabel={soundOn ? 'Turn sound off' : 'Turn sound on'}
             accessibilityState={{ selected: soundOn }}
@@ -954,7 +1015,9 @@ export default function ColourPopScreen() {
       <StartOverlay
         visible={phase === 'select'}
         difficulty={difficulty}
+        speed={speed}
         onSelectDifficulty={setDifficulty}
+        onSelectSpeed={setSpeed}
         onCancel={() => router.back()}
         onStart={startGame}
       />

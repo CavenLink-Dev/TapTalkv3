@@ -38,6 +38,8 @@ import {
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { hapticLight, hapticSelection } from '../../src/utils/haptics';
 import { playSound, playSelectThenConfirm } from '../../src/utils/sounds';
+import { setActivitySfxEnabled, useActivitySfx } from '../../src/features/activities/sound-settings';
+import { recordActivitySession } from '../../src/features/activities/progress-store';
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 
@@ -138,7 +140,7 @@ function StartOverlay({
               onPress={onCancel}
               accessibilityRole="button"
               accessibilityLabel="Cancel"
-              style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.btnGhost, { backgroundColor: '#F1F5F9' }, pressed && { opacity: 0.85 }]}
             >
               <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Cancel</Text>
             </Pressable>
@@ -176,8 +178,10 @@ export default function MemoryMatchScreen() {
   const [round, setRound] = useState<Round>(randomRound);
   const [roundPhase, setRoundPhase] = useState<RoundPhase>('show');
   const [chosen, setChosen] = useState<number | null>(null);
-  // Sound defaults OFF — the user opts in (activity_implementation_rules §3).
-  const [soundOn, setSoundOn] = useState(false);
+  // Sound effects (MP3 cues) default ON — shared across activities, persisted.
+  const soundOn = useActivitySfx();
+  // Voice (spoken symbol names) stays opt-in, default OFF (§3).
+  const [voiceOn, setVoiceOn] = useState(false);
   const [levelPillFlash, setLevelPillFlash] = useState(false);
   const [tryAgainVisible, setTryAgainVisible] = useState(false);
 
@@ -186,6 +190,9 @@ export default function MemoryMatchScreen() {
   const levelPillScale  = useRef(new Animated.Value(1)).current;
   // Pending auto-advance — cleared by footer nav, reset, and unmount.
   const advanceTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Progress logging (one record per completed difficulty run)
+  const runStartRef     = useRef<number>(Date.now());
+  const incorrectRef    = useRef(0);
 
   const totalLevels = TOTAL_LEVELS[difficulty];
 
@@ -201,13 +208,13 @@ export default function MemoryMatchScreen() {
   // One cue per game (§3): speak the shape name when it is revealed,
   // through useSpeech and on top of the user's voice preferences.
   const speakTarget = useCallback((targetIndex: number) => {
-    if (!soundOn) return;
+    if (!voiceOn) return;
     stopSpeech();
     speak(SHAPES[targetIndex]!.label, {
       rate: state.accessibility.speechRate,
       pitch: state.accessibility.speechPitch,
     });
-  }, [soundOn, speak, stopSpeech, state.accessibility.speechRate, state.accessibility.speechPitch]);
+  }, [voiceOn, speak, stopSpeech, state.accessibility.speechRate, state.accessibility.speechPitch]);
 
   const startGame = useCallback(() => {
     hapticSelection();
@@ -220,6 +227,8 @@ export default function MemoryMatchScreen() {
     shapeOpacity.setValue(1);
     setPhase('play');
     setGameStartedAt(Date.now());
+    runStartRef.current = Date.now();
+    incorrectRef.current = 0;
     speakTarget(newRound.target);
   }, [clearAdvanceTimer, shapeOpacity, speakTarget]);
 
@@ -263,6 +272,13 @@ export default function MemoryMatchScreen() {
 
     if (level >= totalLevels) {
       playSound('level_complete', soundOn);
+      recordActivitySession({
+        activityId: 'memory-match',
+        difficulty,
+        totalLevels,
+        incorrectCount: incorrectRef.current,
+        durationMs: Date.now() - runStartRef.current,
+      });
       setPhase('won');
       return;
     }
@@ -288,6 +304,7 @@ export default function MemoryMatchScreen() {
         hapticLight(); // light impact for the outcome commit (Rule 19)
         playSound('correct', soundOn);
       } else {
+        incorrectRef.current += 1;
         playSound('incorrect', soundOn);
         showTryAgain();
       }
@@ -355,6 +372,8 @@ export default function MemoryMatchScreen() {
     shapeOpacity.setValue(1);
     setPhase('play');
     setGameStartedAt(Date.now());
+    runStartRef.current = Date.now();
+    incorrectRef.current = 0;
   }, [clearAdvanceTimer, shapeOpacity]);
 
   const onNextActivity = useCallback(() => {
@@ -391,10 +410,10 @@ export default function MemoryMatchScreen() {
         />
         <View style={styles.headerActions}>
           <Pressable
-            onPress={() => { hapticSelection(); setSoundOn(v => !v); }}
+            onPress={() => { hapticSelection(); setActivitySfxEnabled(!soundOn); }}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel={soundOn ? 'Turn voice off' : 'Turn voice on'}
+            accessibilityLabel={soundOn ? 'Turn sound effects off' : 'Turn sound effects on'}
             accessibilityState={{ selected: soundOn }}
             style={styles.headerIconBtn}
           >
@@ -402,6 +421,20 @@ export default function MemoryMatchScreen() {
               name={soundOn ? 'volume-medium-outline' : 'volume-mute-outline'}
               size={22}
               color={t.colors.text}
+            />
+          </Pressable>
+          <Pressable
+            onPress={() => { hapticSelection(); setVoiceOn(v => !v); }}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={voiceOn ? 'Turn voice off' : 'Turn voice on'}
+            accessibilityState={{ selected: voiceOn }}
+            style={styles.headerIconBtn}
+          >
+            <Ionicons
+              name={voiceOn ? 'chatbubble-ellipses-outline' : 'chatbubble-outline'}
+              size={22}
+              color={voiceOn ? t.colors.primary : t.colors.text}
             />
           </Pressable>
           <Pressable
@@ -477,7 +510,7 @@ export default function MemoryMatchScreen() {
                     accessibilityLabel={`Choose ${SHAPES[shapeIndex]!.label}`}
                     style={({ pressed }) => [
                       styles.choiceCard,
-                      { borderColor },
+                      { backgroundColor: '#FFFFFF', borderColor },
                       pressed && styles.choicePressed,
                     ]}
                   >

@@ -586,6 +586,32 @@ export default function ActivitiesScreen() {
           </View>
         </View>
       ) : null}
+
+      {/* Progress — therapist-friendly view of practice over time */}
+      <Pressable
+        onPress={() => {
+          hapticSelection();
+          router.push('/activities/progress' as Href);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Progress. See completed activity runs over time."
+        style={({ pressed }) => [
+          styles.progressRow,
+          { backgroundColor: t.colors.surface },
+          pressed && { opacity: 0.9 },
+        ]}
+      >
+        <View style={[styles.progressIcon, { backgroundColor: t.colors.selectionBg }]}>
+          <Ionicons name="trending-up-outline" size={22} color={t.colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.progressTitle, { color: t.colors.text }]}>Progress</Text>
+          <Text style={[styles.progressSub, { color: t.colors.textMuted }]}>
+            How practice is going over time.
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={t.colors.textTertiary} />
+      </Pressable>
     </Screen>
   );
 }
@@ -595,6 +621,28 @@ export default function ActivitiesScreen() {
 const styles = StyleSheet.create({
   list: {
     gap: CARD_GAP},
+
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    minHeight: 60},
+  progressIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center'},
+  progressTitle: {
+    fontFamily: fonts.displayHeavy,
+    fontSize: typography.subheading,
+    letterSpacing: typography.trackSubhead},
+  progressSub: {
+    fontFamily: fonts.body,
+    fontSize: typography.caption,
+    marginTop: 2},
 
   section: {
     gap: spacing.sm,

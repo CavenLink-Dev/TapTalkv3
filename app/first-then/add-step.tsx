@@ -267,6 +267,7 @@ export default function AddStepScreen() {
                     }}
                     style={({ pressed }) => [
                       styles.symbolTile,
+                      { backgroundColor: t.colors.inputBg },
                       active && { borderColor: s.color, borderWidth: 3 },
                       pressed && { opacity: 0.85 },
                     ]}
@@ -294,8 +295,8 @@ export default function AddStepScreen() {
             disabled={!canSave}
             style={({ pressed }) => [
               styles.saveBtn,
-              !canSave && styles.saveBtnDisabled,
-              canSave && pressed && { opacity: 0.85 },
+              { backgroundColor: canSave ? t.colors.primary : t.colors.disabled },
+              canSave && pressed && { backgroundColor: t.colors.primaryPressed },
             ]}
             accessibilityLabel={isEdit ? 'Save changes' : 'Save step'}
             accessibilityRole="button"

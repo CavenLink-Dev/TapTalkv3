@@ -33,6 +33,7 @@ import Reanimated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '../../src/components/native/Icon';
 import { Href, useRouter } from 'expo-router';
 import { BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
 import { TalkMessageStrip, type MessageStripTile } from '../../src/components/talk/TalkMessageStrip';
@@ -40,7 +41,7 @@ import { MulberrySymbol, prewarmMulberryAssets } from '../../src/components/symb
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
 import { buildMessageUtterances } from '../../src/utils/speechRules';
-import { animation, colors, spacing } from '../../src/theme/tokens';
+import { animation, CHROME_SEPARATOR_WIDTH, colors, spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
@@ -121,13 +122,93 @@ const MAX_FW = 8; // 8 * 44 = 352px, roughly the full board width
 // Bottom dock spacing: 16px gap between dock and bottom tab bar edge.
 const DOCK_BOTTOM_GAP = spacing.lg; // 16
 // Contextual dock control sizes (pt) — fixed, not tied to tileSize.
-const DOCK_ACTION_SIZE = 60;
-const DOCK_TOGGLE_SIZE = 44;
-const DOCK_GAP = 5;
+const DOCK_ACTION_SIZE = 68;
+const DOCK_TOGGLE_SIZE = 68;
+const DOCK_GAP = 8;
+const DOCK_ACTION_PADDING = 10;
+const DOCK_ICON_STROKE = 4;
+const DOCK_ICON_TOGGLE = 39;
+const DOCK_ICON_ACTION = 22;
+const DOCK_ICON_ROW = 18;
+const DOCK_ROW_LABEL = 15;
 // Coarse tile-cell footprint of a placement — used for collision math
 // and multi-cell highlights. fw=2 → 1 col, fw=3 or 4 → 2 cols, fw=5 or 6 → 3.
 const coarseCols = (fw: number) => Math.ceil(fw / 2);
 const coarseRows = (fh: number) => Math.ceil(fh / 2);
+
+// ── Footprint helpers ────────────────────────────────────────────────────────
+// Shared by resize AND drag-drop so multi-cell tiles can never be committed
+// on top of each other. A footprint is the coarse-cell rectangle a placement
+// occupies, anchored at its slot.
+type CellFootprint = {
+  startCol: number;
+  startRow: number;
+  endCol: number;
+  endRow: number;
+};
+
+const footprintAt = (slot: number, fw: number, fh: number): CellFootprint => {
+  const startCol = slot % BOARD_COLUMNS;
+  const startRow = Math.floor(slot / BOARD_COLUMNS);
+  return {
+    startCol,
+    startRow,
+    endCol: startCol + coarseCols(fw) - 1,
+    endRow: startRow + coarseRows(fh) - 1,
+  };
+};
+
+const footprintsOverlap = (a: CellFootprint, b: CellFootprint) =>
+  !(a.startCol > b.endCol || b.startCol > a.endCol ||
+    a.startRow > b.endRow || b.startRow > a.endRow);
+
+/**
+ * Push-aside reflow around one pinned placement. Every other tile keeps its
+ * slot when possible; tiles whose footprint now collides walk forward to the
+ * nearest empty slot that fits (wrapping rows). Returns the full layout with
+ * the pinned placement included. Used by both resize and drag-drop commits so
+ * a multi-cell tile can never end up overlapping a neighbour.
+ */
+function reflowAroundPinned(
+  others: TilePlacement[],
+  pinned: TilePlacement,
+): BoardLayout {
+  const placed: { p: TilePlacement; fp: CellFootprint }[] = [
+    { p: pinned, fp: footprintAt(pinned.slot, pinned.fw, pinned.fh) },
+  ];
+  const sorted = [...others].sort((a, b) => a.slot - b.slot);
+
+  for (const other of sorted) {
+    const desiredFp = footprintAt(other.slot, other.fw, other.fh);
+    const fits = (fp: CellFootprint) =>
+      fp.endCol < BOARD_COLUMNS &&
+      !placed.some(pl => footprintsOverlap(pl.fp, fp));
+
+    if (fits(desiredFp)) {
+      placed.push({ p: other, fp: desiredFp });
+      continue;
+    }
+
+    // Search forward for the nearest slot that fits.
+    const cw = coarseCols(other.fw);
+    let found = false;
+    for (let s = other.slot + 1; s < 500; s++) {
+      if ((s % BOARD_COLUMNS) + cw > BOARD_COLUMNS) continue;
+      const testFp = footprintAt(s, other.fw, other.fh);
+      if (fits(testFp)) {
+        placed.push({ p: { ...other, slot: s }, fp: testFp });
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      // Give up gracefully — keep in original slot (may overlap; unlikely).
+      placed.push({ p: other, fp: desiredFp });
+    }
+  }
+
+  return placed.map(x => x.p);
+}
 // All board tiles — folders and words alike — render as perfect squares so
 // the grid reads as a single rhythm. The previous `FOLDER_HEIGHT_RATIO`
 // made folders ~3% taller than words, which showed up as "Foods looks
@@ -240,7 +321,6 @@ const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
 };
 
 const BACK_TILE: BoardTile = { id: 'back', label: 'Back', kind: 'action', color: '#6B7580' };
-const HOME_TILE: BoardTile = { id: 'home', label: 'Home', kind: 'action', color: '#6B7580' };
 
 const BoardNavTile = React.memo(function BoardNavTile({ tile, size }: { tile: BoardTile; size: number }) {
   const t = useTheme();
@@ -282,15 +362,19 @@ type DockActionKind = 'primary' | 'neutral' | 'muted';
 
 // Contextual dock states, highest render priority first.
 type DockMode =
-  | 'homeIdle'        // Add +
-  | 'addExpanded'     // Back / Symbol / Folder / <
-  | 'folderExpanded'  // Back / Home / <
-  | 'folderCollapsed' // >
+  | 'homeCollapsed'   // > (default main-board state)
+  | 'homeExpanded'    // Add / Board / Hide
+  | 'addExpanded'     // Back / Symbol / Folder / Add
+  | 'folderExpanded'  // Back / Add / Hide
+  | 'folderCollapsed' // > / Add
   | 'editClean'       // Delete? / Add + / Done
   | 'editDirty';      // Cancel / Save
 
 const BoardDockAction = React.memo(function BoardDockAction({
   label,
+  icon,
+  iconOnly = false,
+  iconLabelLayout = 'stack',
   a11yLabel,
   a11yHint,
   onPress,
@@ -299,27 +383,34 @@ const BoardDockAction = React.memo(function BoardDockAction({
   disabled = false,
   isToggle = false,
   isActive = false,
-  isChevron = false,
+  wide = false,
 }: {
-  label: string;
+  label?: string;
+  icon?: string;
+  iconOnly?: boolean;
+  iconLabelLayout?: 'stack' | 'row';
   a11yLabel: string;
   a11yHint?: string;
   onPress: () => void;
   size?: number;
   kind?: DockActionKind;
   disabled?: boolean;
-  /** 44pt square — Add toggle or < > chevrons. */
+  /** 44pt square — Add toggle or chevrons. */
   isToggle?: boolean;
   /** Toggle is on (Add flow open). */
   isActive?: boolean;
-  /** Large chevron glyph for < > only. */
-  isChevron?: boolean;
+  /** Auto-width for readable multi-word labels (e.g. Board Settings). */
+  wide?: boolean;
 }) {
   const t = useTheme();
-  const dim = isToggle ? DOCK_TOGGLE_SIZE : size;
-  const softFill = t.isDark ? t.colors.surface : '#F4F6F8';
+  const dim = size;
+  const isRowLabel = Boolean(icon && label && iconLabelLayout === 'row');
+  const softFill = t.colors.surface;
   const effectiveKind: DockActionKind =
-    isActive && isToggle && !isChevron ? 'primary' : kind;
+    isActive && isToggle ? 'primary' : kind;
+  const dockIconProps = {
+    strokeWidth: DOCK_ICON_STROKE,
+  } as const;
 
   return (
     <Pressable
@@ -328,6 +419,7 @@ const BoardDockAction = React.memo(function BoardDockAction({
       accessibilityHint={a11yHint}
       accessibilityState={{ disabled, selected: isActive }}
       disabled={disabled}
+      hitSlop={iconOnly ? { top: 4, bottom: 4, left: 4, right: 4 } : undefined}
       onPress={onPress}
       style={({ pressed }) => {
         const bg =
@@ -335,7 +427,7 @@ const BoardDockAction = React.memo(function BoardDockAction({
             ? effectiveKind === 'primary'
               ? t.colors.primaryPressed
               : effectiveKind === 'muted'
-                ? (t.isDark ? t.colors.input : '#E0E4E8')
+                ? (t.isDark ? t.colors.input : '#E8ECF0')
                 : (t.isDark ? t.colors.input : colors.softBlue)
             : effectiveKind === 'primary'
               ? t.colors.primary
@@ -343,46 +435,109 @@ const BoardDockAction = React.memo(function BoardDockAction({
         return [
           styles.dockAction,
           {
-            width: dim,
+            width: wide || isRowLabel ? undefined : dim,
+            minWidth: isRowLabel ? 76 : dim,
+            minHeight: dim,
             height: dim,
+            paddingHorizontal: wide
+              ? spacing.md
+              : isRowLabel
+                ? spacing.sm + 2
+                : DOCK_ACTION_PADDING,
+            paddingVertical: DOCK_ACTION_PADDING,
             backgroundColor: bg,
             borderColor: pressed && effectiveKind !== 'primary'
-              ? t.colors.primaryDark
-              : effectiveKind === 'muted'
-                ? t.colors.textTertiary
-                : t.colors.primary,
+              ? t.colors.text
+              : t.colors.symbolOutline,
             borderWidth: effectiveKind === 'primary' ? 0 : 1.6,
           },
           disabled && { opacity: 0.4 },
         ];
       }}
     >
-      {({ pressed }) => (
-        <Text
-          style={[
-            isChevron
-              ? styles.dockChevronLabel
-              : isToggle
+      {({ pressed }) => {
+        const contentColor =
+          pressed && effectiveKind !== 'primary'
+            ? t.colors.text
+            : effectiveKind === 'primary'
+              ? '#FFFFFF'
+              : effectiveKind === 'muted'
+                ? t.colors.textMuted
+                : t.colors.text;
+
+        if (iconOnly && icon) {
+          return (
+            <View style={styles.dockIconOnlyMount}>
+              <Icon
+                name={icon}
+                size={DOCK_ICON_TOGGLE}
+                color={contentColor}
+                {...dockIconProps}
+              />
+            </View>
+          );
+        }
+
+        if (icon && label && iconLabelLayout === 'row') {
+          return (
+            <View style={styles.dockIconRow}>
+              <View style={styles.dockIconRowGlyph}>
+                <Icon
+                  name={icon}
+                  size={DOCK_ICON_ROW}
+                  color={contentColor}
+                  {...dockIconProps}
+                />
+              </View>
+              <Text
+                style={[styles.dockRowLabel, { color: contentColor }]}
+                numberOfLines={1}
+              >
+                {label}
+              </Text>
+            </View>
+          );
+        }
+
+        if (icon && label) {
+          return (
+            <View style={styles.dockIconStack}>
+              <View style={styles.dockIconStackGlyph}>
+                <Icon
+                  name={icon}
+                  size={DOCK_ICON_ACTION}
+                  color={contentColor}
+                  {...dockIconProps}
+                />
+              </View>
+              <Text
+                style={[styles.dockActionLabel, { color: contentColor }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.65}
+              >
+                {label}
+              </Text>
+            </View>
+          );
+        }
+
+        return (
+          <Text
+            style={[
+              isToggle
                 ? styles.dockAddToggleLabel
                 : styles.dockActionLabel,
-            {
-              color:
-                pressed && effectiveKind !== 'primary'
-                  ? t.colors.primaryDark
-                  : effectiveKind === 'primary'
-                    ? '#FFFFFF'
-                    : effectiveKind === 'muted'
-                      ? t.colors.textMuted
-                      : t.colors.primary,
-            },
-          ]}
-          numberOfLines={2}
-          adjustsFontSizeToFit
-          minimumFontScale={0.65}
-        >
-          {label}
-        </Text>
-      )}
+              { color: contentColor },
+            ]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.65}
+          >
+            {label}
+          </Text>
+        );
+      }}
     </Pressable>
   );
 });
@@ -844,13 +999,14 @@ type TileRectsRef = React.MutableRefObject<Record<string, SlotRect>>;
 
 // ── ResizeHandles ──────────────────────────────────────────────────────────
 // Renders 4 edge pills + 4 corner circles around a tile in edit mode.
-// Only right + bottom + bottom-right corner are functional in this pass
-// (they grow the tile in 44px increments). Other handles are rendered as
-// visual affordances but no-op on drag — extending them requires the
-// "fine offset" positioning system planned for a follow-up.
+// ALL handles are functional: right/bottom grow in 44px (FINE) steps;
+// left/top move the tile's anchor slot, so they snap in whole coarse cells
+// (88px) to keep every placement on the grid. Corners combine both axes.
 const HANDLE_PILL_LEN = 28;
 const HANDLE_PILL_THICK = 8;
 const HANDLE_CORNER_SIZE = 14;
+// One coarse grid cell in px — the left/top resize step.
+const CELL = FINE * 2;
 
 function ResizeHandles({
   editMode,
@@ -867,7 +1023,12 @@ function ResizeHandles({
   height: number;
   fw: number;
   fh: number;
-  onResize: (newFw: number, newFh: number) => void;
+  /**
+   * dCols/dRows — coarse cells the tile's anchor moves LEFT/UP (positive
+   * when growing from the left/top edge, negative when shrinking back).
+   * The parent clamps against the grid edges and commits the slot shift.
+   */
+  onResize: (newFw: number, newFh: number, dCols: number, dRows: number) => void;
   isDragging: SharedValue<number>;
   tileLabel: string;
 }) {
@@ -876,11 +1037,15 @@ function ResizeHandles({
 
   // Preview offsets — shared values that grow/shrink the tile visually
   // during drag before the resize is committed to state.
-  const previewW = useSharedValue(0);
-  const previewH = useSharedValue(0);
+  const previewW = useSharedValue(0); // right edge (FINE steps)
+  const previewH = useSharedValue(0); // bottom edge (FINE steps)
+  const previewL = useSharedValue(0); // left edge (CELL steps, negative = grow)
+  const previewT = useSharedValue(0); // top edge (CELL steps, negative = grow)
   // Track last-fired haptic step so we only pulse on step crossings.
   const lastHapticStepW = useSharedValue(0);
   const lastHapticStepH = useSharedValue(0);
+  const lastHapticStepL = useSharedValue(0);
+  const lastHapticStepT = useSharedValue(0);
 
   const rightPan = useMemo(() => Gesture.Pan()
     .onStart(() => { previewW.value = 0; lastHapticStepW.value = 0; })
@@ -896,7 +1061,7 @@ function ResizeHandles({
       const deltaSteps = Math.round(previewW.value / FINE);
       const newFw = Math.max(2, Math.min(MAX_FW, fw + deltaSteps));
       previewW.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
-      if (newFw !== fw) runOnJS(onResize)(newFw, fh);
+      if (newFw !== fw) runOnJS(onResize)(newFw, fh, 0, 0);
     })
   , [fw, fh, onResize, previewW]);
 
@@ -914,7 +1079,7 @@ function ResizeHandles({
       const deltaSteps = Math.round(previewH.value / FINE);
       const newFh = Math.max(2, Math.min(MAX_FW, fh + deltaSteps));
       previewH.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
-      if (newFh !== fh) runOnJS(onResize)(fw, newFh);
+      if (newFh !== fh) runOnJS(onResize)(fw, newFh, 0, 0);
     })
   , [fw, fh, onResize, previewH]);
 
@@ -941,9 +1106,134 @@ function ResizeHandles({
       const newFh = Math.max(2, Math.min(MAX_FW, fh + dh));
       previewW.value = withTiming(0, { duration: 120 });
       previewH.value = withTiming(0, { duration: 120 });
-      if (newFw !== fw || newFh !== fh) runOnJS(onResize)(newFw, newFh);
+      if (newFw !== fw || newFh !== fh) runOnJS(onResize)(newFw, newFh, 0, 0);
     })
   , [fw, fh, onResize, previewW, previewH]);
+
+  // ── Left / top edges — anchor-shifting, whole-cell steps ──
+  const leftPan = useMemo(() => Gesture.Pan()
+    .onStart(() => { previewL.value = 0; lastHapticStepL.value = 0; })
+    .onUpdate((e) => {
+      const steps = Math.round(-e.translationX / CELL); // + = grow leftwards
+      if (steps !== lastHapticStepL.value) {
+        lastHapticStepL.value = steps;
+        runOnJS(hapticSelection)();
+      }
+      previewL.value = -steps * CELL;
+    })
+    .onEnd(() => {
+      const cells = Math.round(-previewL.value / CELL);
+      previewL.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
+      const newFw = Math.max(2, Math.min(MAX_FW, fw + cells * 2));
+      const applied = (newFw - fw) / 2;
+      if (applied !== 0) runOnJS(onResize)(newFw, fh, applied, 0);
+    })
+  , [fw, fh, onResize, previewL, reduceMotion, lastHapticStepL]);
+
+  const topPan = useMemo(() => Gesture.Pan()
+    .onStart(() => { previewT.value = 0; lastHapticStepT.value = 0; })
+    .onUpdate((e) => {
+      const steps = Math.round(-e.translationY / CELL); // + = grow upwards
+      if (steps !== lastHapticStepT.value) {
+        lastHapticStepT.value = steps;
+        runOnJS(hapticSelection)();
+      }
+      previewT.value = -steps * CELL;
+    })
+    .onEnd(() => {
+      const cells = Math.round(-previewT.value / CELL);
+      previewT.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
+      const newFh = Math.max(2, Math.min(MAX_FW, fh + cells * 2));
+      const applied = (newFh - fh) / 2;
+      if (applied !== 0) runOnJS(onResize)(fw, newFh, 0, applied);
+    })
+  , [fw, fh, onResize, previewT, reduceMotion, lastHapticStepT]);
+
+  // ── Remaining corners — combine the two adjacent edge behaviours ──
+  const tlCornerPan = useMemo(() => Gesture.Pan()
+    .onStart(() => {
+      previewL.value = 0; previewT.value = 0;
+      lastHapticStepL.value = 0; lastHapticStepT.value = 0;
+    })
+    .onUpdate((e) => {
+      const sc = Math.round(-e.translationX / CELL);
+      const sr = Math.round(-e.translationY / CELL);
+      if (sc !== lastHapticStepL.value || sr !== lastHapticStepT.value) {
+        lastHapticStepL.value = sc;
+        lastHapticStepT.value = sr;
+        runOnJS(hapticSelection)();
+      }
+      previewL.value = -sc * CELL;
+      previewT.value = -sr * CELL;
+    })
+    .onEnd(() => {
+      const cCells = Math.round(-previewL.value / CELL);
+      const rCells = Math.round(-previewT.value / CELL);
+      previewL.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
+      previewT.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
+      const newFw = Math.max(2, Math.min(MAX_FW, fw + cCells * 2));
+      const newFh = Math.max(2, Math.min(MAX_FW, fh + rCells * 2));
+      const dCols = (newFw - fw) / 2;
+      const dRows = (newFh - fh) / 2;
+      if (dCols !== 0 || dRows !== 0) runOnJS(onResize)(newFw, newFh, dCols, dRows);
+    })
+  , [fw, fh, onResize, previewL, previewT, reduceMotion, lastHapticStepL, lastHapticStepT]);
+
+  const trCornerPan = useMemo(() => Gesture.Pan()
+    .onStart(() => {
+      previewW.value = 0; previewT.value = 0;
+      lastHapticStepW.value = 0; lastHapticStepT.value = 0;
+    })
+    .onUpdate((e) => {
+      const sw = Math.round(e.translationX / FINE);
+      const sr = Math.round(-e.translationY / CELL);
+      if (sw !== lastHapticStepW.value || sr !== lastHapticStepT.value) {
+        lastHapticStepW.value = sw;
+        lastHapticStepT.value = sr;
+        runOnJS(hapticSelection)();
+      }
+      previewW.value = sw * FINE;
+      previewT.value = -sr * CELL;
+    })
+    .onEnd(() => {
+      const dw = Math.round(previewW.value / FINE);
+      const rCells = Math.round(-previewT.value / CELL);
+      previewW.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
+      previewT.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
+      const newFw = Math.max(2, Math.min(MAX_FW, fw + dw));
+      const newFh = Math.max(2, Math.min(MAX_FW, fh + rCells * 2));
+      const dRows = (newFh - fh) / 2;
+      if (newFw !== fw || dRows !== 0) runOnJS(onResize)(newFw, newFh, 0, dRows);
+    })
+  , [fw, fh, onResize, previewW, previewT, reduceMotion, lastHapticStepW, lastHapticStepT]);
+
+  const blCornerPan = useMemo(() => Gesture.Pan()
+    .onStart(() => {
+      previewL.value = 0; previewH.value = 0;
+      lastHapticStepL.value = 0; lastHapticStepH.value = 0;
+    })
+    .onUpdate((e) => {
+      const sc = Math.round(-e.translationX / CELL);
+      const sh = Math.round(e.translationY / FINE);
+      if (sc !== lastHapticStepL.value || sh !== lastHapticStepH.value) {
+        lastHapticStepL.value = sc;
+        lastHapticStepH.value = sh;
+        runOnJS(hapticSelection)();
+      }
+      previewL.value = -sc * CELL;
+      previewH.value = sh * FINE;
+    })
+    .onEnd(() => {
+      const cCells = Math.round(-previewL.value / CELL);
+      const dh = Math.round(previewH.value / FINE);
+      previewL.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
+      previewH.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
+      const newFw = Math.max(2, Math.min(MAX_FW, fw + cCells * 2));
+      const newFh = Math.max(2, Math.min(MAX_FW, fh + dh));
+      const dCols = (newFw - fw) / 2;
+      if (dCols !== 0 || newFh !== fh) runOnJS(onResize)(newFw, newFh, dCols, 0);
+    })
+  , [fw, fh, onResize, previewL, previewH, reduceMotion, lastHapticStepL, lastHapticStepH]);
 
   // Style: right pill follows the tile's right edge + previewW growth
   const rightPillStyle = useAnimatedStyle(() => ({
@@ -955,6 +1245,30 @@ function ResizeHandles({
   const brCornerStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: previewW.value },
+      { translateY: previewH.value },
+    ],
+  }));
+  const leftPillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: previewL.value }],
+  }));
+  const topPillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: previewT.value }],
+  }));
+  const tlCornerStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: previewL.value },
+      { translateY: previewT.value },
+    ],
+  }));
+  const trCornerStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: previewW.value },
+      { translateY: previewT.value },
+    ],
+  }));
+  const blCornerStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: previewL.value },
       { translateY: previewH.value },
     ],
   }));
@@ -1038,60 +1352,125 @@ function ResizeHandles({
         />
       </GestureDetector>
 
-      {/* Non-functional visual affordances (top/left/tl/tr/bl corners) —
-          shown as dimmed to hint "resize from other sides coming soon". */}
-      <View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          left: -HANDLE_PILL_THICK / 2,
-          top: height / 2 - HANDLE_PILL_LEN / 2,
-          width: HANDLE_PILL_THICK,
-          height: HANDLE_PILL_LEN,
-          borderRadius: HANDLE_PILL_THICK / 2,
-          backgroundColor: handleBg,
-          borderWidth: 2,
-          borderColor: handleColor,
-          opacity: 0.35,
-        }}
-      />
-      <View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          top: -HANDLE_PILL_THICK / 2,
-          left: width / 2 - HANDLE_PILL_LEN / 2,
-          width: HANDLE_PILL_LEN,
-          height: HANDLE_PILL_THICK,
-          borderRadius: HANDLE_PILL_THICK / 2,
-          backgroundColor: handleBg,
-          borderWidth: 2,
-          borderColor: handleColor,
-          opacity: 0.35,
-        }}
-      />
-      {/* Dimmed TL/TR/BL corners */}
-      {[
-        { left: -HANDLE_CORNER_SIZE / 2, top: -HANDLE_CORNER_SIZE / 2 },
-        { right: -HANDLE_CORNER_SIZE / 2, top: -HANDLE_CORNER_SIZE / 2 },
-        { left: -HANDLE_CORNER_SIZE / 2, bottom: -HANDLE_CORNER_SIZE / 2 },
-      ].map((pos, i) => (
-        <View
-          key={i}
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            width: HANDLE_CORNER_SIZE,
-            height: HANDLE_CORNER_SIZE,
-            borderRadius: HANDLE_CORNER_SIZE / 2,
-            backgroundColor: handleColor,
-            borderWidth: 2,
-            borderColor: handleBg,
-            opacity: 0.35,
-            ...pos,
-          }}
+      {/* Left edge pill — functional (whole-cell steps, shifts anchor) */}
+      <GestureDetector gesture={leftPan}>
+        <Reanimated.View
+          hitSlop={12}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Resize ${tileLabel} from the left edge`}
+          style={[
+            {
+              position: 'absolute',
+              left: -HANDLE_PILL_THICK / 2,
+              top: height / 2 - HANDLE_PILL_LEN / 2,
+              width: HANDLE_PILL_THICK,
+              height: HANDLE_PILL_LEN,
+              borderRadius: HANDLE_PILL_THICK / 2,
+              backgroundColor: handleBg,
+              borderWidth: 2,
+              borderColor: handleColor,
+            },
+            leftPillStyle,
+          ]}
         />
-      ))}
+      </GestureDetector>
+
+      {/* Top edge pill — functional (whole-cell steps, shifts anchor) */}
+      <GestureDetector gesture={topPan}>
+        <Reanimated.View
+          hitSlop={12}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Resize ${tileLabel} from the top edge`}
+          style={[
+            {
+              position: 'absolute',
+              top: -HANDLE_PILL_THICK / 2,
+              left: width / 2 - HANDLE_PILL_LEN / 2,
+              width: HANDLE_PILL_LEN,
+              height: HANDLE_PILL_THICK,
+              borderRadius: HANDLE_PILL_THICK / 2,
+              backgroundColor: handleBg,
+              borderWidth: 2,
+              borderColor: handleColor,
+            },
+            topPillStyle,
+          ]}
+        />
+      </GestureDetector>
+
+      {/* Top-left corner — functional */}
+      <GestureDetector gesture={tlCornerPan}>
+        <Reanimated.View
+          hitSlop={10}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Resize ${tileLabel} from the top left corner`}
+          style={[
+            {
+              position: 'absolute',
+              left: -HANDLE_CORNER_SIZE / 2,
+              top: -HANDLE_CORNER_SIZE / 2,
+              width: HANDLE_CORNER_SIZE,
+              height: HANDLE_CORNER_SIZE,
+              borderRadius: HANDLE_CORNER_SIZE / 2,
+              backgroundColor: handleColor,
+              borderWidth: 2,
+              borderColor: handleBg,
+            },
+            tlCornerStyle,
+          ]}
+        />
+      </GestureDetector>
+
+      {/* Top-right corner — functional */}
+      <GestureDetector gesture={trCornerPan}>
+        <Reanimated.View
+          hitSlop={10}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Resize ${tileLabel} from the top right corner`}
+          style={[
+            {
+              position: 'absolute',
+              right: -HANDLE_CORNER_SIZE / 2,
+              top: -HANDLE_CORNER_SIZE / 2,
+              width: HANDLE_CORNER_SIZE,
+              height: HANDLE_CORNER_SIZE,
+              borderRadius: HANDLE_CORNER_SIZE / 2,
+              backgroundColor: handleColor,
+              borderWidth: 2,
+              borderColor: handleBg,
+            },
+            trCornerStyle,
+          ]}
+        />
+      </GestureDetector>
+
+      {/* Bottom-left corner — functional */}
+      <GestureDetector gesture={blCornerPan}>
+        <Reanimated.View
+          hitSlop={10}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Resize ${tileLabel} from the bottom left corner`}
+          style={[
+            {
+              position: 'absolute',
+              left: -HANDLE_CORNER_SIZE / 2,
+              bottom: -HANDLE_CORNER_SIZE / 2,
+              width: HANDLE_CORNER_SIZE,
+              height: HANDLE_CORNER_SIZE,
+              borderRadius: HANDLE_CORNER_SIZE / 2,
+              backgroundColor: handleColor,
+              borderWidth: 2,
+              borderColor: handleBg,
+            },
+            blCornerStyle,
+          ]}
+        />
+      </GestureDetector>
     </View>
   );
 }
@@ -1130,7 +1509,7 @@ interface BoardTileButtonProps {
   onHide?: (tile: BoardTile) => void;
   onAccessibilityReorder?: (tileId: string, direction: 'forward' | 'back') => void;
   /** Called when the user commits a resize via the corner/edge handles. */
-  onResize?: (tileId: string, newFw: number, newFh: number) => void;
+  onResize?: (tileId: string, newFw: number, newFh: number, dCols: number, dRows: number) => void;
   jiggle?: SharedValue<number>;
 }
 
@@ -1415,8 +1794,10 @@ function BoardTileButton({
         dragY.value = withTiming(0, SNAP_TIMING);
       }
     })
+    // fw/fh MUST be deps — without them a resized tile publishes stale
+    // dragFw/dragFh on its next drag and the highlight stays one cell.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    , [currentSlotSV, dragSourceSlot, dragX, dragY, finalizeSwap, isDraggable, lifted, onMoveToSlot, size, snapSlot, tile.id, totalSlots]);
+    , [currentSlotSV, dragSourceSlot, dragX, dragY, finalizeSwap, isDraggable, lifted, onMoveToSlot, size, snapSlot, tile.id, totalSlots, fw, fh, dragFw, dragFh]);
 
   const animatedDragStyle = useAnimatedStyle(() => {
     // Jiggle drives a continuous gentle wobble during edit mode.
@@ -1470,7 +1851,7 @@ function BoardTileButton({
           hitSlop={10}
           style={[styles.deleteBadge, { backgroundColor: t.colors.danger }]}
         >
-          <Ionicons name="close" size={16} color={t.colors.surface} />
+          <Icon name="close" size={16} color={t.colors.surface} />
         </Pressable>
       ) : null}
     </>
@@ -1511,8 +1892,8 @@ function BoardTileButton({
         </Pressable>
       </RNAnimated.View>
       {/* Resize handles — visible in edit mode, absolute-positioned around
-          the tile edges. Right/bottom/BR-corner are functional; other
-          handles are dimmed placeholders. Nav tiles skip handles. */}
+          the tile edges. All 4 edges + 4 corners are functional; left/top
+          shift the anchor slot in whole cells. Nav tiles skip handles. */}
       {editMode && !isNav && onResize ? (
         <ResizeHandles
           editMode={editMode}
@@ -1522,7 +1903,7 @@ function BoardTileButton({
           fh={fh}
           isDragging={lifted}
           tileLabel={tile.label}
-          onResize={(newFw, newFh) => onResize(tile.id, newFw, newFh)}
+          onResize={(newFw, newFh, dCols, dRows) => onResize(tile.id, newFw, newFh, dCols, dRows)}
         />
       ) : null}
     </Reanimated.View>
@@ -1572,7 +1953,7 @@ const BoardTileCell = React.memo(function BoardTileCell({
   onLongPressEnterEdit?: (tileId: string) => void;
   onMoveToSlot?: (tileId: string, targetSlot: number) => void;
   onHide?: (tile: BoardTile) => void;
-  onResize?: (tileId: string, newFw: number, newFh: number) => void;
+  onResize?: (tileId: string, newFw: number, newFh: number, dCols: number, dRows: number) => void;
   snapSlot?: SharedValue<number>;
   dragSourceSlot?: SharedValue<number>;
   dragFw?: SharedValue<number>;
@@ -1798,6 +2179,9 @@ export default function TalkScreen() {
   // editFocusTileId: the tile long-pressed to enter edit mode → Delete target
   const [addFlowExpanded, setAddFlowExpanded] = useState(false);
   const [folderDockExpanded, setFolderDockExpanded] = useState(false);
+  // Main board dock: collapsed shows only ">", expanded shows
+  // Add + / Board Settings / < (rule 1 — simple first, advanced later).
+  const [homeDockExpanded, setHomeDockExpanded] = useState(false);
   const [editFocusTileId, setEditFocusTileId] = useState<string | null>(null);
   const folderCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dockFade = useRef(new RNAnimated.Value(1)).current;
@@ -1956,6 +2340,21 @@ export default function TalkScreen() {
     startFolderCollapseTimer();
   }, [hapticIfEnabled, startFolderCollapseTimer]);
 
+  const handleHomeDockExpand = useCallback(() => {
+    hapticIfEnabled();
+    setHomeDockExpanded(true);
+  }, [hapticIfEnabled]);
+
+  const handleHomeDockCollapse = useCallback(() => {
+    hapticIfEnabled();
+    setHomeDockExpanded(false);
+  }, [hapticIfEnabled]);
+
+  const handleOpenBoardSettings = useCallback(() => {
+    hapticIfEnabled();
+    router.push('/board/settings' as Href);
+  }, [hapticIfEnabled, router]);
+
   const handleDockDone = useCallback(() => {
     exitEditClean();
   }, [exitEditClean]);
@@ -1979,14 +2378,17 @@ export default function TalkScreen() {
       return 'editClean';
     }
     if (addFlowExpanded) return 'addExpanded';
-    if (activeMode === 'home') return 'homeIdle';
+    if (activeMode === 'home') {
+      return homeDockExpanded ? 'homeExpanded' : 'homeCollapsed';
+    }
     return folderDockExpanded ? 'folderExpanded' : 'folderCollapsed';
-  }, [activeMode, addFlowExpanded, editMode, folderDockExpanded, layoutDirty]);
+  }, [activeMode, addFlowExpanded, editMode, folderDockExpanded, homeDockExpanded, layoutDirty]);
 
   // On board change: reset add flow; folders start expanded with a 15s timer,
   // home clears folder nav entirely.
   useEffect(() => {
     setAddFlowExpanded(false);
+    setHomeDockExpanded(false); // home always lands calm — just ">"
     if (activeMode === 'home') {
       setFolderDockExpanded(false);
       clearFolderTimer();
@@ -2033,17 +2435,17 @@ export default function TalkScreen() {
       if (!dragged) return prev;
       if (dragged.slot === targetSlot) return prev;
 
-      // Is there a tile at the target slot?
+      // Reject drops whose footprint would hang past the right edge —
+      // the tile springs back.
+      const movedFp = footprintAt(targetSlot, dragged.fw, dragged.fh);
+      if (movedFp.endCol >= BOARD_COLUMNS) return prev;
+
+      // Same-size tile anchored exactly at the target → classic swap.
       const targetIdx = current.findIndex(
         (p, i) => i !== draggedIdx && p.slot === targetSlot,
       );
       const target = targetIdx >= 0 ? current[targetIdx] : undefined;
-
-      if (target) {
-        // Same-size swap only. Different sizes → reject (spring back).
-        if (target.fw !== dragged.fw || target.fh !== dragged.fh) {
-          return prev;
-        }
+      if (target && target.fw === dragged.fw && target.fh === dragged.fh) {
         const next = [...current];
         next[draggedIdx] = { ...dragged, slot: targetSlot };
         next[targetIdx]  = { ...target,  slot: dragged.slot };
@@ -2051,9 +2453,12 @@ export default function TalkScreen() {
         return { ...prev, [activeMode]: next };
       }
 
-      // Empty target — simple move.
-      const next = [...current];
-      next[draggedIdx] = { ...dragged, slot: targetSlot };
+      // Footprint-aware drop: pin the dragged tile at the target and
+      // push-aside any neighbours whose cells it now covers, so a 2×2
+      // dropped between tiles can never overlap them.
+      const moved: TilePlacement = { ...dragged, slot: targetSlot };
+      const others = current.filter((_, i) => i !== draggedIdx);
+      const next = reflowAroundPinned(others, moved);
       setLayoutDirty(true);
       return { ...prev, [activeMode]: next };
     });
@@ -2066,10 +2471,17 @@ export default function TalkScreen() {
 
   // ── Push-aside resize handler ─────────────────────────────────────────
   // When a tile is resized, cascade-shift any tiles whose footprint now
-  // overlaps the new one. Cascaded tiles walk to the nearest empty slot
-  // (search forward, wrap rows). Coarse footprint uses ceil(fw/2) cols
-  // and ceil(fh/2) rows — a fw=3 tile occupies 2 coarse cols.
-  const handleResize = useCallback((tileId: string, newFw: number, newFh: number) => {
+  // overlaps the new one (shared reflowAroundPinned helper — same walk the
+  // drag-drop commit uses). dCols/dRows are coarse cells the anchor moves
+  // LEFT/UP when the resize came from the left/top edge; they are clamped
+  // at the grid edges so a blocked shift never grows the tile rightwards.
+  const handleResize = useCallback((
+    tileId: string,
+    newFw: number,
+    newFh: number,
+    dCols: number = 0,
+    dRows: number = 0,
+  ) => {
     hapticIfEnabled();
     setLayouts(prev => {
       const current: BoardLayout = prev[activeMode]
@@ -2080,70 +2492,33 @@ export default function TalkScreen() {
       const original = idx >= 0 ? current[idx] : undefined;
       if (!original) return prev;
 
-      // Coarse footprint helpers. fw/fh are in FINE (44px) units; the
-      // coarse (88px) footprint is Math.ceil(fw/2) cols × Math.ceil(fh/2) rows.
-      const footprint = (p: TilePlacement) => {
-        const startCol = p.slot % BOARD_COLUMNS;
-        const startRow = Math.floor(p.slot / BOARD_COLUMNS);
-        return {
-          startCol, startRow,
-          endCol: startCol + coarseCols(p.fw) - 1,
-          endRow: startRow + coarseRows(p.fh) - 1,
-        };
-      };
-      const overlaps = (a: ReturnType<typeof footprint>, b: ReturnType<typeof footprint>) =>
-        !(a.startCol > b.endCol || b.startCol > a.endCol ||
-          a.startRow > b.endRow || b.startRow > a.endRow);
+      const startCol = original.slot % BOARD_COLUMNS;
+      const startRow = Math.floor(original.slot / BOARD_COLUMNS);
 
-      const resized: TilePlacement = { ...original, fw: newFw, fh: newFh };
-      const resizedFp = footprint(resized);
+      // Clamp anchor shifts at column/row 0. If the shift was clamped,
+      // trim the matching growth so the tile doesn't jump sideways.
+      const appliedCols = Math.min(dCols, startCol);
+      const appliedRows = Math.min(dRows, startRow);
+      const fwNext = Math.max(2, Math.min(MAX_FW, newFw - (dCols - appliedCols) * 2));
+      const fhNext = Math.max(2, Math.min(MAX_FW, newFh - (dRows - appliedRows) * 2));
+      const slotNext =
+        (startRow - appliedRows) * BOARD_COLUMNS + (startCol - appliedCols);
+
+      if (
+        fwNext === original.fw &&
+        fhNext === original.fh &&
+        slotNext === original.slot
+      ) return prev;
+
+      const resized: TilePlacement = {
+        ...original, slot: slotNext, fw: fwNext, fh: fhNext,
+      };
 
       // Reject if the resized tile would extend past the right edge.
-      if (resizedFp.endCol >= BOARD_COLUMNS) return prev;
+      if (footprintAt(slotNext, fwNext, fhNext).endCol >= BOARD_COLUMNS) return prev;
 
-      // Fixed footprints for collision checking: start with the resized tile.
-      const placed: { p: TilePlacement; fp: ReturnType<typeof footprint> }[] = [
-        { p: resized, fp: resizedFp },
-      ];
-
-      // Walk other tiles in slot order; keep each at its current slot if
-      // possible, otherwise search for next empty slot that fits.
-      const others = current
-        .filter((_, i) => i !== idx)
-        .sort((a, b) => a.slot - b.slot);
-
-      for (const other of others) {
-        const desiredFp = footprint(other);
-        const fits = (fp: typeof desiredFp) =>
-          fp.endCol < BOARD_COLUMNS &&
-          !placed.some(pl => overlaps(pl.fp, fp));
-
-        if (fits(desiredFp)) {
-          placed.push({ p: other, fp: desiredFp });
-          continue;
-        }
-
-        // Search forward for a slot that fits.
-        const cw = coarseCols(other.fw);
-        const ch = coarseRows(other.fh);
-        let found = -1;
-        for (let s = other.slot + 1; s < 500; s++) {
-          const col = s % BOARD_COLUMNS;
-          if (col + cw > BOARD_COLUMNS) continue;
-          const row = Math.floor(s / BOARD_COLUMNS);
-          const testFp = {
-            startCol: col, startRow: row,
-            endCol: col + cw - 1, endRow: row + ch - 1,
-          };
-          if (fits(testFp)) { found = s; placed.push({ p: { ...other, slot: s }, fp: testFp }); break; }
-        }
-        if (found < 0) {
-          // Give up gracefully — keep in original slot (may overlap; unlikely).
-          placed.push({ p: other, fp: desiredFp });
-        }
-      }
-
-      const next = placed.map(x => x.p);
+      const others = current.filter((_, i) => i !== idx);
+      const next = reflowAroundPinned(others, resized);
       setLayoutDirty(true);
       return { ...prev, [activeMode]: next };
     });
@@ -2508,9 +2883,8 @@ export default function TalkScreen() {
     startGhostToMessage(tile, rect);
   }, [announce, clearMessage, dispatch, hapticIfEnabled, navigateTo, previousMode, repeatMessage, startGhostToMessage]);
 
-  // Folder dock Back / Home reuse the tile-press navigation logic.
+  // Folder dock Back reuses the tile-press navigation logic.
   const handleDockBack = useCallback(() => handleTilePress(BACK_TILE, null), [handleTilePress]);
-  const handleDockHome = useCallback(() => handleTilePress(HOME_TILE, null), [handleTilePress]);
 
   // Delete removes the focused tile's placement from the in-memory layout for
   // the current board only. Marks the session dirty so Cancel/Save appear.
@@ -2639,14 +3013,19 @@ export default function TalkScreen() {
             {(() => {
               const colStep = tileSize + TILE_GAP;
               const rowStep = tileSize + TILE_V_GAP;
-              const maxSlot = activeLayout.reduce(
-                (m, p) => Math.max(m, p.slot), -1,
+              // Rows must count each tile's full footprint (anchor row +
+              // coarse height), not just anchor slots — otherwise growing a
+              // bottom-row tile taller doesn't extend the grid and the
+              // background never refreshes under it.
+              const tileRows = activeLayout.reduce(
+                (m, p) =>
+                  Math.max(m, Math.floor(p.slot / BOARD_COLUMNS) + coarseRows(p.fh)),
+                0,
               );
-              const tileRows = maxSlot >= 0 ? Math.floor(maxSlot / BOARD_COLUMNS) + 1 : 0;
               // Measured board area minus fixed chrome. The dock is always
-              // visible (home shows Add +), so its height is constant: one
-              // action row + top padding + bottom gap. Falls back to an
-              // estimate before onLayout fires.
+              // visible (home shows the ">" toggle), so its height is
+              // constant: one action row + top padding + bottom gap. Falls
+              // back to an estimate before onLayout fires.
               const dockContentH = DOCK_ACTION_SIZE + spacing.sm + DOCK_BOTTOM_GAP;
               const measuredViewH = boardAreaHeight > 0
                 ? boardAreaHeight - BOARD_TOP_GAP - 10 - dockContentH
@@ -2741,25 +3120,60 @@ export default function TalkScreen() {
               styles.boardDock,
               {
                 paddingBottom: DOCK_BOTTOM_GAP,
-                paddingLeft: dockPadLeft,
-                paddingRight: dockPadRight,
                 opacity: dockFade,
+                transform: [{
+                  translateX:
+                    !reduceMotion &&
+                    (dockMode === 'homeExpanded' || dockMode === 'homeCollapsed')
+                      ? dockFade.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] })
+                      : 0,
+                }],
               },
             ]}
           >
-            <View style={styles.dockRow}>
-              {dockMode === 'homeIdle' ? (
+            <View
+              style={[
+                styles.dockRow,
+                { paddingLeft: dockPadLeft, paddingRight: dockPadRight },
+              ]}
+            >
+              {dockMode === 'homeCollapsed' ? (
                 <BoardDockAction
-                  label="Add"
-                  a11yLabel="Add item"
-                  a11yHint="Opens add options"
-                  onPress={handleDockAddToggle}
+                  icon="chevron-right" label="More"
+                  a11yLabel="More"
+                  a11yHint="Expand board controls. Shows Add and Board settings."
+                  onPress={handleHomeDockExpand}
                   isToggle
                 />
+              ) : dockMode === 'homeExpanded' ? (
+                <>
+                  <BoardDockAction
+                    icon="add" label="Add"
+                    a11yLabel="Add"
+                    a11yHint="Opens add options for the board"
+                    onPress={handleDockAddPlus}
+                    kind="neutral"
+                  />
+                  <BoardDockAction
+                    icon="setting" label="Board"
+                    a11yLabel="Board settings"
+                    a11yHint="Opens board display and layout settings"
+                    onPress={handleOpenBoardSettings}
+                    kind="neutral"
+                  />
+                  <BoardDockAction
+                    icon="chevron-left" label="Hide"
+                    a11yLabel="Hide"
+                    a11yHint="Collapse board controls"
+                    onPress={handleHomeDockCollapse}
+                    isToggle
+                  />
+                </>
               ) : dockMode === 'addExpanded' ? (
                 <>
                   <BoardDockAction
-                    label="< Back" a11yLabel="Back" a11yHint="Close add options"
+                    icon="chevron-back" label="Back"
+                    a11yLabel="Back" a11yHint="Close add options"
                     onPress={handleAddFlowClose} kind="neutral"
                   />
                   <BoardDockAction
@@ -2771,7 +3185,7 @@ export default function TalkScreen() {
                     onPress={handleDockAddFolder} kind="neutral"
                   />
                   <BoardDockAction
-                    label="Add"
+                    icon="add" label="Add"
                     a11yLabel="Add item"
                     a11yHint="Close add options"
                     onPress={handleDockAddToggle}
@@ -2782,47 +3196,42 @@ export default function TalkScreen() {
               ) : dockMode === 'folderExpanded' ? (
                 <>
                   <BoardDockAction
-                    label="< Back" a11yLabel="Back"
+                    icon="chevron-back" label="Back"
+                    a11yLabel="Back"
+                    a11yHint="Go back one board"
                     onPress={handleDockBack} kind="neutral"
                   />
                   <BoardDockAction
-                    label="Home" a11yLabel="Go to home board"
-                    onPress={handleDockHome} kind="neutral"
-                  />
-                  <BoardDockAction
-                    label="<" a11yLabel="Collapse actions"
-                    onPress={handleFolderCollapse} isToggle isChevron
-                  />
-                  <BoardDockAction
-                    label="Add"
+                    icon="add" label="Add"
                     a11yLabel="Add item"
                     a11yHint="Opens add options"
                     onPress={handleDockAddToggle}
                     isToggle
+                  />
+                  <BoardDockAction
+                    icon="chevron-left" label="Hide"
+                    a11yLabel="Hide"
+                    a11yHint="Collapse actions. Hides Back and Add."
+                    onPress={handleFolderCollapse} isToggle
                   />
                 </>
               ) : dockMode === 'folderCollapsed' ? (
-                <>
-                  <BoardDockAction
-                    label=">" a11yLabel="Expand actions" a11yHint="Shows Back and Home"
-                    onPress={handleFolderExpand} isToggle isChevron
-                  />
-                  <BoardDockAction
-                    label="Add"
-                    a11yLabel="Add item"
-                    a11yHint="Opens add options"
-                    onPress={handleDockAddToggle}
-                    isToggle
-                  />
-                </>
+                <BoardDockAction
+                  icon="chevron-right" label="More"
+                  a11yLabel="More"
+                  a11yHint="Expand actions. Shows Back and Add."
+                  onPress={handleFolderExpand} isToggle
+                />
               ) : dockMode === 'editDirty' ? (
                 <>
                   <BoardDockAction
-                    label="Cancel" a11yLabel="Cancel changes"
+                    icon="close" label="Cancel"
+                    a11yLabel="Cancel changes"
                     onPress={handleDockCancel} kind="muted"
                   />
                   <BoardDockAction
-                    label="Save" a11yLabel="Save changes"
+                    icon="checkmark" label="Save"
+                    a11yLabel="Save changes"
                     onPress={handleSaveEdit} kind="primary"
                   />
                 </>
@@ -2830,16 +3239,19 @@ export default function TalkScreen() {
                 <>
                   {editFocusTileId ? (
                     <BoardDockAction
-                      label="Delete" a11yLabel="Delete selected tile"
+                      icon="remove" label="Delete"
+                      a11yLabel="Delete selected tile"
                       onPress={handleDockDelete} kind="muted"
                     />
                   ) : null}
                   <BoardDockAction
-                    label="Add +" a11yLabel="Add item" a11yHint="Opens add options"
+                    icon="add" label="Add"
+                    a11yLabel="Add item" a11yHint="Opens add options"
                     onPress={handleDockAddPlus} kind="neutral"
                   />
                   <BoardDockAction
-                    label="Done" a11yLabel="Finish editing"
+                    icon="checkmark" label="Done"
+                    a11yLabel="Finish editing"
                     onPress={handleDockDone} kind="primary"
                   />
                 </>
@@ -2968,7 +3380,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 1.2,
+    height: CHROME_SEPARATOR_WIDTH,
   },
   topTab: {
     width: 72,
@@ -3118,28 +3530,60 @@ const styles = StyleSheet.create({
   dockRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'nowrap',
     gap: DOCK_GAP,
   },
   dockAction: {
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
   },
   dockActionLabel: {
     fontSize: 14,
+    lineHeight: 18,
     fontWeight: '700',
     textAlign: 'center',
   },
   dockAddToggleLabel: {
     fontSize: 13,
+    lineHeight: 16,
     fontWeight: '700',
     textAlign: 'center',
   },
-  dockChevronLabel: {
-    fontSize: 22,
-    fontWeight: '800',
-    textAlign: 'center',
+  dockIconOnlyMount: {
+    width: DOCK_ICON_TOGGLE + 4,
+    height: DOCK_ICON_TOGGLE + 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dockIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  dockIconRowGlyph: {
+    width: DOCK_ICON_ROW + 2,
+    height: DOCK_ROW_LABEL + 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dockRowLabel: {
+    fontSize: DOCK_ROW_LABEL,
+    lineHeight: DOCK_ROW_LABEL + 3,
+    fontWeight: '700',
+    textAlign: 'left',
+  },
+  dockIconStack: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+  },
+  dockIconStackGlyph: {
+    width: DOCK_ICON_ACTION + 2,
+    height: DOCK_ICON_ACTION + 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   navRow: {
     flexDirection: 'row',

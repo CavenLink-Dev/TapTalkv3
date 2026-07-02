@@ -76,7 +76,7 @@ function PhraseRow({
             hitSlop={10}
             accessibilityLabel={`Delete phrase ${index + 1}`}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.deleteHandle, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [styles.deleteHandle, { backgroundColor: t.colors.danger }, pressed && { opacity: 0.85 }]}
           >
             <Ionicons name="remove" size={22} color="#FFFFFF" />
           </Pressable>
@@ -89,7 +89,7 @@ function PhraseRow({
         delayLongPress={350}
         accessibilityRole="button"
         accessibilityLabel={`Speak: ${item.text}`}
-        style={({ pressed }) => [styles.card, pressed && { opacity: 0.94 }]}
+        style={({ pressed }) => [styles.card, { backgroundColor: t.colors.surface }, pressed && { opacity: 0.94 }]}
       >
         <Ionicons name="volume-medium-outline" size={20} color={t.colors.primary} />
         <Text style={[styles.cardText, { color: t.colors.text }]} numberOfLines={3}>{item.text}</Text>

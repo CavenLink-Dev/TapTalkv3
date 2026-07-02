@@ -184,6 +184,7 @@ function StepEditor({
                     }}
                     style={({ pressed }) => [
                       styles.symTile,
+                      { backgroundColor: t.colors.inputBg },
                       active && { borderColor: s.color, borderWidth: 3 },
                       pressed && { opacity: 0.86 },
                     ]}
@@ -518,6 +519,7 @@ export default function NewPlanScreen() {
                     }}
                     style={({ pressed }) => [
                       styles.symTile,
+                      { backgroundColor: t.colors.inputBg },
                       active && { borderColor: s.color, borderWidth: 3 },
                       pressed && { opacity: 0.86 },
                     ]}
@@ -552,7 +554,7 @@ export default function NewPlanScreen() {
             onPress={() => setDateSheetOpen(true)}
             accessibilityRole="button"
             accessibilityLabel="Change plan date"
-            style={({ pressed }) => [styles.dateRow, pressed && { opacity: 0.94 }]}
+            style={({ pressed }) => [styles.dateRow, { backgroundColor: t.colors.surface }, pressed && { opacity: 0.94 }]}
           >
             <View style={styles.dateIconChip}>
               <Ionicons name="calendar-outline" size={20} color={t.colors.primary} />
@@ -662,8 +664,8 @@ export default function NewPlanScreen() {
             accessibilityState={{ disabled: !canSave }}
             style={({ pressed }) => [
               styles.saveBtn,
-              !canSave && styles.saveBtnDisabled,
-              canSave && pressed && { opacity: 0.85 },
+              { backgroundColor: canSave ? t.colors.primary : t.colors.disabled },
+              canSave && pressed && { backgroundColor: t.colors.primaryPressed },
             ]}
           >
             <Ionicons

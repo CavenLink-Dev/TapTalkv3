@@ -16,6 +16,9 @@
 
 import React, { useMemo, useState } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -29,11 +32,16 @@ import { Href, Stack, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
-import { hapticSelection } from '../../src/utils/haptics';
+import { hapticSelection, hapticSuccess, hapticWarning } from '../../src/utils/haptics';
 import {
   Plan,
   formatDateKey,
+  movePlan,
   parseDateKey,
+  removePlan,
+  toggleFavoritePlan,
+  updatePlan,
+  usePlanColorsByDate,
   usePlanCountsByDate,
   usePlansForDate,
 } from '../../src/features/calendar/store';
@@ -77,12 +85,14 @@ function MonthGrid({
   anchor,
   selectedKey,
   countsByDate,
+  colorsByDate,
   onSelect,
   onShiftMonth,
 }: {
   anchor: Date;
   selectedKey: string;
   countsByDate: Map<string, number>;
+  colorsByDate: Map<string, string[]>;
   onSelect: (date: Date) => void;
   onShiftMonth: (delta: number) => void;
 }) {
@@ -130,7 +140,11 @@ function MonthGrid({
               const inMonth = d.getMonth() === monthIdx;
               const isToday = key === todayKey;
               const isSelected = key === selectedKey;
-              const hasPlans = (countsByDate.get(key) ?? 0) > 0;
+              const planCount = countsByDate.get(key) ?? 0;
+              // Up to three coloured marks (one per plan, plan's own colour)
+              // so a day with plans reads at a glance. 4+ plans keep three
+              // marks — the count lives in the accessibility label.
+              const planColors = (colorsByDate.get(key) ?? []).slice(0, 3);
               return (
                 <Pressable
                   key={key}
@@ -139,35 +153,44 @@ function MonthGrid({
                     onSelect(d);
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={`${MONTHS_LONG[d.getMonth()]} ${d.getDate()}`}
+                  accessibilityLabel={
+                    `${MONTHS_LONG[d.getMonth()]} ${d.getDate()}` +
+                    (planCount > 0 ? `. ${planCount} plan${planCount === 1 ? '' : 's'}` : '')
+                  }
                   accessibilityState={{ selected: isSelected }}
                   style={styles.cellHit}
                 >
                   <View
                     style={[
                       styles.cellInner,
-                      isSelected && styles.cellSelected,
-                      isToday && !isSelected && styles.cellToday,
+                      isSelected && { backgroundColor: t.colors.primary },
+                      isToday && !isSelected && [styles.cellToday, { borderColor: t.colors.primary }],
                     ]}
                   >
                     <Text
                       style={[
                         styles.cellText,
-                        !inMonth && styles.cellTextMuted,
-                        isToday && !isSelected && styles.cellTextToday,
+                        { color: t.colors.text },
+                        !inMonth && { color: t.colors.textTertiary },
+                        isToday && !isSelected && [styles.cellTextToday, { color: t.colors.primary }],
                         isSelected && styles.cellTextSelected,
                       ]}
                     >
                       {d.getDate()}
                     </Text>
                   </View>
-                  <View
-                    style={[
-                      styles.cellDot,
-                      hasPlans && styles.cellDotActive,
-                      hasPlans && isSelected && { backgroundColor: '#FFFFFF' },
-                    ]}
-                  />
+                  <View style={styles.cellMarks}>
+                    {planCount === 0 ? (
+                      <View style={styles.cellMarkSpacer} />
+                    ) : (
+                      planColors.map((c, i) => (
+                        <View
+                          key={i}
+                          style={[styles.cellMark, { backgroundColor: c }]}
+                        />
+                      ))
+                    )}
+                  </View>
                 </Pressable>
               );
             })}
@@ -180,7 +203,15 @@ function MonthGrid({
 
 // ─── Plan card ─────────────────────────────────────────────────────────────
 
-function PlanRowCard({ plan, onOpen }: { plan: Plan; onOpen: () => void }) {
+function PlanRowCard({
+  plan,
+  onOpen,
+  onMenu,
+}: {
+  plan: Plan;
+  onOpen: () => void;
+  onMenu: () => void;
+}) {
   const t = useTheme();
   const total = plan.steps.length;
   const done = plan.steps.filter(s => s.done).length;
@@ -188,9 +219,20 @@ function PlanRowCard({ plan, onOpen }: { plan: Plan; onOpen: () => void }) {
   return (
     <Pressable
       onPress={onOpen}
+      onLongPress={onMenu}
+      delayLongPress={350}
       accessibilityRole="button"
-      accessibilityLabel={`${plan.name}. ${done} of ${total} steps done.`}
-      style={({ pressed }) => [styles.planCard, pressed && { opacity: 0.94 }]}
+      accessibilityLabel={
+        `${plan.name}${plan.favorite ? ', favourite' : ''}. ${done} of ${total} steps done.`
+      }
+      accessibilityHint="Opens the day timeline. Long press for plan options."
+      style={({ pressed }) => [
+        styles.planCard,
+        // Left accent stripe ties the card to the plan's colour identity —
+        // the same colour used by this plan's mark on the month grid.
+        { backgroundColor: t.colors.surface, borderLeftWidth: 5, borderLeftColor: plan.symbolColor },
+        pressed && { opacity: 0.94 },
+      ]}
     >
       <View style={styles.planHead}>
         <View style={[styles.planIconChip, { backgroundColor: hexAlpha(plan.symbolColor, 0.18) }]}>
@@ -201,12 +243,33 @@ function PlanRowCard({ plan, onOpen }: { plan: Plan; onOpen: () => void }) {
           />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.planName, { color: t.colors.text }]}>{plan.name}</Text>
+          <View style={styles.planNameRow}>
+            <Text style={[styles.planName, { color: t.colors.text }]} numberOfLines={1}>
+              {plan.name}
+            </Text>
+            {plan.favorite ? (
+              <Ionicons
+                name="heart"
+                size={16}
+                color={t.colors.danger}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+              />
+            ) : null}
+          </View>
           <Text style={[styles.planMeta, { color: t.colors.textMuted }]}>
             {total} step{total === 1 ? '' : 's'}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={22} color={t.colors.textTertiary} />
+        <Pressable
+          onPress={onMenu}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Options for ${plan.name}`}
+          style={({ pressed }) => [styles.planMenuBtn, pressed && { opacity: 0.6 }]}
+        >
+          <Ionicons name="ellipsis-horizontal" size={22} color={t.colors.textTertiary} />
+        </Pressable>
       </View>
       <View style={[styles.progressTrack, { backgroundColor: t.colors.progressTrack }]}>
         <View
@@ -242,7 +305,11 @@ function CreatePlanCard({ onCreate, isToday }: { onCreate: () => void; isToday: 
         onPress={onCreate}
         accessibilityRole="button"
         accessibilityLabel="Create a new plan"
-        style={({ pressed }) => [styles.createBubble, pressed && { opacity: 0.85 }]}
+        style={({ pressed }) => [
+          styles.createBubble,
+          { backgroundColor: t.colors.primary },
+          pressed && { backgroundColor: t.colors.primaryPressed },
+        ]}
       >
         <Ionicons name="add" size={36} color={t.colors.surface} />
       </Pressable>
@@ -261,6 +328,7 @@ export default function CalendarScreen() {
   const [anchor, setAnchor] = useState<Date>(() => startOfMonth(new Date()));
   const [selectedKey, setSelectedKey] = useState<string>(todayKey);
   const countsByDate = usePlanCountsByDate();
+  const colorsByDate = usePlanColorsByDate();
   const plansForSelected = usePlansForDate(selectedKey);
   const isSelectedToday = selectedKey === todayKey;
   const selectedDate = useMemo(() => parseDateKey(selectedKey), [selectedKey]);
@@ -274,6 +342,88 @@ export default function CalendarScreen() {
   const openCreate = () => {
     hapticSelection();
     router.push({ pathname: '/calendar/new-plan', params: { date: selectedKey } } as Href);
+  };
+
+  const renamePlan = (plan: Plan) => {
+    if (Platform.OS === 'ios' && typeof Alert.prompt === 'function') {
+      Alert.prompt(
+        'Rename Plan',
+        'Give this plan a new name.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Save',
+            onPress: (text?: string) => {
+              const trimmed = (text ?? '').trim();
+              if (!trimmed) return;
+              updatePlan(plan.id, { name: trimmed });
+              hapticSuccess();
+            },
+          },
+        ],
+        'plain-text',
+        plan.name,
+      );
+    }
+  };
+
+  const confirmRemove = (plan: Plan) => {
+    hapticWarning();
+    Alert.alert(
+      'Remove Plan?',
+      `"${plan.name}" and its ${plan.steps.length} step${plan.steps.length === 1 ? '' : 's'} will be removed from this day.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            removePlan(plan.id);
+            hapticSuccess();
+          },
+        },
+      ],
+    );
+  };
+
+  // Item options — long press on the card or tap the ⋯ button. Every action
+  // here is reachable without drag gestures (motor access), and Remove is
+  // separated + confirmed (principle 12).
+  const openPlanMenu = (plan: Plan, index: number, count: number) => {
+    hapticSelection();
+    const entries: { label: string; act: () => void; destructive?: boolean }[] = [
+      {
+        label: plan.favorite ? 'Remove from Favourites' : 'Add to Favourites',
+        act: () => { toggleFavoritePlan(plan.id); hapticSuccess(); },
+      },
+      { label: 'Rename', act: () => renamePlan(plan) },
+    ];
+    if (index > 0) entries.push({ label: 'Move Up', act: () => { movePlan(plan.id, -1); hapticSelection(); } });
+    if (index < count - 1) entries.push({ label: 'Move Down', act: () => { movePlan(plan.id, 1); hapticSelection(); } });
+    entries.push({ label: 'Remove Plan', act: () => confirmRemove(plan), destructive: true });
+
+    const options = [...entries.map(e => e.label), 'Cancel'];
+    const cancelButtonIndex = options.length - 1;
+    const destructiveButtonIndex = entries.findIndex(e => e.destructive);
+    const handle = (i: number) => {
+      if (i === cancelButtonIndex) return;
+      entries[i]?.act();
+    };
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { title: plan.name, options, cancelButtonIndex, destructiveButtonIndex },
+        handle,
+      );
+    } else {
+      Alert.alert(plan.name, undefined, [
+        ...entries.map((e, i) => ({
+          text: e.label,
+          style: (e.destructive ? 'destructive' : 'default') as 'destructive' | 'default',
+          onPress: () => handle(i),
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
   };
 
   return (
@@ -295,7 +445,11 @@ export default function CalendarScreen() {
           onPress={openCreate}
           accessibilityRole="button"
           accessibilityLabel="Create a new plan"
-          style={({ pressed }) => [styles.newPlanPill, pressed && { opacity: 0.85 }]}
+          style={({ pressed }) => [
+            styles.newPlanPill,
+            { backgroundColor: t.colors.primary },
+            pressed && { backgroundColor: t.colors.primaryPressed },
+          ]}
         >
           <Ionicons name="add" size={18} color={t.colors.surface} />
           <Text style={[styles.newPlanText, { color: t.colors.surface }]}>New Plan</Text>
@@ -321,6 +475,7 @@ export default function CalendarScreen() {
           anchor={anchor}
           selectedKey={selectedKey}
           countsByDate={countsByDate}
+          colorsByDate={colorsByDate}
           onSelect={(d) => {
             setSelectedKey(formatDateKey(d));
             // If the user taps a date in an adjacent month, jump the
@@ -342,14 +497,23 @@ export default function CalendarScreen() {
           <CreatePlanCard onCreate={openCreate} isToday={isSelectedToday} />
         ) : (
           <View style={styles.plansList}>
-            {plansForSelected.map(p => (
-              <PlanRowCard key={p.id} plan={p} onOpen={() => openDay(selectedKey)} />
+            {plansForSelected.map((p, i) => (
+              <PlanRowCard
+                key={p.id}
+                plan={p}
+                onOpen={() => openDay(selectedKey)}
+                onMenu={() => openPlanMenu(p, i, plansForSelected.length)}
+              />
             ))}
             <Pressable
               onPress={openCreate}
               accessibilityRole="button"
               accessibilityLabel="Add another plan to this day"
-              style={({ pressed }) => [styles.addMore, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [
+                styles.addMore,
+                { backgroundColor: t.colors.selectionBg },
+                pressed && { opacity: 0.85 },
+              ]}
             >
               <Ionicons name="add" size={20} color={t.colors.primary} />
               <Text style={[styles.addMoreText, { color: t.colors.primary }]}>Add another plan</Text>
@@ -442,23 +606,23 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center'},
-  cellSelected: {
-
-  },
   cellToday: {
     borderWidth: 1.5},
   cellText: {
     fontFamily: fonts.displayBold,
     fontSize: typography.callout},
-  cellTextMuted: { },
   cellTextToday: { fontFamily: fonts.displayBlack},
   cellTextSelected: { fontFamily: fonts.displayBlack, color: '#FFFFFF' },
-  cellDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'transparent'},
-  cellDotActive: { },
+  cellMarks: {
+    flexDirection: 'row',
+    gap: 3,
+    height: 5,
+    alignItems: 'center'},
+  cellMark: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5},
+  cellMarkSpacer: { width: 5, height: 5 },
 
   // Day plans
   sectionTitle: {
@@ -483,10 +647,19 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center'},
+  planNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm},
+  planMenuBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center'},
   planName: {
     fontFamily: fonts.displayHeavy,
     fontSize: typography.subheading,
-
+    flexShrink: 1,
     letterSpacing: typography.trackSubhead},
   planMeta: {
     fontFamily: fonts.body,
@@ -508,9 +681,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    minHeight: 48,
     paddingVertical: 14,
-    borderRadius: radii.pill,
-    backgroundColor: '#E6F4FD'},
+    borderRadius: radii.pill},
   addMoreText: {
     fontFamily: fonts.displayBold,
     fontSize: typography.callout},

@@ -8,8 +8,10 @@
  *   • Title "Great work!" with a per-game sub line (§7 structure).
  *   • Quiet session stats: levels, time, difficulty. No scores, no star
  *     ratings, no accuracy % — effort-first, never shaming.
- *   • Actions stacked: Play Again (primary), Next Activity (secondary),
- *     Back to Activities (ghost). Cancel X stays top-right — no trapping.
+ *   • Actions stacked: Play Again (brand-blue primary), Next Activity
+ *     (soft blue secondary), Back to Activities (ghost). Buttons always use
+ *     the brand/mascot blue family — theme.primary tints stats only.
+ *     Cancel X stays top-right — no trapping.
  *   • Copy is calm and sentence case. No emoji, no praise spam.
  */
 
@@ -21,17 +23,22 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '../native/Icon';
 import { colors, radii, spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/useTheme';
+
+// Soft tint of the brand blue for the secondary action — same family as
+// colors.primary (#199AEE), matching the tint already used across activity
+// footers (e.g. Colour Pop's footerGhost).
+const SOFT_BLUE_TINT = '#E6F4FD';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
 /** Per-activity visual identity for the completion card. */
 export interface ActivityCompletionTheme {
-  /** Main accent colour: primary button, stat values. */
+  /** Accent colour — stat values only. Buttons always use brand blue. */
   primary: string;
-  /** Light tint of primary: secondary button bg. */
+  /** Light tint of primary. Kept for compatibility; buttons no longer use it. */
   light: string;
   /** Short activity name, e.g. "Shape Match". */
   label: string;
@@ -104,7 +111,7 @@ export function ActivityCompletionOverlay({
       accessible
       accessibilityLabel={`${label}: ${value}`}
     >
-      <Text style={[styles.statValue, { color: t.colors.text }]}>{value}</Text>
+      <Text style={[styles.statValue, { color: theme.primary }]}>{value}</Text>
       <Text style={[styles.statLabel, { color: t.colors.textMuted }]}>{label}</Text>
     </View>
   );
@@ -127,7 +134,7 @@ export function ActivityCompletionOverlay({
             hitSlop={12}
             style={[styles.cancelBtn, { backgroundColor: t.colors.background }]}
           >
-            <Ionicons name="close" size={18} color={t.colors.textMuted} />
+            <Icon name="close" size={18} color={t.colors.textMuted} />
           </Pressable>
 
           {/* ── Green check badge (§7) ── */}
@@ -135,7 +142,7 @@ export function ActivityCompletionOverlay({
             style={[styles.checkBadge, { backgroundColor: colors.success }]}
             accessibilityElementsHidden
           >
-            <Ionicons name="checkmark" size={48} color="#FFFFFF" />
+            <Icon name="checkmark" size={48} color="#FFFFFF" />
           </View>
 
           {/* ── Title + sub ── */}
@@ -163,11 +170,11 @@ export function ActivityCompletionOverlay({
             accessibilityLabel="Play again from level 1"
             style={({ pressed }) => [
               styles.btnAgain,
-              { backgroundColor: theme.primary },
+              { backgroundColor: colors.primary },
               pressed && { opacity: 0.85 },
             ]}
           >
-            <Ionicons name="refresh" size={20} color="#FFFFFF" />
+            <Icon name="refresh" size={20} color="#FFFFFF" />
             <Text style={styles.btnAgainText}>Play Again</Text>
           </Pressable>
 
@@ -177,11 +184,11 @@ export function ActivityCompletionOverlay({
             accessibilityLabel="Next activity"
             style={({ pressed }) => [
               styles.btnNext,
-              { backgroundColor: theme.light },
+              { backgroundColor: SOFT_BLUE_TINT },
               pressed && { opacity: 0.85 },
             ]}
           >
-            <Text style={[styles.btnNextText, { color: theme.primary }]}>
+            <Text style={[styles.btnNextText, { color: colors.primaryDark }]}>
               Next Activity
             </Text>
           </Pressable>

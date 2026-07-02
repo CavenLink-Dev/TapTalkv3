@@ -3,6 +3,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { BottomNavIcon, BottomNavIconName } from '../../src/components/icons/BottomNavIcon';
 import { PressableTabButton } from '../../src/components/native/PressableTabButton';
+import { CHROME_SEPARATOR_WIDTH } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 
 function icon(name: BottomNavIconName) {
@@ -76,7 +77,7 @@ const styles = StyleSheet.create({
     height: 100,
     paddingTop: 12,
     paddingBottom: 28,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: CHROME_SEPARATOR_WIDTH,
   },
   tabBarItem: {
     justifyContent: 'center',

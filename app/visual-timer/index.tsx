@@ -718,8 +718,8 @@ export default function VisualTimerScreen() {
           accessibilityState={{ disabled: !canStart }}
           style={({ pressed }) => [
             styles.startBtn,
-            !canStart && styles.startBtnDisabled,
-            canStart && pressed && { opacity: 0.86 },
+            { backgroundColor: canStart ? t.colors.primary : t.colors.disabled },
+            canStart && pressed && { backgroundColor: t.colors.primaryPressed },
           ]}
         >
           <Ionicons name="play" size={22} color={canStart ? t.colors.surface : t.colors.textTertiary} />
@@ -881,7 +881,7 @@ function RunOverlay({
       {phase === 'done' ? (
         <Pressable
           onPress={onClose}
-          style={({ pressed }) => [styles.runClose, pressed && { opacity: 0.86 }]}
+          style={({ pressed }) => [styles.runClose, { backgroundColor: t.colors.primary }, pressed && { backgroundColor: t.colors.primaryPressed }]}
           accessibilityRole="button"
           accessibilityLabel="Close"
         >

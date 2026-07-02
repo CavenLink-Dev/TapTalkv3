@@ -8,8 +8,11 @@
  */
 
 import React from 'react';
+import { Image } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { useTheme } from '../../theme/useTheme';
+
+const SETTING_BOARD_SOURCE = require('../../assets/icons/setting-board.png');
 
 // ─── Backspace (used inside the "Tap to speak" card) ─────────────────────────
 // Figma node 86:293 — viewBox 45×30, fill error_colour_red (#F3312A).
@@ -99,6 +102,24 @@ export function BoardBackIcon({ size = 36 }: { size?: number }) {
         strokeWidth={1}
       />
     </Svg>
+  );
+}
+
+// ─── Board Settings button (Figma AAC BOARD gear, tinted to match dock) ───────
+
+export function BoardSettingIcon({ size = 22, color }: { size?: number; color?: string }) {
+  const t = useTheme();
+  const tint = color ?? t.colors.text;
+  // Slight optical bump so the filled gear matches stroke icon footprint at the same `size`.
+  const renderSize = Math.round(size * 1.12);
+  return (
+    <Image
+      source={SETTING_BOARD_SOURCE}
+      style={{ width: renderSize, height: renderSize, tintColor: tint }}
+      resizeMode="contain"
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    />
   );
 }
 

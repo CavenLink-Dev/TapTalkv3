@@ -203,6 +203,9 @@ export const spacing = {
   xxl: 32,
 } as const;
 
+/** Full-width chrome separator thickness (message strip, top nav, tab bar). */
+export const CHROME_SEPARATOR_WIDTH = 1.2 as const;
+
 // ─── Typography ───────────────────────────────────────────────────────────────
 // Source: TapTalk Component Library - Design Handoff (Sept 2026)
 // Display/Title/Heading/Subhead use SF Compact Rounded; Body/Callout use SF Compact.
