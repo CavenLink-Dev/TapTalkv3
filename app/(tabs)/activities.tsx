@@ -338,7 +338,7 @@ function ActivityCard({
       }),
     ]).start();
 
-    if (favourite && !wasFav) {
+    if (favourite && !wasFav && !reduceMotion) {
       setParticleTrigger(t => t + 1);
     }
   }, [favourite, reduceMotion]);
@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
   playButton: {
     width:          38,
     height:         38,
-    borderRadius:   19,
+    borderRadius:   10,
     alignItems:     'center',
     justifyContent: 'center'},
 

@@ -450,8 +450,8 @@ describe('E — resolveSymbolsForPhrase', () => {
     const phrase = await resolveSymbolsForPhrase('help blargorp');
 
     expect(phrase).toHaveLength(2);
-    expect(phrase[0].resolved.tier).toBe('exact');
-    expect(['category', 'unknown']).toContain(phrase[1].resolved.tier);
+    expect(phrase[0]?.resolved.tier).toBe('exact');
+    expect(['category', 'unknown']).toContain(phrase[1]?.resolved.tier);
   });
 
   it('returns an empty array for an empty or whitespace-only phrase', async () => {

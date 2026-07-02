@@ -23,6 +23,7 @@ interface PrimaryButtonProps {
   label: string;
   onPress: () => void;
   accessibilityLabel: string;
+  accessibilityHint?: string;
   disabled?: boolean;
   /** Inline loading dots; taps are locked while true. */
   loading?: boolean;
@@ -67,6 +68,7 @@ export function PrimaryButton({
   label,
   onPress,
   accessibilityLabel,
+  accessibilityHint,
   disabled = false,
   loading = false,
   success = false,
@@ -152,6 +154,7 @@ export function PrimaryButton({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
         accessibilityState={{ disabled: isLocked, busy: loading }}
         disabled={isLocked}
         onPressIn={handlePressIn}

@@ -112,7 +112,7 @@ async function unknownFallback(): Promise<{ symbolId: string; reason: string }> 
   if (UNKNOWN_FALLBACK_SYMBOL_ID && UNKNOWN_FALLBACK_SYMBOL_ID in MULBERRY_ASSET_MAP) {
     return { symbolId: UNKNOWN_FALLBACK_SYMBOL_ID, reason: 'unknown fallback' };
   }
-  const first = Object.keys(MULBERRY_ASSET_MAP)[0];
+  const first = Object.keys(MULBERRY_ASSET_MAP)[0] ?? '';
   return { symbolId: first, reason: 'unknown fallback (stub)' };
 }
 

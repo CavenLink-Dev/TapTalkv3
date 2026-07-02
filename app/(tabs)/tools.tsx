@@ -395,7 +395,7 @@ function ToolCard({
       }),
     ]).start();
 
-    if (favourite && !wasFav) {
+    if (favourite && !wasFav && !reduceMotion) {
       setParticleTrigger(t => t + 1);
     }
   }, [favourite, reduceMotion]);
@@ -920,14 +920,9 @@ const styles = StyleSheet.create({
   playButton: {
     width:          38,
     height:         38,
-    borderRadius:   19,
+    borderRadius:   10,
     alignItems:     'center',
-    justifyContent: 'center',
-    shadowColor:    '#000',
-    shadowOffset:   { width: 0, height: 2 },
-    shadowOpacity:  0.18,
-    shadowRadius:   3,
-    elevation:      3},
+    justifyContent: 'center'},
   playIcon: {
     marginLeft: 2},
   // Golden halo — only visible (opacity > 0) when card is favourited

@@ -39,7 +39,8 @@ import { TalkMessageStrip, type MessageStripTile } from '../../src/components/ta
 import { MulberrySymbol, prewarmMulberryAssets } from '../../src/components/symbols/MulberrySymbol';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
-import { animation, spacing } from '../../src/theme/tokens';
+import { buildMessageUtterances } from '../../src/utils/speechRules';
+import { animation, colors, radii, spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
@@ -117,6 +118,10 @@ const TILE_SIZE = 88;
 // get finer control than whole-tile jumps.
 const FINE = 44;
 const MAX_FW = 8; // 8 * 44 = 352px, roughly the full board width
+// Bottom dock spacing: 16px gap between dock and bottom tab bar edge.
+const DOCK_BOTTOM_GAP = spacing.lg; // 16
+// Edit dock button row height (minHeight 50 + vertical padding).
+const EDIT_DOCK_HEIGHT = 54;
 // Coarse tile-cell footprint of a placement — used for collision math
 // and multi-cell highlights. fw=2 → 1 col, fw=3 or 4 → 2 cols, fw=5 or 6 → 3.
 const coarseCols = (fw: number) => Math.ceil(fw / 2);
@@ -241,14 +246,20 @@ const BoardNavTile = React.memo(function BoardNavTile({ tile, size }: { tile: Bo
     <View
       style={[
         styles.navTileShell,
-        { width: size, height: size, backgroundColor: t.isDark ? t.colors.input : '#E8EBED' },
+        {
+          width: size,
+          height: size,
+          backgroundColor: t.isDark ? t.colors.surface : '#F4F6F8',
+          borderWidth: 1.6,
+          borderColor: t.isDark ? t.colors.primary : colors.primary,
+        },
       ]}
     >
       <View style={styles.navTileIconMount}>
         {tile.id === 'back' ? <BoardBackIcon size={40} /> : <BoardHomeIcon size={40} />}
       </View>
       <Text
-        style={[styles.navTileLabel, { color: t.isDark ? t.colors.textMuted : '#4B555C' }]}
+        style={[styles.navTileLabel, { color: t.colors.primary }]}
         numberOfLines={1}
         adjustsFontSizeToFit
       >
@@ -1660,8 +1671,16 @@ export default function TalkScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const scrollPositions = useRef<Partial<Record<BoardMode, number>>>({});
   const reduceMotion = useReduceMotion();
+  const [boardAreaHeight, setBoardAreaHeight] = useState(0);
+  const [layoutDirty, setLayoutDirty] = useState(false);
+  const layoutSnapshotRef = useRef<BoardLayout | null>(null);
   const messageWordsRef = useRef(state.messageWords);
   messageWordsRef.current = state.messageWords;
+
+  // Chained-utterance run tracking — cancels any in-flight clause chain so
+  // rapid re-taps on the strip never overlap audio (board_speech_rules.md).
+  const speakRunIdRef = useRef(0);
+  const speakGapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hapticIfEnabled = useCallback(() => {
     if (state.accessibility.hapticsEnabled !== false) hapticSelection();
   }, [state.accessibility.hapticsEnabled]);
@@ -1693,14 +1712,51 @@ export default function TalkScreen() {
   // ── Edit mode callbacks ──────────────────────────────────────────────────
   const handleEnterEdit = useCallback(() => {
     hapticIfEnabled();
+    const current: BoardLayout = layouts[activeMode]
+      ?? BOARD_TILES[activeMode].map((t, i) => ({ id: t.id, slot: i, fw: 2, fh: 2 }));
+    layoutSnapshotRef.current = current.map(p => ({ ...p }));
+    setLayoutDirty(false);
     setEditMode(true);
-  }, [hapticIfEnabled]);
+  }, [activeMode, hapticIfEnabled, layouts]);
 
-  const handleExitEdit = useCallback(() => {
+  const exitEditClean = useCallback(() => {
     hapticIfEnabled();
     setEditMode(false);
+    setLayoutDirty(false);
+    layoutSnapshotRef.current = null;
     snapSlot.value = -1;
   }, [hapticIfEnabled, snapSlot]);
+
+  const handleSaveEdit = useCallback(() => {
+    exitEditClean();
+  }, [exitEditClean]);
+
+  const handleCancelEdit = useCallback(() => {
+    if (!layoutDirty) { exitEditClean(); return; }
+    Alert.alert(
+      'Discard changes?',
+      'Your layout changes will be lost.',
+      [
+        { text: 'Keep editing', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            if (layoutSnapshotRef.current) {
+              setLayouts(prev => ({ ...prev, [activeMode]: layoutSnapshotRef.current! }));
+            }
+            exitEditClean();
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [activeMode, exitEditClean, layoutDirty]);
+
+  const handleExitEdit = useCallback(() => {
+    if (layoutDirty) { handleCancelEdit(); return; }
+    exitEditClean();
+  }, [exitEditClean, handleCancelEdit, layoutDirty]);
 
   const handleMoveToSlot = useCallback((tileId: string, targetSlot: number) => {
     setLayouts(prev => {
@@ -1727,12 +1783,14 @@ export default function TalkScreen() {
         const next = [...current];
         next[draggedIdx] = { ...dragged, slot: targetSlot };
         next[targetIdx]  = { ...target,  slot: dragged.slot };
+        setLayoutDirty(true);
         return { ...prev, [activeMode]: next };
       }
 
       // Empty target — simple move.
       const next = [...current];
       next[draggedIdx] = { ...dragged, slot: targetSlot };
+      setLayoutDirty(true);
       return { ...prev, [activeMode]: next };
     });
   }, [activeMode]);
@@ -1822,6 +1880,7 @@ export default function TalkScreen() {
       }
 
       const next = placed.map(x => x.p);
+      setLayoutDirty(true);
       return { ...prev, [activeMode]: next };
     });
   }, [activeMode, hapticIfEnabled]);
@@ -1934,20 +1993,61 @@ export default function TalkScreen() {
     AccessibilityInfo.announceForAccessibility(message);
   }, []);
 
+  // Chained clause runner — cancels any in-flight run, then walks the
+  // utterance list, chaining each via `onDone` with a punctuation-aware
+  // gap between clauses (board_speech_rules.md).
+  const speakChained = useCallback((text: string) => {
+    speakRunIdRef.current += 1;
+    if (speakGapTimerRef.current) {
+      clearTimeout(speakGapTimerRef.current);
+      speakGapTimerRef.current = null;
+    }
+    stopSpeech();
+
+    const utterances = buildMessageUtterances(
+      text,
+      state.accessibility.speechRate,
+      state.accessibility.speechPitch,
+    );
+    if (utterances.length === 0) return;
+    const run = speakRunIdRef.current;
+
+    const speakNext = (i: number) => {
+      if (run !== speakRunIdRef.current) return;
+      const u = utterances[i];
+      if (!u) return;
+      speak(u.text, {
+        rate: u.rate,
+        pitch: u.pitch,
+        onDone: () => {
+          if (run !== speakRunIdRef.current) return;
+          if (i + 1 < utterances.length) {
+            speakGapTimerRef.current = setTimeout(() => speakNext(i + 1), u.gapAfter);
+          }
+        },
+      });
+    };
+
+    speakNext(0);
+  }, [speak, stopSpeech, state.accessibility.speechRate, state.accessibility.speechPitch]);
+
+  // Never leave a chain running when the screen unmounts.
+  useEffect(() => () => {
+    speakRunIdRef.current += 1;
+    if (speakGapTimerRef.current) {
+      clearTimeout(speakGapTimerRef.current);
+      speakGapTimerRef.current = null;
+    }
+  }, []);
+
   const handleStripSpeak = useCallback((messageText: string, hasWords: boolean) => {
     if (!messageText.trim() || !hasWords) {
       announce('No message to speak');
       return;
     }
-    // Cancel any in-flight speech so a re-tap never overlaps audio
-    // (board_speech_rules.md — always stop before a new run).
-    stopSpeech();
-    speak(messageText, {
-      rate: state.accessibility.speechRate,
-      pitch: state.accessibility.speechPitch,
-    });
+    speakChained(messageText);
     announce(`Speaking: ${messageText}`);
-  }, [announce, speak, stopSpeech, state.accessibility.speechPitch, state.accessibility.speechRate]);
+  }, [announce, speakChained]);
 
   const handleStripBackspace = useCallback((hasWords: boolean) => {
     hapticIfEnabled();
@@ -2008,17 +2108,23 @@ export default function TalkScreen() {
       announce('No message to speak');
       return;
     }
-    stopSpeech(); // cancel in-flight speech before a new run
-    speak(messageText, { rate: state.accessibility.speechRate, pitch: state.accessibility.speechPitch });
+    speakChained(messageText);
     announce(`Speaking: ${messageText}`);
-  }, [announce, speak, stopSpeech, state.accessibility.speechPitch, state.accessibility.speechRate]);
+  }, [announce, speakChained]);
 
   const clearMessage = useCallback(() => {
+    // Cancel any in-flight chained clause run before wiping the message.
+    speakRunIdRef.current += 1;
+    if (speakGapTimerRef.current) {
+      clearTimeout(speakGapTimerRef.current);
+      speakGapTimerRef.current = null;
+    }
+    stopSpeech();
     ghostsRef.current = [];
     setGhosts([]);
     dispatch({ type: 'CLEAR_WORDS' });
     announce('Message cleared');
-  }, [announce, dispatch]);
+  }, [announce, dispatch, stopSpeech]);
 
   const startGhostToMessage = useCallback((tile: BoardTile, fromRect: WindowRect | null) => {
     // Speak immediately on press — don't wait for the 430ms ghost animation
@@ -2220,142 +2326,182 @@ export default function TalkScreen() {
           />
         ) : null}
 
-        <ScrollView
-          ref={scrollRef}
-          style={[styles.board, { backgroundColor: t.colors.background }]}
-          contentContainerStyle={[
-            styles.boardContent,
-            {
-              // Horizontal padding centres the grid on Plus / Pro Max / iPad.
-              paddingLeft:  insets.left  + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
-              paddingRight: insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
-            },
-          ]}
+        {/* Board area: ScrollView (flex:1) + pinned bottom dock */}
+        <View
+          style={styles.boardArea}
+          onLayout={e => setBoardAreaHeight(e.nativeEvent.layout.height)}
+        >
+          <ScrollView
+            ref={scrollRef}
+            style={[styles.board, { backgroundColor: t.colors.background }]}
+            contentContainerStyle={[
+              styles.boardContent,
+              {
+                paddingLeft:  insets.left  + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
+                paddingRight: insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
+              },
+            ]}
           showsVerticalScrollIndicator={false}
           onScroll={handleScroll}
           scrollEventThrottle={50}
+          bounces
+          alwaysBounceVertical
         >
-          {/* Absolute-positioned tile grid — enables free drag + math-based snap.
-              The grid always renders with enough rows to fill the visible board
-              area, so the user sees the full slot layout even on empty boards. */}
-          {(() => {
-            const colStep = tileSize + TILE_GAP;
-            const rowStep = tileSize + TILE_V_GAP;
-            // Highest slot the layout reaches determines minimum rows.
-            const maxSlot = activeLayout.reduce(
-              (m, p) => Math.max(m, p.slot), -1,
-            );
-            const tileRows = maxSlot >= 0 ? Math.floor(maxSlot / BOARD_COLUMNS) + 1 : 0;
-            const boardViewH = screenHeight - MESSAGE_HEIGHT - BOARD_TOP_GAP - 100 - 50;
-            const viewportRows = Math.ceil(boardViewH / rowStep) + 1;
-            const gridRows = Math.max(tileRows, viewportRows);
-            const totalGridSlots = gridRows * BOARD_COLUMNS;
-            const gridH = gridRows * rowStep - TILE_V_GAP;
-            return (
-              <View style={{ width: boardWidth - TILE_LEFT_PADDING * 2, height: gridH, position: 'relative' }}>
-                <GridOverlay
-                  cols={BOARD_COLUMNS}
-                  totalSlots={totalGridSlots}
-                  tileSize={tileSize}
-                  gap={TILE_GAP}
-                  rowGap={TILE_V_GAP}
-                  opacity={gridOverlayOpacity}
-                />
-                {/* Iterate placements — each tile knows its own slot + fine size.
-                    Non-square tiles compute their visual width/height from fw/fh. */}
-                {activeLayout.map((placement) => {
-                  const tile = tileMapForMode.get(placement.id);
-                  if (!tile) return null;
-                  const col = placement.slot % BOARD_COLUMNS;
-                  const row = Math.floor(placement.slot / BOARD_COLUMNS);
-                  const w = placement.fw * FINE;
-                  const h = placement.fh * FINE;
-                  return (
-                    <View
-                      key={tile.id}
-                      style={{
-                        position: 'absolute',
-                        left: col * colStep,
-                        top: row * rowStep,
-                        width: w,
-                        height: h,
-                      }}
-                    >
-                      <BoardTileCell
-                        tile={tile}
-                        size={tileSize}
-                        width={w}
-                        height={h}
-                        fw={placement.fw}
-                        fh={placement.fh}
-                        slot={placement.slot}
-                        totalSlots={totalGridSlots}
-                        onTilePress={handleTilePress}
-                        resolved={resolvedSymbols.get(tile.id)}
-                        editMode={editMode}
-                        onLongPressEnterEdit={editMode ? handleExitEdit : handleEnterEdit}
-                        onMoveToSlot={handleMoveToSlot}
-                        onHide={handleHide}
-                        onResize={handleResize}
+            {(() => {
+              const colStep = tileSize + TILE_GAP;
+              const rowStep = tileSize + TILE_V_GAP;
+              const maxSlot = activeLayout.reduce(
+                (m, p) => Math.max(m, p.slot), -1,
+              );
+              const tileRows = maxSlot >= 0 ? Math.floor(maxSlot / BOARD_COLUMNS) + 1 : 0;
+              // Measured board area minus fixed chrome. Falls back to old
+              // estimate when onLayout hasn't fired yet.
+              const dockH = editMode
+                ? EDIT_DOCK_HEIGHT + DOCK_BOTTOM_GAP
+                : (activeMode !== 'home' ? tileSize + TILE_GAP + DOCK_BOTTOM_GAP : 0);
+              const measuredViewH = boardAreaHeight > 0
+                ? boardAreaHeight - BOARD_TOP_GAP - 10 - dockH
+                : screenHeight - MESSAGE_HEIGHT - BOARD_TOP_GAP - 100 - 50;
+              const viewportRows = Math.max(1, Math.ceil(measuredViewH / rowStep));
+              const gridRows = Math.max(tileRows, viewportRows);
+              const totalGridSlots = gridRows * BOARD_COLUMNS;
+              const gridH = gridRows * rowStep - TILE_V_GAP;
+              return (
+                <View style={{ width: boardWidth - TILE_LEFT_PADDING * 2, height: gridH, position: 'relative' }}>
+                  <GridOverlay
+                    cols={BOARD_COLUMNS}
+                    totalSlots={totalGridSlots}
+                    tileSize={tileSize}
+                    gap={TILE_GAP}
+                    rowGap={TILE_V_GAP}
+                    opacity={gridOverlayOpacity}
+                  />
+                  {activeLayout.map((placement) => {
+                    const tile = tileMapForMode.get(placement.id);
+                    if (!tile) return null;
+                    const col = placement.slot % BOARD_COLUMNS;
+                    const row = Math.floor(placement.slot / BOARD_COLUMNS);
+                    const w = placement.fw * FINE;
+                    const h = placement.fh * FINE;
+                    return (
+                      <View
+                        key={tile.id}
+                        style={{
+                          position: 'absolute',
+                          left: col * colStep,
+                          top: row * rowStep,
+                          width: w,
+                          height: h,
+                        }}
+                      >
+                        <BoardTileCell
+                          tile={tile}
+                          size={tileSize}
+                          width={w}
+                          height={h}
+                          fw={placement.fw}
+                          fh={placement.fh}
+                          slot={placement.slot}
+                          totalSlots={totalGridSlots}
+                          onTilePress={handleTilePress}
+                          resolved={resolvedSymbols.get(tile.id)}
+                          editMode={editMode}
+                          onLongPressEnterEdit={editMode ? handleExitEdit : handleEnterEdit}
+                          onMoveToSlot={handleMoveToSlot}
+                          onHide={handleHide}
+                          onResize={handleResize}
+                          snapSlot={snapSlot}
+                          dragSourceSlot={dragSourceSlot}
+                          dragFw={dragFw}
+                          dragFh={dragFh}
+                          jiggle={jiggle}
+                        />
+                      </View>
+                    );
+                  })}
+                  {editMode ? (
+                    <>
+                      <DragPlaceholder
                         snapSlot={snapSlot}
-                        dragSourceSlot={dragSourceSlot}
                         dragFw={dragFw}
                         dragFh={dragFh}
-                        jiggle={jiggle}
+                        tileSize={tileSize}
+                        gap={TILE_GAP}
+                        rowGap={TILE_V_GAP}
+                        cols={BOARD_COLUMNS}
                       />
-                    </View>
-                  );
-                })}
-                {editMode ? (
-                  <>
-                    {/* Highlight where the dragged tile will land */}
-                    <DragPlaceholder
-                      snapSlot={snapSlot}
-                      dragFw={dragFw}
-                      dragFh={dragFh}
-                      tileSize={tileSize}
-                      gap={TILE_GAP}
-                      rowGap={TILE_V_GAP}
-                      cols={BOARD_COLUMNS}
-                    />
-                    {/* Phantom card trail at the drag origin slot */}
-                    <SourceGhost
-                      dragSourceSlot={dragSourceSlot}
-                      tileSize={tileSize}
-                      gap={TILE_GAP}
-                      rowGap={TILE_V_GAP}
-                      cols={BOARD_COLUMNS}
-                    />
-                  </>
-                ) : null}
-              </View>
-            );
-          })()}
+                      <SourceGhost
+                        dragSourceSlot={dragSourceSlot}
+                        tileSize={tileSize}
+                        gap={TILE_GAP}
+                        rowGap={TILE_V_GAP}
+                        cols={BOARD_COLUMNS}
+                      />
+                    </>
+                  ) : null}
+                </View>
+              );
+            })()}
+          </ScrollView>
 
-          {activeMode !== 'home' ? (
-            <View
-              style={[
-                styles.navRow,
-                {
-                  paddingLeft: 0,
-                  paddingRight: 0,
-                  width: boardWidth - TILE_LEFT_PADDING * 2,
-                },
-              ]}
-            >
-              <BoardTileCell
-                tile={BACK_TILE}
-                size={tileSize}
-                onTilePress={handleTilePress}
-              />
-              <BoardTileCell
-                tile={HOME_TILE}
-                size={tileSize}
-                onTilePress={handleTilePress}
-              />
+          {/* ── Bottom dock: Back/Home (folders) or Done/Save/Cancel (edit) ── */}
+          {editMode ? (
+            <View style={[styles.boardDock, { paddingBottom: DOCK_BOTTOM_GAP, paddingHorizontal: spacing.md }]}>
+              {layoutDirty ? (
+                <View style={styles.dockButtonRow}>
+                  <Pressable
+                    onPress={handleCancelEdit}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel layout changes"
+                    style={({ pressed }) => [styles.dockBtn, styles.dockBtnGhost, pressed && { opacity: 0.85 }]}
+                  >
+                    <Text style={[styles.dockBtnText, { color: t.colors.text }]}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleSaveEdit}
+                    accessibilityRole="button"
+                    accessibilityLabel="Save layout changes"
+                    style={({ pressed }) => [styles.dockBtn, styles.dockBtnPrimary, pressed && { opacity: 0.85 }]}
+                  >
+                    <Text style={styles.dockBtnPrimaryText}>Save</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={exitEditClean}
+                  accessibilityRole="button"
+                  accessibilityLabel="Done editing"
+                  style={({ pressed }) => [styles.dockBtn, styles.dockBtnPrimary, { alignSelf: 'center', minWidth: 140 }, pressed && { opacity: 0.85 }]}
+                >
+                  <Text style={styles.dockBtnPrimaryText}>Done</Text>
+                </Pressable>
+              )}
+            </View>
+          ) : activeMode !== 'home' ? (
+            <View style={[styles.boardDock, { paddingBottom: DOCK_BOTTOM_GAP }]}>
+              <View
+                style={[
+                  styles.navRow,
+                  {
+                    paddingLeft: insets.left + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
+                    paddingRight: insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
+                  },
+                ]}
+              >
+                <BoardTileCell
+                  tile={BACK_TILE}
+                  size={tileSize}
+                  onTilePress={handleTilePress}
+                />
+                <BoardTileCell
+                  tile={HOME_TILE}
+                  size={tileSize}
+                  onTilePress={handleTilePress}
+                />
+              </View>
             </View>
           ) : null}
-        </ScrollView>
+        </View>
 
         <View pointerEvents="none" style={styles.ghostOverlay}>
           {ghosts.map(ghost => (
@@ -2618,10 +2764,46 @@ const styles = StyleSheet.create({
   ghostTile: {
     position: 'absolute',
   },
+  boardArea: {
+    flex: 1,
+  },
+  boardDock: {
+    paddingTop: spacing.sm,
+  },
+  dockButtonRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'center',
+  },
+  dockBtn: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  dockBtnPrimary: {
+    backgroundColor: colors.primary,
+  },
+  dockBtnGhost: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: 'transparent',
+  },
+  dockBtnText: {
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  dockBtnPrimaryText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
   navRow: {
     flexDirection: 'row',
     gap: TILE_GAP,
-    marginTop: TILE_GAP,
+    marginTop: 0,
   },
   navTileShell: {
     position: 'relative',

@@ -34,9 +34,10 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, Stack, useRouter } from 'expo-router';
-import { colors, radii, spacing, typography } from '../../../src/theme/tokens';
+import { radii, spacing, typography } from '../../../src/theme/tokens';
 import { useAppContext } from '../../../src/hooks/useAppContext';
 import { useSpeech } from '../../../src/hooks/useSpeech';
+import { buildMessageUtterances } from '../../../src/utils/speechRules';
 import { hapticSelection } from '../../../src/utils/haptics';
 import {
   QUICK_TALK_MAX,
@@ -66,85 +67,6 @@ const quickTalkRoute = '/board/quick-talk' as Href;
 // Modifications are applied ON TOP of the user's voice prefs
 // (state.accessibility.speechRate / speechPitch).
 
-interface Clause {
-  text: string;
-  /** Punctuation that ended the clause, or undefined if none. */
-  terminator?: '.' | ',' | '!' | '?';
-}
-
-/** One TTS call in a chained run. */
-interface Utterance {
-  text: string;
-  rate: number;
-  pitch: number;
-  /** Silent wait before the next utterance starts. */
-  gapAfter: number;
-}
-
-function tokeniseClauses(text: string): Clause[] {
-  const result: Clause[] = [];
-  // Match: any non-punctuation run, optionally followed by one of . , ! ?
-  const re = /([^.,!?]+)([.,!?])?/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    const body = (m[1] ?? '').trim();
-    if (!body) continue;
-    const term = m[2] as Clause['terminator'] | undefined;
-    result.push({ text: body, terminator: term });
-  }
-  return result;
-}
-
-/**
- * Build the utterance chain for a full-message read.
- * `rate`/`pitch` are the user's stored voice preferences.
- */
-function buildMessageUtterances(text: string, rate: number, pitch: number): Utterance[] {
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-
-  // Single word (no spaces, no punctuation) → spell-and-speak.
-  if (!/[\s.,!?]/.test(trimmed)) {
-    const letters: Utterance[] = [...trimmed].map(letter => ({
-      text: letter,
-      rate: rate * 0.95,
-      pitch,
-      gapAfter: 80,
-    }));
-    letters.push({ text: trimmed, rate, pitch, gapAfter: 0 });
-    return letters;
-  }
-
-  const out: Utterance[] = [];
-  for (const c of tokeniseClauses(trimmed)) {
-    switch (c.terminator) {
-      case '!':
-      case '?': {
-        // Modify only the final word of the clause; the head stays neutral.
-        const words = c.text.split(/\s+/);
-        const last = words.pop() ?? '';
-        const head = words.join(' ');
-        const mod = c.terminator === '!'
-          ? { rate: rate * 0.94, pitch: pitch * 1.15, gapAfter: 220 }
-          : { rate: rate * 0.96, pitch: pitch * 1.25, gapAfter: 200 };
-        if (head) out.push({ text: head, rate, pitch, gapAfter: 40 });
-        out.push({ text: last, ...mod });
-        break;
-      }
-      case '.':
-        out.push({ text: c.text, rate, pitch, gapAfter: 350 });
-        break;
-      case ',':
-        out.push({ text: c.text, rate, pitch, gapAfter: 180 });
-        break;
-      default:
-        out.push({ text: c.text, rate, pitch, gapAfter: 100 });
-        break;
-    }
-  }
-  return out;
-}
-
 // ─── Key components ────────────────────────────────────────────────────────
 
 function LetterKey({ value, onPress }: { value: string; onPress: (v: string) => void }) {
@@ -154,7 +76,10 @@ function LetterKey({ value, onPress }: { value: string; onPress: (v: string) => 
       onPress={() => onPress(value)}
       accessibilityRole="button"
       accessibilityLabel={value}
-      style={({ pressed }) => [styles.letterKey, pressed && styles.keyPressed]}
+      style={({ pressed }) => [
+        styles.letterKey,
+        { backgroundColor: pressed ? t.colors.progressTrack : t.colors.inputBg },
+      ]}
     >
       <Text style={[styles.letterText, { color: t.colors.text }]}>{value}</Text>
     </Pressable>
@@ -176,7 +101,10 @@ function MutedKey({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.mutedKey, { flex }, pressed && styles.keyPressed]}
+      style={({ pressed }) => [
+        styles.mutedKey,
+        { flex, backgroundColor: pressed ? t.colors.progressTrack : t.colors.inputBg },
+      ]}
     >
       <Text style={[styles.mutedText, { color: t.colors.textMuted }]}>{label}</Text>
     </Pressable>
@@ -200,7 +128,10 @@ function IconKey({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.iconKey, { flex }, pressed && styles.keyPressed]}
+      style={({ pressed }) => [
+        styles.iconKey,
+        { flex, backgroundColor: pressed ? t.colors.progressTrack : t.colors.inputBg },
+      ]}
     >
       <Ionicons name={icon} size={24} color={t.colors.text} />
     </Pressable>
@@ -271,6 +202,11 @@ export default function KeyboardScreen() {
     speakNext(0);
   }, [cancelSpeech, speak, speechRate, speechPitch]);
 
+  const clearBuffer = useCallback(() => {
+    cancelSpeech();
+    setBuffer('');
+  }, [cancelSpeech]);
+
   const wordCount = useMemo(
     () => buffer.trim().split(/\s+/).filter(Boolean).length,
     [buffer],
@@ -329,11 +265,11 @@ export default function KeyboardScreen() {
         `“${t}” is now in Quick Talk.`,
         [
           { text: 'Keep typing', style: 'cancel' },
-          { text: 'Clear', onPress: () => setBuffer('') },
+          { text: 'Clear', onPress: clearBuffer },
         ],
       );
     }
-  }, [buffer, router]);
+  }, [buffer, clearBuffer, router]);
 
   const onBackPress = useCallback(() => {
     if (wordCount >= 3) {
@@ -358,11 +294,11 @@ export default function KeyboardScreen() {
       'This will remove everything you have typed.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear', style: 'destructive', onPress: () => setBuffer('') },
+        { text: 'Clear', style: 'destructive', onPress: clearBuffer },
       ],
       { cancelable: true },
     );
-  }, [buffer]);
+  }, [buffer, clearBuffer]);
 
   const canSave = buffer.trim().length > 0;
 
@@ -389,7 +325,7 @@ export default function KeyboardScreen() {
           accessibilityState={{ disabled: !canSave }}
           style={({ pressed }) => [
             styles.saveBtn,
-            !canSave && styles.saveBtnDisabled,
+            { backgroundColor: canSave ? t.colors.primary : t.colors.disabled },
             canSave && pressed && { opacity: 0.85 },
           ]}
         >
@@ -398,7 +334,12 @@ export default function KeyboardScreen() {
             size={16}
             color={canSave ? t.colors.surface : t.colors.textTertiary}
           />
-          <Text style={[styles.saveBtnText, !canSave && { color: t.colors.textTertiary }]}>
+          <Text
+            style={[
+              styles.saveBtnText,
+              { color: canSave ? t.colors.surface : t.colors.textTertiary },
+            ]}
+          >
             Save
           </Text>
         </Pressable>
@@ -410,7 +351,11 @@ export default function KeyboardScreen() {
           onPress={onSpeakAll}
           accessibilityRole="button"
           accessibilityLabel={buffer.trim() ? `Speak: ${buffer}` : 'Type to begin'}
-          style={({ pressed }) => [styles.strip, pressed && { opacity: 0.94 }]}
+          style={({ pressed }) => [
+            styles.strip,
+            { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+            pressed && { opacity: 0.94 },
+          ]}
         >
           {buffer.length > 0 ? (
             <Text style={[styles.stripText, { color: t.colors.text }]} numberOfLines={3}>{buffer}</Text>
@@ -466,7 +411,10 @@ export default function KeyboardScreen() {
             onPress={onSpace}
             accessibilityRole="button"
             accessibilityLabel="Space"
-            style={({ pressed }) => [styles.spaceKey, pressed && styles.keyPressed]}
+            style={({ pressed }) => [
+              styles.spaceKey,
+              { backgroundColor: pressed ? t.colors.progressTrack : t.colors.inputBg },
+            ]}
           >
             <Text style={[styles.spaceText, { color: t.colors.text }]}>Space</Text>
           </Pressable>
@@ -500,11 +448,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
     borderRadius: radii.pill},
-  saveBtnDisabled: {
-
-  },
   saveBtnText: {
-
     fontSize: typography.callout,
     fontWeight: '800'},
 
@@ -519,6 +463,7 @@ const styles = StyleSheet.create({
     flex: 1,
 
     borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     minHeight: 84,
@@ -573,14 +518,12 @@ const styles = StyleSheet.create({
 
   iconKey: {
     minHeight: 46,
-    backgroundColor: colors.inputBg,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center'},
 
   mutedKey: {
     minHeight: 46,
-    backgroundColor: colors.inputBg,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center'},
@@ -601,6 +544,4 @@ const styles = StyleSheet.create({
 
     letterSpacing: 0.6},
 
-  keyPressed: {
-    backgroundColor: colors.progressTrack},
 });
