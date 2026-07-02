@@ -36,6 +36,7 @@ import {
 } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { MulberrySymbol } from '../../src/components/symbols/MulberrySymbol';
 import { Card } from '../../src/components/native/Card';
 import { HelperCaption } from '../../src/components/native/HelperCaption';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
@@ -43,6 +44,7 @@ import { Screen } from '../../src/components/native/Screen';
 import { TextField } from '../../src/components/native/TextField';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { splitAppState } from '../../src/context/persistence';
+import { setActivitySfxEnabled, useActivitySfx } from '../../src/features/activities/sound-settings';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { verifyPin } from '../../src/utils/pin';
@@ -68,6 +70,20 @@ const tourRoute = '/onboarding/tour' as Href;
 const splashRoute = '/onboarding/splash' as Href;
 
 const MASCOT_HAPPY = require('../../assets/mascot_library/png_mascot/mascot_happy_looking_up.png');
+
+// Avatar symbols — bundled Mulberry IDs already used elsewhere in the app.
+// A symbol avatar is stored as `symbol:<id>` in profilePhotoUri.
+const AVATAR_SYMBOL_PREFIX = 'symbol:';
+const AVATAR_SYMBOLS: { symbolId: string; name: string }[] = [
+  { symbolId: 'mulberry_family_excv0f', name: 'Family' },
+  { symbolId: 'mulberry_cat_1lz3nun',   name: 'Cat' },
+  { symbolId: 'mulberry_dog_1bfmoh1',   name: 'Dog' },
+  { symbolId: 'mulberry_bird_13ztxas',  name: 'Bird' },
+  { symbolId: 'mulberry_fish_1u95ovx',  name: 'Fish' },
+  { symbolId: 'mulberry_rabbit_sjorvr', name: 'Rabbit' },
+  { symbolId: 'mulberry_horse_c0o22y',  name: 'Horse' },
+  { symbolId: 'mulberry_house_1ice1xp', name: 'House' },
+];
 
 const USER_TYPE_LABELS: Record<string, string> = {
   myself: 'AAC user',
@@ -132,7 +148,7 @@ interface RowProps {
 function SettingsRow({
   icon,
   iconColor,
-  iconBg = '#E6F4FD',
+  iconBg,
   label,
   value,
   hint,
@@ -144,11 +160,12 @@ function SettingsRow({
 }: RowProps) {
   const t = useTheme();
   const resolvedIconColor = iconColor ?? t.colors.primary;
+  const resolvedIconBg = iconBg ?? t.colors.iconTintBlueBg;
   const spokenLabel = value ? `${label}, ${value}` : label;
 
   const body = (
     <>
-      <View style={[styles.rowIcon, { backgroundColor: iconBg }]}>
+      <View style={[styles.rowIcon, { backgroundColor: resolvedIconBg }]}>
         <Ionicons name={icon} size={19} color={resolvedIconColor} />
       </View>
       <Text
@@ -341,6 +358,7 @@ export default function MeScreen() {
     about: false,
   });
   const [nameModalVisible, setNameModalVisible] = useState(false);
+  const [symbolPickerVisible, setSymbolPickerVisible] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [saveNotice, setSaveNotice] = useState('');
   const toggleSection = (key: keyof typeof open) =>
@@ -365,6 +383,9 @@ export default function MeScreen() {
   const initial = name.charAt(0).toUpperCase() || '?';
   const userType = state.user.role ? USER_TYPE_LABELS[state.user.role] ?? 'Other' : 'Not set';
   const hasPhoto = !!state.profilePhotoUri;
+  const avatarSymbolId = state.profilePhotoUri?.startsWith(AVATAR_SYMBOL_PREFIX)
+    ? state.profilePhotoUri.slice(AVATAR_SYMBOL_PREFIX.length)
+    : null;
   const voiceLabel = speechRateLabel(state.accessibility.speechRate);
   const textSizeLabel = TEXT_SIZE_LABELS[state.accessibility.textSize] ?? 'Default';
   const buttonSizeLabel = BUTTON_SIZE_LABELS[state.accessibility.buttonSize] ?? 'Standard';
@@ -388,11 +409,21 @@ export default function MeScreen() {
     [dispatch, showSaveNotice],
   );
 
-  const comingSoon = useCallback((feature: string) => {
-    Alert.alert(feature, 'This is coming soon. We are building it with care.', [
-      { text: 'OK', style: 'cancel' },
-    ]);
+  // Honest, calm copy for the parts that are not built yet (Rule 7 / Rule 30).
+  const notYetAvailable = useCallback((feature: string) => {
+    Alert.alert(
+      feature,
+      'Photo picking arrives in update 1.2. Your initial avatar or a symbol works today.',
+      [{ text: 'OK', style: 'cancel' }],
+    );
   }, []);
+
+  const chooseAvatarSymbol = useCallback((symbolId: string) => {
+    dispatch({ type: 'SET_PROFILE_PHOTO', payload: `${AVATAR_SYMBOL_PREFIX}${symbolId}` });
+    setSymbolPickerVisible(false);
+    hapticSuccess();
+    showSaveNotice('Profile symbol updated');
+  }, [dispatch, showSaveNotice]);
 
   // Profile picture ──
   const onProfilePicture = useCallback(() => {
@@ -422,9 +453,13 @@ export default function MeScreen() {
         showSaveNotice('Using TapTalk avatar');
         return;
       }
+      if (index === 1) {
+        setSymbolPickerVisible(true);
+        return;
+      }
       const option = options[index];
       if (!option) return;
-      comingSoon(option);
+      notYetAvailable(option);
     };
 
     if (Platform.OS === 'ios') {
@@ -442,7 +477,7 @@ export default function MeScreen() {
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
-  }, [hasPhoto, dispatch, comingSoon, showSaveNotice]);
+  }, [hasPhoto, dispatch, notYetAvailable, showSaveNotice]);
 
   const onEditDisplayName = useCallback(() => {
     hapticSelection();
@@ -531,6 +566,20 @@ export default function MeScreen() {
       payload: { highContrast: !state.accessibility.highContrast },
     });
   }, [dispatch, state.accessibility.highContrast]);
+
+  // Sounds & Haptics — real controls, not placeholders (Rule 8 — toggles for
+  // on/off settings; Rule 13 — the switch itself is the visible result).
+  const sfxEnabled = useActivitySfx();
+  const toggleActivitySfx = useCallback(() => {
+    setActivitySfxEnabled(!sfxEnabled);
+  }, [sfxEnabled]);
+
+  const toggleHaptics = useCallback(() => {
+    dispatch({
+      type: 'SET_ACCESSIBILITY',
+      payload: { hapticsEnabled: !state.accessibility.hapticsEnabled },
+    });
+  }, [dispatch, state.accessibility.hapticsEnabled]);
 
   const signOut = useCallback(() => {
     Alert.alert(
@@ -633,20 +682,23 @@ export default function MeScreen() {
         </Text>
       ) : null}
 
-      {/* ── 1 · User Card — always visible ── */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${name}. Voice and AAC profile ready.`}
-        accessibilityHint="Opens your profile details"
-        onPress={() => {
-          hapticSelection();
-          setOpen((prev) => ({ ...prev, userSettings: true }));
-        }}
-        style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-      >
-        <Card style={styles.userCard}>
-          <View style={[styles.avatar, { backgroundColor: t.colors.primary }]}>
-            {hasPhoto ? (
+      {/* ── 1 · User Card — always visible (Rule 1/2 — identity + quick
+             actions only, everything else stays in the groups below) ── */}
+      <Card style={styles.userCard}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${name}, ${userType}. Voice ready.`}
+          accessibilityHint="Opens your profile details"
+          onPress={() => {
+            hapticSelection();
+            setOpen((prev) => ({ ...prev, userSettings: true }));
+          }}
+          style={({ pressed }) => [styles.userCardTop, pressed && { opacity: 0.7 }]}
+        >
+          <View style={[styles.avatar, { backgroundColor: avatarSymbolId ? t.colors.iconTintBlueBg : t.colors.primary }]}>
+            {avatarSymbolId ? (
+              <MulberrySymbol symbolId={avatarSymbolId} size={40} />
+            ) : hasPhoto ? (
               <Image
                 source={{ uri: state.profilePhotoUri! }}
                 style={styles.avatarImage}
@@ -661,8 +713,20 @@ export default function MeScreen() {
               {name}
             </Text>
             <Text style={[styles.userMeta, { color: t.colors.textMuted }]} numberOfLines={1}>
-              Voice and AAC profile ready
+              {userType}
             </Text>
+            <View style={styles.userStatusRow}>
+              <Ionicons
+                name="checkmark-circle"
+                size={14}
+                color={t.colors.success}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+              />
+              <Text style={[styles.userStatus, { color: t.colors.textMuted }]} numberOfLines={1}>
+                Voice ready
+              </Text>
+            </View>
           </View>
           <Ionicons
             name="chevron-forward"
@@ -671,8 +735,46 @@ export default function MeScreen() {
             accessibilityElementsHidden
             importantForAccessibility="no"
           />
-        </Card>
-      </Pressable>
+        </Pressable>
+
+        {/* Quick actions (Rule 29 — high-value actions near the top) */}
+        <View style={[styles.quickActionsRow, { borderTopColor: t.colors.input }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Voice settings"
+            accessibilityHint="Opens voice, speed, and pitch settings"
+            onPress={() => {
+              hapticSelection();
+              router.push(voiceRoute);
+            }}
+            style={({ pressed }) => [
+              styles.quickAction,
+              { backgroundColor: t.colors.input },
+              pressed && { opacity: 0.75 },
+            ]}
+          >
+            <Ionicons name="mic-outline" size={18} color={t.colors.primary} />
+            <Text style={[styles.quickActionLabel, { color: t.colors.text }]}>Voice</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Display settings"
+            accessibilityHint="Opens text size, theme, and board appearance"
+            onPress={() => {
+              hapticSelection();
+              router.push(displayRoute);
+            }}
+            style={({ pressed }) => [
+              styles.quickAction,
+              { backgroundColor: t.colors.input },
+              pressed && { opacity: 0.75 },
+            ]}
+          >
+            <Ionicons name="grid-outline" size={18} color={t.colors.primary} />
+            <Text style={[styles.quickActionLabel, { color: t.colors.text }]}>Display</Text>
+          </Pressable>
+        </View>
+      </Card>
 
       {/* ── 2 · User Profile & Settings ── */}
       <CollapsibleSection
@@ -724,24 +826,32 @@ export default function MeScreen() {
         />
         <SettingsRow
           icon="musical-notes-outline"
-          iconColor="#FF9500"
-          iconBg="#FFF4E0"
-          label="Sounds & Haptics"
-          hint="Control sound effects and vibration feedback"
-          onPress={() => comingSoon('Sounds & Haptics')}
+          iconColor={t.colors.iconTintOrange}
+          iconBg={t.colors.iconTintOrangeBg}
+          label="Activity Sounds"
+          hint="Turns short sound cues in activity games on or off"
+          toggle={{ value: sfxEnabled, onValueChange: toggleActivitySfx }}
+        />
+        <SettingsRow
+          icon="radio-outline"
+          iconColor={t.colors.iconTintOrange}
+          iconBg={t.colors.iconTintOrangeBg}
+          label="Haptic Feedback"
+          hint="Turns gentle vibration on taps on or off"
+          toggle={{ value: state.accessibility.hapticsEnabled, onValueChange: toggleHaptics }}
         />
         <SettingsRow
           icon="grid-outline"
-          iconColor="#5CD65C"
-          iconBg="#E8FAE8"
+          iconColor={t.colors.iconTintGreen}
+          iconBg={t.colors.iconTintGreenBg}
           label="Board Appearance"
           hint="Change how the AAC board looks"
           onPress={() => router.push(displayRoute)}
         />
         <SettingsRow
           icon="language-outline"
-          iconColor="#BD73FF"
-          iconBg="#F3EAFF"
+          iconColor={t.colors.iconTintPurple}
+          iconBg={t.colors.iconTintPurpleBg}
           label="Language"
           value="English (AU)"
           hint="The language used for voice and labels"
@@ -769,8 +879,8 @@ export default function MeScreen() {
         />
         <SettingsRow
           icon="resize-outline"
-          iconColor="#5CD65C"
-          iconBg="#E8FAE8"
+          iconColor={t.colors.iconTintGreen}
+          iconBg={t.colors.iconTintGreenBg}
           label="Button Size"
           value={buttonSizeLabel}
           hint="Opens Display to change tap target size"
@@ -778,8 +888,8 @@ export default function MeScreen() {
         />
         <SettingsRow
           icon="contract-outline"
-          iconColor="#FF9500"
-          iconBg="#FFF4E0"
+          iconColor={t.colors.iconTintOrange}
+          iconBg={t.colors.iconTintOrangeBg}
           label="Reduce Motion"
           value={reduceMotion ? 'On' : 'Follows iOS'}
           hint="TapTalk follows the Reduce Motion setting in iOS Settings"
@@ -793,8 +903,8 @@ export default function MeScreen() {
         />
         <SettingsRow
           icon="contrast-outline"
-          iconColor="#BD73FF"
-          iconBg="#F3EAFF"
+          iconColor={t.colors.iconTintPurple}
+          iconBg={t.colors.iconTintPurpleBg}
           label="High Contrast"
           hint="Enables stronger borders and text in TapTalk"
           toggle={{ value: state.accessibility.highContrast, onValueChange: toggleHighContrast }}
@@ -832,8 +942,8 @@ export default function MeScreen() {
         <SubSectionLabel label="Privacy" />
         <SettingsRow
           icon="shield-checkmark-outline"
-          iconColor="#199AEE"
-          iconBg="#E6F4FD"
+          iconColor={t.colors.iconTintBlue}
+          iconBg={t.colors.iconTintBlueBg}
           label="Privacy Policy"
           hint="How TapTalk stores, uses, and protects your data"
           onPress={() => router.push(privacyPolicyRoute)}
@@ -906,8 +1016,8 @@ export default function MeScreen() {
         ) : null}
         <SettingsRow
           icon="camera-outline"
-          iconColor="#5CD65C"
-          iconBg="#E8FAE8"
+          iconColor={t.colors.iconTintGreen}
+          iconBg={t.colors.iconTintGreenBg}
           label="Camera Access"
           hint="TapTalk only uses the camera when you choose to take a profile photo"
           onPress={() =>
@@ -920,8 +1030,8 @@ export default function MeScreen() {
         />
         <SettingsRow
           icon="images-outline"
-          iconColor="#BD73FF"
-          iconBg="#F3EAFF"
+          iconColor={t.colors.iconTintPurple}
+          iconBg={t.colors.iconTintPurpleBg}
           label="Photo Access"
           hint="TapTalk only reads photos when you pick one for your profile"
           onPress={() =>
@@ -950,8 +1060,8 @@ export default function MeScreen() {
         />
         <SettingsRow
           icon="options-outline"
-          iconColor="#BD73FF"
-          iconBg="#F3EAFF"
+          iconColor={t.colors.iconTintPurple}
+          iconBg={t.colors.iconTintPurpleBg}
           label="Data & Privacy Choices"
           hint="Manage, export, delete, or request changes to your data"
           onPress={() => router.push(dataChoicesRoute)}
@@ -965,7 +1075,7 @@ export default function MeScreen() {
         <SettingsRow
           icon="trash-outline"
           iconColor={t.colors.danger}
-          iconBg="#FDECEC"
+          iconBg={t.colors.iconTintDangerBg}
           label="Delete Profile Data"
           destructive
           hint="Removes profile data from this device. Cannot be undone."
@@ -973,8 +1083,8 @@ export default function MeScreen() {
         />
         <SettingsRow
           icon="ribbon-outline"
-          iconColor="#FF9500"
-          iconBg="#FFF4E0"
+          iconColor={t.colors.iconTintOrange}
+          iconBg={t.colors.iconTintOrangeBg}
           label="Mulberry Symbols (CC BY-SA 4.0)"
           hint="View symbol licence and attribution"
           onPress={() => router.push(attributionRoute)}
@@ -998,8 +1108,8 @@ export default function MeScreen() {
         <SubSectionLabel label="Guide" />
         <SettingsRow
           icon="compass-outline"
-          iconColor="#199AEE"
-          iconBg="#E6F4FD"
+          iconColor={t.colors.iconTintBlue}
+          iconBg={t.colors.iconTintBlueBg}
           label="Replay the Tour"
           hint="Walk through Talk, Activity, Tools, and Profile again"
           onPress={() => router.push(tourRoute)}
@@ -1010,24 +1120,24 @@ export default function MeScreen() {
         <SubSectionLabel label="Legal" />
         <SettingsRow
           icon="document-text-outline"
-          iconColor="#434343"
-          iconBg="#EAEEF2"
+          iconColor={t.colors.iconTintNeutral}
+          iconBg={t.colors.iconTintNeutralBg}
           label="Terms of Use"
           hint="Plain-English rules for using TapTalk safely"
           onPress={() => router.push(termsRoute)}
         />
         <SettingsRow
           icon="medkit-outline"
-          iconColor="#5CD65C"
-          iconBg="#E8FAE8"
+          iconColor={t.colors.iconTintGreen}
+          iconBg={t.colors.iconTintGreenBg}
           label="Medical & Therapy Disclaimer"
           hint="TapTalk supports communication but does not replace professional advice"
           onPress={() => router.push(medicalDisclaimerRoute)}
         />
         <SettingsRow
           icon="ribbon-outline"
-          iconColor="#FF9500"
-          iconBg="#FFF4E0"
+          iconColor={t.colors.iconTintOrange}
+          iconBg={t.colors.iconTintOrangeBg}
           label="Licences & Attribution"
           hint="Symbol, icon, sound, font, and open-source credits"
           onPress={() => router.push(attributionRoute)}
@@ -1043,8 +1153,8 @@ export default function MeScreen() {
         <SettingsRow icon="information-circle-outline" label="App Version" value={APP_VERSION} info />
         <SettingsRow
           icon="mail-outline"
-          iconColor="#199AEE"
-          iconBg="#E6F4FD"
+          iconColor={t.colors.iconTintBlue}
+          iconBg={t.colors.iconTintBlueBg}
           label="Contact Support"
           hint="Email the developer for help or privacy questions"
           onPress={contactSupport}
@@ -1087,6 +1197,61 @@ export default function MeScreen() {
           Only sign out if you are finished using TapTalk on this device.
         </HelperCaption>
       </View>
+
+      {/* Symbol avatar picker (Rule 6 — focused modal, Rule 9 — pick one) */}
+      <Modal
+        visible={symbolPickerVisible}
+        animationType={reduceMotion ? 'fade' : 'slide'}
+        presentationStyle="formSheet"
+        onRequestClose={() => setSymbolPickerVisible(false)}
+      >
+        <View style={[styles.symbolPickerContainer, { backgroundColor: t.colors.background }]}>
+          <View style={styles.symbolPickerHeader}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+              onPress={() => {
+                hapticSelection();
+                setSymbolPickerVisible(false);
+              }}
+              hitSlop={12}
+              style={styles.symbolPickerCancel}
+            >
+              <Text style={[styles.symbolPickerCancelText, { color: t.colors.primary }]}>Cancel</Text>
+            </Pressable>
+            <Text style={[styles.symbolPickerTitle, { color: t.colors.text }]}>Choose Symbol</Text>
+            <View style={styles.symbolPickerSpacer} />
+          </View>
+          <View style={styles.symbolGrid}>
+            {AVATAR_SYMBOLS.map((s) => {
+              const isOn = avatarSymbolId === s.symbolId;
+              return (
+                <Pressable
+                  key={s.symbolId}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use ${s.name} symbol as profile picture`}
+                  accessibilityState={{ selected: isOn }}
+                  onPress={() => chooseAvatarSymbol(s.symbolId)}
+                  style={({ pressed }) => [
+                    styles.symbolCell,
+                    { backgroundColor: pressed || isOn ? t.colors.selectionBg : t.colors.input },
+                  ]}
+                >
+                  <MulberrySymbol symbolId={s.symbolId} size={44} />
+                  <Text style={[styles.symbolCellLabel, { color: t.colors.text }]} numberOfLines={1}>
+                    {s.name}
+                  </Text>
+                  {isOn ? (
+                    <View style={[styles.symbolCellCheck, { backgroundColor: t.colors.primary }]}>
+                      <Ionicons name="checkmark" size={12} color={t.colors.surface} />
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
 
       {/* Display name modal */}
       <Modal
@@ -1145,10 +1310,43 @@ export default function MeScreen() {
 const styles = StyleSheet.create({
   // ── User card ──
   userCard: {
+    marginBottom: spacing.xxl,
+  },
+  userCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginBottom: spacing.xxl,
+    minHeight: 60,
+  },
+  userStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  userStatus: {
+    fontFamily: fonts.body,
+    fontSize: typography.caption,
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    borderTopWidth: 1,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+  },
+  quickAction: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: 44,
+    borderRadius: radii.button,
+  },
+  quickActionLabel: {
+    fontFamily: fonts.displayBold,
+    fontSize: typography.callout,
   },
   saveNotice: {
     fontFamily: fonts.displayBold,
@@ -1359,5 +1557,66 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
+  },
+
+  // ── Symbol avatar picker ──
+  symbolPickerContainer: {
+    flex: 1,
+  },
+  symbolPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  symbolPickerCancel: {
+    minWidth: 60,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  symbolPickerCancelText: {
+    fontFamily: fonts.displayBold,
+    fontSize: typography.body,
+  },
+  symbolPickerTitle: {
+    fontFamily: fonts.displayHeavy,
+    fontSize: typography.heading,
+  },
+  symbolPickerSpacer: {
+    minWidth: 60,
+  },
+  symbolGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  symbolCell: {
+    width: 76,
+    minHeight: 76,
+    borderRadius: radii.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xs,
+    gap: 2,
+  },
+  symbolCellLabel: {
+    fontFamily: fonts.body,
+    fontSize: typography.caption,
+    maxWidth: 68,
+    textAlign: 'center',
+  },
+  symbolCellCheck: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -85,6 +85,30 @@ export const colorsLight = {
 
   /** selected option / pill background */
   selectionBg:        '#EAF6FE',
+
+  // ── Settings icon tints (chip icon + soft background pairs)
+  /** blue settings icon */
+  iconTintBlue:       '#199AEE',
+  /** blue settings icon chip background */
+  iconTintBlueBg:     '#E6F4FD',
+  /** orange settings icon */
+  iconTintOrange:     '#FF9500',
+  /** orange settings icon chip background */
+  iconTintOrangeBg:   '#FFF4E0',
+  /** green settings icon */
+  iconTintGreen:      '#5CD65C',
+  /** green settings icon chip background */
+  iconTintGreenBg:    '#E8FAE8',
+  /** purple settings icon */
+  iconTintPurple:     '#BD73FF',
+  /** purple settings icon chip background */
+  iconTintPurpleBg:   '#F3EAFF',
+  /** neutral settings icon */
+  iconTintNeutral:    '#434343',
+  /** neutral settings icon chip background */
+  iconTintNeutralBg:  '#EAEEF2',
+  /** danger settings icon chip background */
+  iconTintDangerBg:   '#FDECEC',
 } as const;
 
 export type ColorTokens = Record<keyof typeof colorsLight, string>;

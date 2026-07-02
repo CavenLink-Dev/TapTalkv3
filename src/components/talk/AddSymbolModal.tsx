@@ -4,7 +4,8 @@
  * Uses the existing `searchSymbols` service (no new data sources).
  *
  * Two-step flow (Rule 1 / Rule 5 — simple first, deeper detail on selection):
- *   Step 1 "find"      — search, category browse chips, recently added row.
+ *   Step 1 "find"      — search, category browse chips, recently added row,
+ *                        data-driven category filters over results.
  *   Step 2 "customise" — live tile preview, label, word type → Fitzgerald
  *                        colour (Rule 9 picker, Rule 23 never colour alone).
  */
@@ -71,6 +72,12 @@ const SWATCHES: { color: string; name: string }[] = [
   { color: '#34C759', name: 'green' },
   { color: '#0A84FF', name: 'blue' },
   { color: '#BF5AF2', name: 'purple' },
+  { color: '#FF2D55', name: 'pink' },
+  { color: '#64D2FF', name: 'sky' },
+  { color: '#00C7BE', name: 'teal' },
+  { color: '#5E5CE6', name: 'indigo' },
+  { color: '#A2845E', name: 'brown' },
+  { color: '#8E8E93', name: 'grey' },
 ];
 
 // Browse chips shown before any query is typed (Rule 28 — suggestions).
@@ -106,6 +113,8 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
   const [wordType, setWordType] = useState<WordTypeOption>(WORD_TYPES[2]!);
   const [color, setColor] = useState<string>(WORD_TYPES[2]!.color);
   const [recents, setRecents] = useState<RecentSymbol[]>([]);
+  // Data-driven category filter over the current results (Rule 28). null = All.
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -130,11 +139,13 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
       setCustomLabel('');
       setWordType(WORD_TYPES[2]!);
       setColor(WORD_TYPES[2]!.color);
+      setCategoryFilter(null);
     }
   }, [visible]);
 
   // Debounced search
   useEffect(() => {
+    setCategoryFilter(null); // a new query clears any category narrowing
     if (!query.trim()) { setResults([]); setLoading(false); return; }
     setLoading(true);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -243,6 +254,12 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
     </Pressable>
   ), [goToCustomise, t]);
 
+  // Distinct categories present in the current results, and the narrowed list.
+  const resultCategories = Array.from(new Set(results.map(r => r.concept.category))).sort();
+  const filteredResults = categoryFilter
+    ? results.filter(r => r.concept.category === categoryFilter)
+    : results;
+
   // ── Find step body ───────────────────────────────────────────────────
   const findBody = (
     <>
@@ -284,13 +301,51 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
             </ThemedText>
           </View>
         ) : (
-          <FlatList
-            data={results}
-            keyExtractor={item => item.symbol.id}
-            renderItem={renderItem}
-            contentContainerStyle={styles.listContent}
-            keyboardShouldPersistTaps="handled"
-          />
+          <>
+            {/* Category filter — chips narrow the results; All clears */}
+            {resultCategories.length > 1 && (
+              <View style={styles.filterRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Show all categories"
+                  accessibilityState={{ selected: categoryFilter === null }}
+                  onPress={() => { hapticSelection(); setCategoryFilter(null); }}
+                  style={[
+                    styles.filterChip,
+                    { backgroundColor: categoryFilter === null ? t.colors.selectionBg : t.colors.inputBg },
+                  ]}
+                >
+                  <ThemedText variant="caption" color={t.colors.text}>All</ThemedText>
+                </Pressable>
+                {resultCategories.map(cat => {
+                  const isOn = categoryFilter === cat;
+                  return (
+                    <Pressable
+                      key={cat}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Only show ${cat} symbols`}
+                      accessibilityState={{ selected: isOn }}
+                      onPress={() => { hapticSelection(); setCategoryFilter(isOn ? null : cat); }}
+                      style={[
+                        styles.filterChip,
+                        { backgroundColor: isOn ? t.colors.selectionBg : t.colors.inputBg },
+                      ]}
+                    >
+                      <ThemedText variant="caption" color={t.colors.text}>{cat}</ThemedText>
+                      {isOn && <Ionicons name="checkmark" size={12} color={t.colors.primary} />}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+            <FlatList
+              data={filteredResults}
+              keyExtractor={item => item.symbol.id}
+              renderItem={renderItem}
+              contentContainerStyle={styles.listContent}
+              keyboardShouldPersistTaps="handled"
+            />
+          </>
         )
       ) : (
         // Empty state → browse + recents instead of a bare icon (Rule 24/28)
@@ -620,6 +675,21 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
   },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.button,
+  },
   customiseContent: {
     paddingBottom: 40,
   },
@@ -654,6 +724,7 @@ const styles = StyleSheet.create({
   },
   swatchRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.md,
   },
   swatchHit: {

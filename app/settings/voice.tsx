@@ -1,9 +1,11 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
+import { DisclosureRow } from '../../src/components/native/DisclosureRow';
+import { WheelPicker } from '../../src/components/native/WheelPicker';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
@@ -26,12 +28,27 @@ const PITCH_OPTIONS: { label: string; value: number; description: string }[] = [
 
 const SAMPLE_PHRASE = 'Hello, I use TapTalk to communicate.';
 
+// Fine-tune wheel: 0.50× – 1.50× in 0.05 steps (Rule 9 — picker, not slider;
+// matches the app's native WheelPicker pattern).
+const FINE_RATES: number[] = Array.from({ length: 21 }, (_, i) =>
+  Math.round((0.5 + i * 0.05) * 100) / 100,
+);
+
+function nearestFineRate(rate: number): number {
+  let best = FINE_RATES[0]!;
+  for (const r of FINE_RATES) {
+    if (Math.abs(r - rate) < Math.abs(best - rate)) best = r;
+  }
+  return best;
+}
+
 export default function VoiceSettingsScreen() {
   const router = useRouter();
   const { state, dispatch } = useAppContext();
   const { speak, stop } = useSpeech();
   const t = useTheme();
   const { speechRate, speechPitch } = state.accessibility;
+  const [fineTuneOpen, setFineTuneOpen] = useState(false);
 
   const setRate = useCallback((value: number) => {
     hapticSelection();
@@ -84,7 +101,7 @@ export default function VoiceSettingsScreen() {
                   accessibilityRole="radio"
                   accessibilityState={{ checked: selected }}
                   accessibilityLabel={`${opt.label} rate. ${opt.description}`}
-                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: '#EAF6FE' }]}
+                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: t.colors.selectionBg }]}
                 >
                   <View style={styles.optionLeft}>
                     <Text style={[styles.optionLabel, { color: t.colors.text }, selected && { color: t.colors.primary }]}>
@@ -99,6 +116,26 @@ export default function VoiceSettingsScreen() {
               );
             })}
           </View>
+
+          {/* Fine-tune (Rule 3 — optional detail stays behind a disclosure) */}
+          <DisclosureRow
+            title="Fine-tune speed"
+            subtitle="Pick an exact speaking rate"
+            summary={`${speechRate.toFixed(2)}×`}
+            expanded={fineTuneOpen}
+            onToggle={() => setFineTuneOpen(v => !v)}
+          >
+            <View style={styles.wheelWrap}>
+              <WheelPicker
+                values={FINE_RATES}
+                selectedValue={nearestFineRate(speechRate)}
+                onChange={setRate}
+                format={(v) => `${v.toFixed(2)}×`}
+                width={110}
+                accessibilityLabel="Exact speaking rate"
+              />
+            </View>
+          </DisclosureRow>
         </Card>
 
         <Card style={styles.section}>
@@ -114,7 +151,7 @@ export default function VoiceSettingsScreen() {
                   accessibilityRole="radio"
                   accessibilityState={{ checked: selected }}
                   accessibilityLabel={`${opt.label} pitch. ${opt.description}`}
-                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: '#EAF6FE' }]}
+                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: t.colors.selectionBg }]}
                 >
                   <View style={styles.optionLeft}>
                     <Text style={[styles.optionLabel, { color: t.colors.text }, selected && { color: t.colors.primary }]}>
@@ -195,4 +232,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: typography.caption,
     marginTop: 2},
+  wheelWrap: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm},
 });
