@@ -40,7 +40,7 @@ import { MulberrySymbol, prewarmMulberryAssets } from '../../src/components/symb
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
 import { buildMessageUtterances } from '../../src/utils/speechRules';
-import { animation, colors, radii, spacing } from '../../src/theme/tokens';
+import { animation, colors, spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
@@ -120,8 +120,10 @@ const FINE = 44;
 const MAX_FW = 8; // 8 * 44 = 352px, roughly the full board width
 // Bottom dock spacing: 16px gap between dock and bottom tab bar edge.
 const DOCK_BOTTOM_GAP = spacing.lg; // 16
-// Edit dock button row height (minHeight 50 + vertical padding).
-const EDIT_DOCK_HEIGHT = 54;
+// Contextual dock control sizes (pt) — fixed, not tied to tileSize.
+const DOCK_ACTION_SIZE = 60;
+const DOCK_TOGGLE_SIZE = 44;
+const DOCK_GAP = 5;
 // Coarse tile-cell footprint of a placement — used for collision math
 // and multi-cell highlights. fw=2 → 1 col, fw=3 or 4 → 2 cols, fw=5 or 6 → 3.
 const coarseCols = (fw: number) => Math.ceil(fw / 2);
@@ -266,6 +268,122 @@ const BoardNavTile = React.memo(function BoardNavTile({ tile, size }: { tile: Bo
         {tile.label}
       </Text>
     </View>
+  );
+});
+
+// ── Contextual dock action ────────────────────────────────────────────────
+// A square, symbol-styled control used by the Talk board bottom dock. It is
+// visually distinct from AAC word/folder tiles (neutral fill + primary
+// outline) so it reads as "a button, not a symbol". Three visual kinds:
+//   • primary — filled primary (Done / Save / Add + on home)
+//   • neutral — soft fill, primary outline (Back / Home / Symbol / Folder / < / >)
+//   • muted   — soft fill, muted outline (Delete / Cancel) — avoids harsh red
+type DockActionKind = 'primary' | 'neutral' | 'muted';
+
+// Contextual dock states, highest render priority first.
+type DockMode =
+  | 'homeIdle'        // Add +
+  | 'addExpanded'     // Back / Symbol / Folder / <
+  | 'folderExpanded'  // Back / Home / <
+  | 'folderCollapsed' // >
+  | 'editClean'       // Delete? / Add + / Done
+  | 'editDirty';      // Cancel / Save
+
+const BoardDockAction = React.memo(function BoardDockAction({
+  label,
+  a11yLabel,
+  a11yHint,
+  onPress,
+  size = DOCK_ACTION_SIZE,
+  kind = 'neutral',
+  disabled = false,
+  isToggle = false,
+  isActive = false,
+  isChevron = false,
+}: {
+  label: string;
+  a11yLabel: string;
+  a11yHint?: string;
+  onPress: () => void;
+  size?: number;
+  kind?: DockActionKind;
+  disabled?: boolean;
+  /** 44pt square — Add toggle or < > chevrons. */
+  isToggle?: boolean;
+  /** Toggle is on (Add flow open). */
+  isActive?: boolean;
+  /** Large chevron glyph for < > only. */
+  isChevron?: boolean;
+}) {
+  const t = useTheme();
+  const dim = isToggle ? DOCK_TOGGLE_SIZE : size;
+  const softFill = t.isDark ? t.colors.surface : '#F4F6F8';
+  const effectiveKind: DockActionKind =
+    isActive && isToggle && !isChevron ? 'primary' : kind;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={a11yLabel}
+      accessibilityHint={a11yHint}
+      accessibilityState={{ disabled, selected: isActive }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => {
+        const bg =
+          pressed
+            ? effectiveKind === 'primary'
+              ? t.colors.primaryPressed
+              : effectiveKind === 'muted'
+                ? (t.isDark ? t.colors.input : '#E0E4E8')
+                : (t.isDark ? t.colors.input : colors.softBlue)
+            : effectiveKind === 'primary'
+              ? t.colors.primary
+              : softFill;
+        return [
+          styles.dockAction,
+          {
+            width: dim,
+            height: dim,
+            backgroundColor: bg,
+            borderColor: pressed && effectiveKind !== 'primary'
+              ? t.colors.primaryDark
+              : effectiveKind === 'muted'
+                ? t.colors.textTertiary
+                : t.colors.primary,
+            borderWidth: effectiveKind === 'primary' ? 0 : 1.6,
+          },
+          disabled && { opacity: 0.4 },
+        ];
+      }}
+    >
+      {({ pressed }) => (
+        <Text
+          style={[
+            isChevron
+              ? styles.dockChevronLabel
+              : isToggle
+                ? styles.dockAddToggleLabel
+                : styles.dockActionLabel,
+            {
+              color:
+                pressed && effectiveKind !== 'primary'
+                  ? t.colors.primaryDark
+                  : effectiveKind === 'primary'
+                    ? '#FFFFFF'
+                    : effectiveKind === 'muted'
+                      ? t.colors.textMuted
+                      : t.colors.primary,
+            },
+          ]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.65}
+        >
+          {label}
+        </Text>
+      )}
+    </Pressable>
   );
 });
 
@@ -995,7 +1113,7 @@ interface BoardTileButtonProps {
   resolved?: ResolvedSymbol;
   // ── Drag + edit-mode plumbing ──
   editMode?: boolean;
-  onLongPressEnterEdit?: () => void;
+  onLongPressEnterEdit?: (tileId: string) => void;
   /** Slot index of this tile in the grid (0-based, row-major). */
   slot?: number;
   /** Total tile count for clamping the snap target. */
@@ -1380,7 +1498,7 @@ function BoardTileButton({
           accessibilityActions={accessibilityActions}
           onAccessibilityAction={handleAccessibilityAction}
           onPress={handlePress}
-          onLongPress={!editMode && !isNav ? onLongPressEnterEdit : undefined}
+          onLongPress={!editMode && !isNav ? () => onLongPressEnterEdit?.(tile.id) : undefined}
           delayLongPress={450}
           onPressIn={() => !editMode && animateTo(0.94)}
           onPressOut={() => !editMode && animateTo(1)}
@@ -1451,7 +1569,7 @@ const BoardTileCell = React.memo(function BoardTileCell({
   resolved?: ResolvedSymbol;
   onTilePress: (tile: BoardTile, rect: WindowRect | null) => void;
   editMode?: boolean;
-  onLongPressEnterEdit?: () => void;
+  onLongPressEnterEdit?: (tileId: string) => void;
   onMoveToSlot?: (tileId: string, targetSlot: number) => void;
   onHide?: (tile: BoardTile) => void;
   onResize?: (tileId: string, newFw: number, newFh: number) => void;
@@ -1674,6 +1792,15 @@ export default function TalkScreen() {
   const [boardAreaHeight, setBoardAreaHeight] = useState(0);
   const [layoutDirty, setLayoutDirty] = useState(false);
   const layoutSnapshotRef = useRef<BoardLayout | null>(null);
+  // ── Contextual dock state ────────────────────────────────────────────────
+  // addFlowExpanded: Add + sub-menu open (Back / Symbol / Folder / <)
+  // folderDockExpanded: folder nav shows Back/Home/< (true) or collapsed > (false)
+  // editFocusTileId: the tile long-pressed to enter edit mode → Delete target
+  const [addFlowExpanded, setAddFlowExpanded] = useState(false);
+  const [folderDockExpanded, setFolderDockExpanded] = useState(false);
+  const [editFocusTileId, setEditFocusTileId] = useState<string | null>(null);
+  const folderCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dockFade = useRef(new RNAnimated.Value(1)).current;
   const messageWordsRef = useRef(state.messageWords);
   messageWordsRef.current = state.messageWords;
 
@@ -1710,12 +1837,14 @@ export default function TalkScreen() {
   }, [editMode, gridOverlayOpacity, jiggle, reduceMotion]);
 
   // ── Edit mode callbacks ──────────────────────────────────────────────────
-  const handleEnterEdit = useCallback(() => {
+  const enterEditFromTile = useCallback((tileId: string) => {
     hapticIfEnabled();
     const current: BoardLayout = layouts[activeMode]
       ?? BOARD_TILES[activeMode].map((t, i) => ({ id: t.id, slot: i, fw: 2, fh: 2 }));
     layoutSnapshotRef.current = current.map(p => ({ ...p }));
     setLayoutDirty(false);
+    setEditFocusTileId(tileId);
+    setAddFlowExpanded(false);
     setEditMode(true);
   }, [activeMode, hapticIfEnabled, layouts]);
 
@@ -1723,6 +1852,8 @@ export default function TalkScreen() {
     hapticIfEnabled();
     setEditMode(false);
     setLayoutDirty(false);
+    setEditFocusTileId(null);
+    setAddFlowExpanded(false);
     layoutSnapshotRef.current = null;
     snapSlot.value = -1;
   }, [hapticIfEnabled, snapSlot]);
@@ -1757,6 +1888,139 @@ export default function TalkScreen() {
     if (layoutDirty) { handleCancelEdit(); return; }
     exitEditClean();
   }, [exitEditClean, handleCancelEdit, layoutDirty]);
+
+  // Long-press on a tile: enter edit (focusing that tile) or, if already in
+  // edit mode, exit via the shared exit logic (which prompts when dirty).
+  const handleTileLongPress = useCallback((tileId: string) => {
+    if (editMode) { handleExitEdit(); return; }
+    enterEditFromTile(tileId);
+  }, [editMode, enterEditFromTile, handleExitEdit]);
+
+  // Tap-outside overlay: never silently discard. When dirty the user must use
+  // the visible Cancel / Save dock; a clean edit session exits immediately.
+  const handleOverlayPress = useCallback(() => {
+    if (layoutDirty) return;
+    exitEditClean();
+  }, [exitEditClean, layoutDirty]);
+
+  // ── Folder dock collapse timer (15s) ──────────────────────────────────────
+  const clearFolderTimer = useCallback(() => {
+    if (folderCollapseTimerRef.current) {
+      clearTimeout(folderCollapseTimerRef.current);
+      folderCollapseTimerRef.current = null;
+    }
+  }, []);
+
+  const startFolderCollapseTimer = useCallback(() => {
+    clearFolderTimer();
+    folderCollapseTimerRef.current = setTimeout(() => {
+      setFolderDockExpanded(false);
+    }, 15000);
+  }, [clearFolderTimer]);
+
+  // ── Dock action handlers ──────────────────────────────────────────────────
+  const handleDockAddToggle = useCallback(() => {
+    hapticIfEnabled();
+    setAddFlowExpanded(v => !v);
+  }, [hapticIfEnabled]);
+
+  const handleDockAddPlus = useCallback(() => {
+    hapticIfEnabled();
+    setAddFlowExpanded(true);
+  }, [hapticIfEnabled]);
+
+  const handleAddFlowClose = useCallback(() => {
+    hapticIfEnabled();
+    setAddFlowExpanded(false);
+  }, [hapticIfEnabled]);
+
+  const handleDockSymbol = useCallback(() => {
+    hapticIfEnabled();
+    Alert.alert('Add symbol', 'Adding new symbols is coming soon.', [{ text: 'OK' }]);
+  }, [hapticIfEnabled]);
+
+  const handleDockAddFolder = useCallback(() => {
+    hapticIfEnabled();
+    Alert.alert('Add folder', 'Adding new folders is coming soon.', [{ text: 'OK' }]);
+  }, [hapticIfEnabled]);
+
+  const handleFolderCollapse = useCallback(() => {
+    hapticIfEnabled();
+    clearFolderTimer();
+    setFolderDockExpanded(false);
+  }, [clearFolderTimer, hapticIfEnabled]);
+
+  const handleFolderExpand = useCallback(() => {
+    hapticIfEnabled();
+    setFolderDockExpanded(true);
+    startFolderCollapseTimer();
+  }, [hapticIfEnabled, startFolderCollapseTimer]);
+
+  const handleDockDone = useCallback(() => {
+    exitEditClean();
+  }, [exitEditClean]);
+
+  // Direct revert without an alert — the Cancel button is already an explicit,
+  // visible choice (principle 12: separate destructive actions, but no scary
+  // dialog when the control itself is the confirmation).
+  const handleDockCancel = useCallback(() => {
+    hapticIfEnabled();
+    if (layoutSnapshotRef.current) {
+      setLayouts(prev => ({ ...prev, [activeMode]: layoutSnapshotRef.current! }));
+    }
+    exitEditClean();
+  }, [activeMode, exitEditClean, hapticIfEnabled]);
+
+  // ── Dock mode resolver (priority: dirty edit > add > edit > folder) ────────
+  const dockMode = useMemo<DockMode>(() => {
+    if (editMode) {
+      if (layoutDirty) return 'editDirty';
+      if (addFlowExpanded) return 'addExpanded';
+      return 'editClean';
+    }
+    if (addFlowExpanded) return 'addExpanded';
+    if (activeMode === 'home') return 'homeIdle';
+    return folderDockExpanded ? 'folderExpanded' : 'folderCollapsed';
+  }, [activeMode, addFlowExpanded, editMode, folderDockExpanded, layoutDirty]);
+
+  // On board change: reset add flow; folders start expanded with a 15s timer,
+  // home clears folder nav entirely.
+  useEffect(() => {
+    setAddFlowExpanded(false);
+    if (activeMode === 'home') {
+      setFolderDockExpanded(false);
+      clearFolderTimer();
+    } else {
+      setFolderDockExpanded(true);
+      startFolderCollapseTimer();
+    }
+    return clearFolderTimer;
+  }, [activeMode, clearFolderTimer, startFolderCollapseTimer]);
+
+  // Entering edit mode hides folder nav + any open add flow.
+  useEffect(() => {
+    if (editMode) {
+      setFolderDockExpanded(false);
+      setAddFlowExpanded(false);
+      clearFolderTimer();
+    }
+  }, [editMode, clearFolderTimer]);
+
+  // A layout change (dirty) closes the add sub-flow so Cancel/Save can take over.
+  useEffect(() => {
+    if (layoutDirty) setAddFlowExpanded(false);
+  }, [layoutDirty]);
+
+  // Calm crossfade whenever the dock content changes; instant under Reduce Motion.
+  useEffect(() => {
+    if (reduceMotion) { dockFade.setValue(1); return; }
+    dockFade.setValue(0);
+    RNAnimated.timing(dockFade, {
+      toValue: 1,
+      duration: 150,
+      useNativeDriver: true,
+    }).start();
+  }, [dockMode, reduceMotion, dockFade]);
 
   const handleMoveToSlot = useCallback((tileId: string, targetSlot: number) => {
     setLayouts(prev => {
@@ -1919,6 +2183,9 @@ export default function TalkScreen() {
     TILE_SIZE,
     Math.floor((boardWidth - TILE_LEFT_PADDING * 2 - TILE_GAP * (BOARD_COLUMNS - 1)) / BOARD_COLUMNS),
   );
+  // Dock actions are fixed 60pt squares; toggles (< >) are 50pt.
+  const dockPadLeft = insets.left + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2);
+  const dockPadRight = insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2);
 
   // Lookup map: tileId → BoardTile for the active mode.
   const tileMapForMode = useMemo(
@@ -2241,6 +2508,27 @@ export default function TalkScreen() {
     startGhostToMessage(tile, rect);
   }, [announce, clearMessage, dispatch, hapticIfEnabled, navigateTo, previousMode, repeatMessage, startGhostToMessage]);
 
+  // Folder dock Back / Home reuse the tile-press navigation logic.
+  const handleDockBack = useCallback(() => handleTilePress(BACK_TILE, null), [handleTilePress]);
+  const handleDockHome = useCallback(() => handleTilePress(HOME_TILE, null), [handleTilePress]);
+
+  // Delete removes the focused tile's placement from the in-memory layout for
+  // the current board only. Marks the session dirty so Cancel/Save appear.
+  const handleDockDelete = useCallback(() => {
+    if (!editFocusTileId) return;
+    hapticIfEnabled();
+    const target = editFocusTileId;
+    setLayouts(prev => {
+      const current: BoardLayout = prev[activeMode]
+        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+      const next = current.filter(p => p.id !== target);
+      return { ...prev, [activeMode]: next };
+    });
+    setLayoutDirty(true);
+    setEditFocusTileId(null);
+    announce('Tile deleted');
+  }, [activeMode, announce, editFocusTileId, hapticIfEnabled]);
+
   const handleTopTab = useCallback((tab: TopTab) => {
     hapticIfEnabled();
     // TAPTALK opens the dedicated keyboard page (new route — see
@@ -2316,11 +2604,12 @@ export default function TalkScreen() {
           onTabPress={handleTopTab}
         />
 
-        {/* Tap-outside overlay exits edit mode without consuming tile presses */}
+        {/* Tap-outside overlay exits a clean edit session; when dirty it is a
+            no-op so changes are never silently discarded (use Cancel/Save). */}
         {editMode ? (
           <Pressable
             style={StyleSheet.absoluteFillObject}
-            onPress={handleExitEdit}
+            onPress={handleOverlayPress}
             accessible={false}
             importantForAccessibility="no"
           />
@@ -2354,13 +2643,13 @@ export default function TalkScreen() {
                 (m, p) => Math.max(m, p.slot), -1,
               );
               const tileRows = maxSlot >= 0 ? Math.floor(maxSlot / BOARD_COLUMNS) + 1 : 0;
-              // Measured board area minus fixed chrome. Falls back to old
-              // estimate when onLayout hasn't fired yet.
-              const dockH = editMode
-                ? EDIT_DOCK_HEIGHT + DOCK_BOTTOM_GAP
-                : (activeMode !== 'home' ? tileSize + TILE_GAP + DOCK_BOTTOM_GAP : 0);
+              // Measured board area minus fixed chrome. The dock is always
+              // visible (home shows Add +), so its height is constant: one
+              // action row + top padding + bottom gap. Falls back to an
+              // estimate before onLayout fires.
+              const dockContentH = DOCK_ACTION_SIZE + spacing.sm + DOCK_BOTTOM_GAP;
               const measuredViewH = boardAreaHeight > 0
-                ? boardAreaHeight - BOARD_TOP_GAP - 10 - dockH
+                ? boardAreaHeight - BOARD_TOP_GAP - 10 - dockContentH
                 : screenHeight - MESSAGE_HEIGHT - BOARD_TOP_GAP - 100 - 50;
               const viewportRows = Math.max(1, Math.ceil(measuredViewH / rowStep));
               const gridRows = Math.max(tileRows, viewportRows);
@@ -2406,7 +2695,7 @@ export default function TalkScreen() {
                           onTilePress={handleTilePress}
                           resolved={resolvedSymbols.get(tile.id)}
                           editMode={editMode}
-                          onLongPressEnterEdit={editMode ? handleExitEdit : handleEnterEdit}
+                          onLongPressEnterEdit={handleTileLongPress}
                           onMoveToSlot={handleMoveToSlot}
                           onHide={handleHide}
                           onResize={handleResize}
@@ -2444,63 +2733,119 @@ export default function TalkScreen() {
             })()}
           </ScrollView>
 
-          {/* ── Bottom dock: Back/Home (folders) or Done/Save/Cancel (edit) ── */}
-          {editMode ? (
-            <View style={[styles.boardDock, { paddingBottom: DOCK_BOTTOM_GAP, paddingHorizontal: spacing.md }]}>
-              {layoutDirty ? (
-                <View style={styles.dockButtonRow}>
-                  <Pressable
-                    onPress={handleCancelEdit}
-                    accessibilityRole="button"
-                    accessibilityLabel="Cancel layout changes"
-                    style={({ pressed }) => [styles.dockBtn, styles.dockBtnGhost, pressed && { opacity: 0.85 }]}
-                  >
-                    <Text style={[styles.dockBtnText, { color: t.colors.text }]}>Cancel</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={handleSaveEdit}
-                    accessibilityRole="button"
-                    accessibilityLabel="Save layout changes"
-                    style={({ pressed }) => [styles.dockBtn, styles.dockBtnPrimary, pressed && { opacity: 0.85 }]}
-                  >
-                    <Text style={styles.dockBtnPrimaryText}>Save</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Pressable
-                  onPress={exitEditClean}
-                  accessibilityRole="button"
-                  accessibilityLabel="Done editing"
-                  style={({ pressed }) => [styles.dockBtn, styles.dockBtnPrimary, { alignSelf: 'center', minWidth: 140 }, pressed && { opacity: 0.85 }]}
-                >
-                  <Text style={styles.dockBtnPrimaryText}>Done</Text>
-                </Pressable>
-              )}
-            </View>
-          ) : activeMode !== 'home' ? (
-            <View style={[styles.boardDock, { paddingBottom: DOCK_BOTTOM_GAP }]}>
-              <View
-                style={[
-                  styles.navRow,
-                  {
-                    paddingLeft: insets.left + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
-                    paddingRight: insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
-                  },
-                ]}
-              >
-                <BoardTileCell
-                  tile={BACK_TILE}
-                  size={tileSize}
-                  onTilePress={handleTilePress}
+          {/* ── Unified contextual dock (fixed, outside the ScrollView) ── */}
+          <RNAnimated.View
+            accessibilityRole="toolbar"
+            accessibilityLabel="Board actions"
+            style={[
+              styles.boardDock,
+              {
+                paddingBottom: DOCK_BOTTOM_GAP,
+                paddingLeft: dockPadLeft,
+                paddingRight: dockPadRight,
+                opacity: dockFade,
+              },
+            ]}
+          >
+            <View style={styles.dockRow}>
+              {dockMode === 'homeIdle' ? (
+                <BoardDockAction
+                  label="Add"
+                  a11yLabel="Add item"
+                  a11yHint="Opens add options"
+                  onPress={handleDockAddToggle}
+                  isToggle
                 />
-                <BoardTileCell
-                  tile={HOME_TILE}
-                  size={tileSize}
-                  onTilePress={handleTilePress}
-                />
-              </View>
+              ) : dockMode === 'addExpanded' ? (
+                <>
+                  <BoardDockAction
+                    label="< Back" a11yLabel="Back" a11yHint="Close add options"
+                    onPress={handleAddFlowClose} kind="neutral"
+                  />
+                  <BoardDockAction
+                    label="Symbol" a11yLabel="Add symbol"
+                    onPress={handleDockSymbol} kind="neutral"
+                  />
+                  <BoardDockAction
+                    label="Folder" a11yLabel="Add folder"
+                    onPress={handleDockAddFolder} kind="neutral"
+                  />
+                  <BoardDockAction
+                    label="Add"
+                    a11yLabel="Add item"
+                    a11yHint="Close add options"
+                    onPress={handleDockAddToggle}
+                    isToggle
+                    isActive
+                  />
+                </>
+              ) : dockMode === 'folderExpanded' ? (
+                <>
+                  <BoardDockAction
+                    label="< Back" a11yLabel="Back"
+                    onPress={handleDockBack} kind="neutral"
+                  />
+                  <BoardDockAction
+                    label="Home" a11yLabel="Go to home board"
+                    onPress={handleDockHome} kind="neutral"
+                  />
+                  <BoardDockAction
+                    label="<" a11yLabel="Collapse actions"
+                    onPress={handleFolderCollapse} isToggle isChevron
+                  />
+                  <BoardDockAction
+                    label="Add"
+                    a11yLabel="Add item"
+                    a11yHint="Opens add options"
+                    onPress={handleDockAddToggle}
+                    isToggle
+                  />
+                </>
+              ) : dockMode === 'folderCollapsed' ? (
+                <>
+                  <BoardDockAction
+                    label=">" a11yLabel="Expand actions" a11yHint="Shows Back and Home"
+                    onPress={handleFolderExpand} isToggle isChevron
+                  />
+                  <BoardDockAction
+                    label="Add"
+                    a11yLabel="Add item"
+                    a11yHint="Opens add options"
+                    onPress={handleDockAddToggle}
+                    isToggle
+                  />
+                </>
+              ) : dockMode === 'editDirty' ? (
+                <>
+                  <BoardDockAction
+                    label="Cancel" a11yLabel="Cancel changes"
+                    onPress={handleDockCancel} kind="muted"
+                  />
+                  <BoardDockAction
+                    label="Save" a11yLabel="Save changes"
+                    onPress={handleSaveEdit} kind="primary"
+                  />
+                </>
+              ) : dockMode === 'editClean' ? (
+                <>
+                  {editFocusTileId ? (
+                    <BoardDockAction
+                      label="Delete" a11yLabel="Delete selected tile"
+                      onPress={handleDockDelete} kind="muted"
+                    />
+                  ) : null}
+                  <BoardDockAction
+                    label="Add +" a11yLabel="Add item" a11yHint="Opens add options"
+                    onPress={handleDockAddPlus} kind="neutral"
+                  />
+                  <BoardDockAction
+                    label="Done" a11yLabel="Finish editing"
+                    onPress={handleDockDone} kind="primary"
+                  />
+                </>
+              ) : null}
             </View>
-          ) : null}
+          </RNAnimated.View>
         </View>
 
         <View pointerEvents="none" style={styles.ghostOverlay}>
@@ -2770,35 +3115,31 @@ const styles = StyleSheet.create({
   boardDock: {
     paddingTop: spacing.sm,
   },
-  dockButtonRow: {
+  dockRow: {
     flexDirection: 'row',
-    gap: spacing.md,
-    justifyContent: 'center',
+    alignItems: 'center',
+    gap: DOCK_GAP,
   },
-  dockBtn: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: radii.pill,
+  dockAction: {
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: 4,
   },
-  dockBtnPrimary: {
-    backgroundColor: colors.primary,
+  dockActionLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  dockBtnGhost: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    backgroundColor: 'transparent',
+  dockAddToggleLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  dockBtnText: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  dockBtnPrimaryText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  dockChevronLabel: {
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   navRow: {
     flexDirection: 'row',
