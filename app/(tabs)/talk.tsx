@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityActionEvent,
   AccessibilityInfo,
   Alert,
   Animated as RNAnimated,
   Easing as RNEasing,
-  LayoutChangeEvent,
+  LayoutAnimation,
   LayoutRectangle,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -20,10 +20,13 @@ import Reanimated, {
   cancelAnimation,
   Easing as ReanimatedEasing,
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withRepeat,
   withSequence,
+  withSpring,
   withTiming,
   SharedValue,
 } from 'react-native-reanimated';
@@ -75,6 +78,19 @@ type BoardTile = {
 
 type WindowRect = LayoutRectangle;
 
+// Tile placement: which slot it starts in (coarse 88+10px grid), and
+// its size in TILE UNITS. fw=1 → one 88px tile, fw=2 → 186px (spans
+// 2 slots). Default is fw=fh=1. Resize grows in whole tile-unit steps
+// so placements always align cleanly with the background grid.
+type TilePlacement = {
+  id: string;
+  slot: number;
+  fw: number;
+  fh: number;
+};
+
+type BoardLayout = TilePlacement[];
+
 type GhostTile = {
   id: string;
   tile: BoardTile;
@@ -87,23 +103,24 @@ const FIGMA_WIDTH = 393;
 const MESSAGE_HEIGHT = 104;
 const TOP_NAV_HEIGHT = 76;
 const BOARD_COLUMNS = 4;
-// +1pt of breathing room between every tile — picks up the request to
-// loosen the grid without dropping a column. Drives both the horizontal
-// `columnGap` and vertical `rowGap` on `boardContent`, and is factored
-// into `tileSize` so the right column still lands inside the safe-area
-// gutter.
-const TILE_GAP = 4;
-// 4pt gutter on top of the safe-area inset. Halved from 8pt because the
-// side margin was still reading as wasted space — the freed width below
-// goes straight into the tiles via the `tileSize` row maths.
-const TILE_LEFT_PADDING = 4;
-const BOARD_TOP_GAP = 36;
-// Soft cap on tile size. Actual size is `min(TILE_SIZE, fit-to-row)`, so
-// on a standard 390-393pt iPhone the row maths drives the tile to ~94pt
-// (up from 91 at 8pt gutter). On wider devices (Plus / Pro Max / iPad)
-// tiles cap here — raised from 96 so the recovered gutter space actually
-// produces bigger folders/symbols instead of leftover whitespace.
-const TILE_SIZE = 104;
+// 10pt uniform gap between columns and rows — outer spacing, not inner.
+const TILE_GAP = 10;
+const TILE_V_GAP = 10;
+// 5pt side gutter. With TILE_GAP=10 and TILE_SIZE=88, this produces
+// exactly 88pt tiles on a 393pt iPhone: (393-10-30)/4 = 88.
+const TILE_LEFT_PADDING = 5;
+const BOARD_TOP_GAP = 32;
+// Hard cap at 88pt — the AAC standard square size.
+const TILE_SIZE = 88;
+// Fine grid unit: resize handles snap in 44px increments (half a tile).
+// Default tile is fw=fh=2 (88×88); each drag step grows by 44px so users
+// get finer control than whole-tile jumps.
+const FINE = 44;
+const MAX_FW = 8; // 8 * 44 = 352px, roughly the full board width
+// Coarse tile-cell footprint of a placement — used for collision math
+// and multi-cell highlights. fw=2 → 1 col, fw=3 or 4 → 2 cols, fw=5 or 6 → 3.
+const coarseCols = (fw: number) => Math.ceil(fw / 2);
+const coarseRows = (fh: number) => Math.ceil(fh / 2);
 // All board tiles — folders and words alike — render as perfect squares so
 // the grid reads as a single rhythm. The previous `FOLDER_HEIGHT_RATIO`
 // made folders ~3% taller than words, which showed up as "Foods looks
@@ -135,17 +152,11 @@ function wordBackgroundForTile(tile: BoardTile) {
 // neutral outlined Ionicons + uppercase text labels — matches the bottom
 // nav vocabulary (one tint, two states: idle grey, active brand blue).
 const TOP_TAB_META: Record<TopTab, { icon: React.ComponentProps<typeof Ionicons>['name']; label: string }> = {
-  taptalk: { icon: 'keypad-outline',         label: 'TAPTALK' },
-  quick:   { icon: 'flash-outline',          label: 'QUICK'   },
-  edit:    { icon: 'create-outline',         label: 'EDIT'    },
-  clear:   { icon: 'close-circle-outline',   label: 'CLEAR'   },
+  taptalk: { icon: 'keypad',       label: 'TAPTALK' },
+  quick:   { icon: 'flash',        label: 'QUICK'   },
+  edit:    { icon: 'create',       label: 'EDIT'    },
+  clear:   { icon: 'close-circle', label: 'CLEAR'   },
 };
-
-// Active state mirrors the bottom-nav outline weight — a deep neutral
-// rather than brand blue, so the press feedback reads as "selected" without
-// shouting. Was `colors.primary` (#199AEE); the blue felt disconnected from
-// the rest of the chrome.
-const TOP_TAB_IDLE_COLOR = '#8A8F95';
 
 // ─── Symbol palette ──────────────────────────────────────────────────────────
 // Vibrant, matte primaries chosen from the iOS system palette. The tile
@@ -251,28 +262,54 @@ const BoardNavTile = React.memo(function BoardNavTile({ tile, size }: { tile: Bo
 // the tile size, which keeps them comfortably below the label without
 // crowding. Returns null when the tile has no symbol assigned so existing
 // tiles (e.g. People, Places) stay clean until we curate one for them.
-function TileSymbol({ tile, size, resolved }: { tile: BoardTile; size: number; resolved?: ResolvedSymbol }) {
+function TileSymbol({ tile, width, height, resolved, horizontal }: {
+  tile: BoardTile; width: number; height: number; resolved?: ResolvedSymbol; horizontal?: boolean;
+}) {
   const symbolId = tile.mulberrySymbolId ?? resolved?.symbol.id;
   const symbolName = tile.mulberryName;
   if (!symbolId && !symbolName) return null;
-  const symbolSize = Math.round(size * 0.52);
+  // Two layout modes:
+  //  • horizontal — for wide (landscape) tiles: symbol fills the LEFT half,
+  //    label on the right. Symbol size = height * 0.78 (fills vertically).
+  //  • vertical (default) — label at top, symbol fills remaining area.
+  //    Symbol size scales with the smaller dimension bumped to 0.72 so
+  //    it reads MUCH bigger than the previous 0.58 baseline.
+  if (horizontal) {
+    const size = Math.round(Math.min(width * 0.42, height * 0.78));
+    return (
+      <View
+        style={{
+          position: 'absolute', left: 4, top: 0, bottom: 0,
+          width: Math.round(width * 0.42),
+          alignItems: 'center', justifyContent: 'center',
+        }}
+        pointerEvents="none"
+      >
+        <MulberrySymbol symbolId={symbolId} name={symbolName} size={size} />
+      </View>
+    );
+  }
+  const size = Math.round(Math.min(width * 0.85, height * 0.72));
   return (
     <View style={styles.symbolMount} pointerEvents="none">
-      <MulberrySymbol symbolId={symbolId} name={symbolName} size={symbolSize} />
+      <MulberrySymbol symbolId={symbolId} name={symbolName} size={size} />
     </View>
   );
 }
 
-function BoardFolderTile({ tile, size, resolved }: { tile: BoardTile; size: number; resolved?: ResolvedSymbol }) {
+function BoardFolderTile({ tile, width, height, resolved }: { tile: BoardTile; width: number; height: number; resolved?: ResolvedSymbol }) {
   const t = useTheme();
   const edgeColor = t.isDark ? t.colors.border : t.colors.primary;
-  const tabWidth = Math.round(size * 0.48);
-  const tabHeight = Math.round(size * 0.17);
-  const faceTop = Math.round(size * 0.08);
-  // Folder tiles render at the same square footprint as word tiles so the
-  // grid reads as one rhythm regardless of `kind`.
+  // When the tile is much wider than tall (aspect > 1.5), use a
+  // horizontal layout: symbol on the left, label on the right. This
+  // keeps the symbol readable on landscape resized tiles instead of
+  // shrinking it to fit the short height.
+  const horizontal = width > height * 1.5;
+  const tabWidth = Math.round(width * 0.48);
+  const tabHeight = Math.round(height * 0.17);
+  const faceTop = Math.round(height * 0.08);
   return (
-    <View style={[styles.tileShell, { width: size, height: size }]}>
+    <View style={[styles.tileShell, { width, height }]}>
       <View
         pointerEvents="none"
         style={[
@@ -297,18 +334,25 @@ function BoardFolderTile({ tile, size, resolved }: { tile: BoardTile; size: numb
         ]}
       />
       <Text
-        style={[styles.folderLabel, { color: t.colors.text }]}
-        numberOfLines={1}
+        style={[
+          styles.folderLabel,
+          horizontal
+            ? { left: Math.round(width * 0.44), right: 8, textAlign: 'left' as const,
+                bottom: 0, top: 0, ...({ textAlignVertical: 'center' } as any) }
+            : { color: t.colors.text },
+          { color: t.colors.text },
+        ]}
+        numberOfLines={horizontal ? 2 : 1}
         adjustsFontSizeToFit
       >
         {tile.label}
       </Text>
-      <TileSymbol tile={tile} size={size} resolved={resolved} />
+      <TileSymbol tile={tile} width={width} height={height} resolved={resolved} horizontal={horizontal} />
     </View>
   );
 }
 
-function BoardWordTile({ tile, size, resolved }: { tile: BoardTile; size: number; resolved?: ResolvedSymbol }) {
+function BoardWordTile({ tile, width, height, resolved }: { tile: BoardTile; width: number; height: number; resolved?: ResolvedSymbol }) {
   const t = useTheme();
   const isFallback =
     resolved != null &&
@@ -316,16 +360,13 @@ function BoardWordTile({ tile, size, resolved }: { tile: BoardTile; size: number
     !tile.mulberryName &&
     (resolved.tier === 'fuzzy' || resolved.tier === 'semantic' ||
       resolved.tier === 'category' || resolved.tier === 'unknown');
-  // Flat coloured fill at 30% opacity — replaces the previous baked PNG
-  // backgrounds so the tile reads as a clean tinted chip. The label sits
-  // above at full opacity for legibility; the Mulberry symbol sits below
-  // in the `symbolMount` region.
+  const horizontal = width > height * 1.5;
   return (
-    <View style={[styles.wordTile, { width: size, height: size }]}>
+    <View style={[styles.wordTile, { width, height }]}>
       <View
         style={[
           styles.wordTileFill,
-          { width: size, height: size, backgroundColor: tile.color, opacity: 0.3 },
+          { width, height, backgroundColor: tile.color, opacity: 0.3 },
         ]}
       />
       {isFallback ? (
@@ -339,13 +380,24 @@ function BoardWordTile({ tile, size, resolved }: { tile: BoardTile; size: number
         />
       ) : null}
       <Text
-        style={[styles.wordLabel, { color: t.colors.text }]}
-        numberOfLines={1}
+        style={[
+          styles.wordLabel,
+          horizontal
+            ? {
+                left: Math.round(width * 0.44), right: 8,
+                top: 0, bottom: 0,
+                textAlign: 'left' as const,
+                ...({ textAlignVertical: 'center' } as any),
+              }
+            : null,
+          { color: t.colors.text },
+        ]}
+        numberOfLines={horizontal ? 2 : 1}
         adjustsFontSizeToFit
       >
         {isFallback ? '≈ ' : ''}{tile.label}
       </Text>
-      <TileSymbol tile={tile} size={size} resolved={resolved} />
+      <TileSymbol tile={tile} width={width} height={height} resolved={resolved} horizontal={horizontal} />
     </View>
   );
 }
@@ -415,55 +467,575 @@ function GhostTileClone({
       ]}
     >
       {ghost.tile.kind === 'folder' ? (
-        <BoardFolderTile tile={ghost.tile} size={ghost.size} />
+        <BoardFolderTile tile={ghost.tile} width={ghost.size} height={ghost.size} />
       ) : (
-        <BoardWordTile tile={ghost.tile} size={ghost.size} />
+        <BoardWordTile tile={ghost.tile} width={ghost.size} height={ghost.size} />
       )}
     </Reanimated.View>
   );
 }
 
+// ── GridOverlay ──────────────────────────────────────────────────────────────
+// Renders dashed slot outlines behind all tiles. Opacity is driven by a
+// Reanimated shared value so it fades in/out with a spring when edit mode
+// toggles — no JS-thread involvement during the transition.
+function GridOverlay({
+  cols,
+  totalSlots,
+  tileSize,
+  gap,
+  rowGap,
+  opacity,
+  alwaysVisible = false,
+}: {
+  cols: number;
+  totalSlots: number;
+  tileSize: number;
+  gap: number;
+  rowGap?: number;
+  opacity: SharedValue<number>;
+  alwaysVisible?: boolean;
+}) {
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: alwaysVisible ? 1 : opacity.value,
+  }));
+  const colStep = tileSize + gap;
+  const rowStep = tileSize + (rowGap ?? gap);
+  return (
+    <Reanimated.View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFillObject, animatedStyle]}
+    >
+      {Array.from({ length: totalSlots }).map((_, slot) => {
+        const col = slot % cols;
+        const row = Math.floor(slot / cols);
+        return (
+          <View
+            key={slot}
+            style={{
+              position: 'absolute',
+              left: col * colStep,
+              top: row * rowStep,
+              width: tileSize,
+              height: tileSize,
+              borderWidth: 1.5,
+              borderStyle: 'dashed',
+              borderRadius: 14,
+              borderColor: alwaysVisible
+                ? 'rgba(120, 140, 200, 0.38)'
+                : 'rgba(100, 130, 255, 0.55)',
+              backgroundColor: alwaysVisible
+                ? 'rgba(120, 140, 200, 0.06)'
+                : 'rgba(100, 130, 255, 0.08)',
+            }}
+          />
+        );
+      })}
+    </Reanimated.View>
+  );
+}
+
+// ── DragPlaceholder ───────────────────────────────────────────────────────────
+// A highlighted slot outline that tracks the snap target while the user drags.
+// Driven entirely from the UI thread via snapSlot shared value.
+function DragPlaceholder({
+  snapSlot,
+  dragFw,
+  dragFh,
+  tileSize,
+  gap,
+  rowGap,
+  cols,
+}: {
+  snapSlot: SharedValue<number>;
+  /** FINE units of the dragged tile — highlight cells = ceil(fw/2) × ceil(fh/2). */
+  dragFw: SharedValue<number>;
+  dragFh: SharedValue<number>;
+  tileSize: number;
+  gap: number;
+  rowGap?: number;
+  cols: number;
+}) {
+  const colStep = tileSize + gap;
+  const rowStep = tileSize + (rowGap ?? gap);
+  // Render a single wrapper positioned at snapSlot, then N×M individual
+  // cell outlines inside it so the highlight matches the dragged tile's
+  // footprint (e.g. a 2×2 shows 4 cells).
+  const wrapperStyle = useAnimatedStyle(() => {
+    if (snapSlot.value < 0) return { opacity: 0, transform: [] };
+    const col = snapSlot.value % cols;
+    const row = Math.floor(snapSlot.value / cols);
+    return {
+      opacity: 1,
+      transform: [
+        { translateX: col * colStep },
+        { translateY: row * rowStep },
+      ],
+    };
+  });
+  // Cell grid style: recomputed when dragFw/dragFh change (which happens
+  // on drag start). Uses fixed width/height (up to MAX_FW) to render all
+  // cells; opacity of cells beyond the tile's footprint drops to 0.
+  const cellsStyle = useAnimatedStyle(() => {
+    const cCols = Math.max(1, Math.ceil(dragFw.value / 2));
+    const cRows = Math.max(1, Math.ceil(dragFh.value / 2));
+    return {
+      width: cCols * colStep - gap,
+      height: cRows * rowStep - (rowGap ?? gap),
+    };
+  });
+  // For each possible cell in the max footprint, decide whether it's active.
+  const maxC = Math.ceil(MAX_FW / 2);
+  return (
+    <Reanimated.View
+      pointerEvents="none"
+      style={[
+        { position: 'absolute', left: 0, top: 0 },
+        wrapperStyle,
+        cellsStyle,
+      ]}
+    >
+      {Array.from({ length: maxC * maxC }).map((_, i) => {
+        const c = i % maxC;
+        const r = Math.floor(i / maxC);
+        return (
+          <MultiCell
+            key={i}
+            c={c}
+            r={r}
+            dragFw={dragFw}
+            dragFh={dragFh}
+            tileSize={tileSize}
+            colStep={colStep}
+            rowStep={rowStep}
+          />
+        );
+      })}
+    </Reanimated.View>
+  );
+}
+
+// One highlight cell — only visible when it falls inside the dragged tile's
+// coarse footprint. Drives visibility from dragFw/dragFh so highlight cell
+// count matches the tile's size on every drag start.
+function MultiCell({
+  c, r, dragFw, dragFh, tileSize, colStep, rowStep,
+}: {
+  c: number; r: number;
+  dragFw: SharedValue<number>;
+  dragFh: SharedValue<number>;
+  tileSize: number;
+  colStep: number;
+  rowStep: number;
+}) {
+  const style = useAnimatedStyle(() => {
+    const cCols = Math.max(1, Math.ceil(dragFw.value / 2));
+    const cRows = Math.max(1, Math.ceil(dragFh.value / 2));
+    const active = c < cCols && r < cRows;
+    return { opacity: active ? 1 : 0 };
+  });
+  return (
+    <Reanimated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: 'absolute',
+          left: c * colStep,
+          top: r * rowStep,
+          width: tileSize,
+          height: tileSize,
+          borderRadius: 14,
+          borderWidth: 2.5,
+          borderStyle: 'dashed',
+          borderColor: 'rgba(60, 120, 255, 0.65)',
+          backgroundColor: 'rgba(60, 120, 255, 0.10)',
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+// ── SourceGhost ───────────────────────────────────────────────────────────────
+// A low-opacity card outline that hovers at the slot the dragged tile left
+// behind — the "phantom" trail that shows where the displaced tile will land.
+function SourceGhost({
+  dragSourceSlot: sourceSlot,
+  tileSize,
+  gap,
+  rowGap,
+  cols,
+}: {
+  dragSourceSlot: SharedValue<number>;
+  tileSize: number;
+  gap: number;
+  rowGap?: number;
+  cols: number;
+}) {
+  const colStep = tileSize + gap;
+  const rowStep = tileSize + (rowGap ?? gap);
+  const animatedStyle = useAnimatedStyle(() => {
+    if (sourceSlot.value < 0) return { opacity: 0, transform: [] };
+    const col = sourceSlot.value % cols;
+    const row = Math.floor(sourceSlot.value / cols);
+    return {
+      opacity: 1,
+      transform: [
+        { translateX: col * colStep },
+        { translateY: row * rowStep },
+      ],
+    };
+  });
+  return (
+    <Reanimated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: tileSize,
+          height: tileSize,
+          borderRadius: 14,
+          borderWidth: 1.5,
+          borderStyle: 'dashed',
+          borderColor: 'rgba(180, 180, 200, 0.45)',
+          backgroundColor: 'rgba(180, 180, 200, 0.08)',
+        },
+        animatedStyle,
+      ]}
+    />
+  );
+}
+
 // Rect in board-content coordinate space (relative to the ScrollView's
-// content container). Used purely for drag hit-testing inside the same
-// coordinate space — never crosses screens.
+// content container). Kept for type-compat; no longer used for drag logic.
 type SlotRect = { x: number; y: number; width: number; height: number };
 type TileRectsRef = React.MutableRefObject<Record<string, SlotRect>>;
 
+// ── ResizeHandles ──────────────────────────────────────────────────────────
+// Renders 4 edge pills + 4 corner circles around a tile in edit mode.
+// Only right + bottom + bottom-right corner are functional in this pass
+// (they grow the tile in 44px increments). Other handles are rendered as
+// visual affordances but no-op on drag — extending them requires the
+// "fine offset" positioning system planned for a follow-up.
+const HANDLE_PILL_LEN = 28;
+const HANDLE_PILL_THICK = 8;
+const HANDLE_CORNER_SIZE = 14;
+
+function ResizeHandles({
+  editMode,
+  width,
+  height,
+  fw,
+  fh,
+  onResize,
+  isDragging: _isDragging,
+  tileLabel,
+}: {
+  editMode: boolean;
+  width: number;
+  height: number;
+  fw: number;
+  fh: number;
+  onResize: (newFw: number, newFh: number) => void;
+  isDragging: SharedValue<number>;
+  tileLabel: string;
+}) {
+  const t = useTheme();
+  const reduceMotion = useReduceMotion();
+
+  // Preview offsets — shared values that grow/shrink the tile visually
+  // during drag before the resize is committed to state.
+  const previewW = useSharedValue(0);
+  const previewH = useSharedValue(0);
+  // Track last-fired haptic step so we only pulse on step crossings.
+  const lastHapticStepW = useSharedValue(0);
+  const lastHapticStepH = useSharedValue(0);
+
+  const rightPan = useMemo(() => Gesture.Pan()
+    .onStart(() => { previewW.value = 0; lastHapticStepW.value = 0; })
+    .onUpdate((e) => {
+      const steps = Math.round(e.translationX / FINE);
+      if (steps !== lastHapticStepW.value) {
+        lastHapticStepW.value = steps;
+        runOnJS(hapticSelection)();
+      }
+      previewW.value = steps * FINE;
+    })
+    .onEnd(() => {
+      const deltaSteps = Math.round(previewW.value / FINE);
+      const newFw = Math.max(2, Math.min(MAX_FW, fw + deltaSteps));
+      previewW.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
+      if (newFw !== fw) runOnJS(onResize)(newFw, fh);
+    })
+  , [fw, fh, onResize, previewW]);
+
+  const bottomPan = useMemo(() => Gesture.Pan()
+    .onStart(() => { previewH.value = 0; lastHapticStepH.value = 0; })
+    .onUpdate((e) => {
+      const steps = Math.round(e.translationY / FINE);
+      if (steps !== lastHapticStepH.value) {
+        lastHapticStepH.value = steps;
+        runOnJS(hapticSelection)();
+      }
+      previewH.value = steps * FINE;
+    })
+    .onEnd(() => {
+      const deltaSteps = Math.round(previewH.value / FINE);
+      const newFh = Math.max(2, Math.min(MAX_FW, fh + deltaSteps));
+      previewH.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
+      if (newFh !== fh) runOnJS(onResize)(fw, newFh);
+    })
+  , [fw, fh, onResize, previewH]);
+
+  const cornerPan = useMemo(() => Gesture.Pan()
+    .onStart(() => {
+      previewW.value = 0; previewH.value = 0;
+      lastHapticStepW.value = 0; lastHapticStepH.value = 0;
+    })
+    .onUpdate((e) => {
+      const sw = Math.round(e.translationX / FINE);
+      const sh = Math.round(e.translationY / FINE);
+      if (sw !== lastHapticStepW.value || sh !== lastHapticStepH.value) {
+        lastHapticStepW.value = sw;
+        lastHapticStepH.value = sh;
+        runOnJS(hapticSelection)();
+      }
+      previewW.value = sw * FINE;
+      previewH.value = sh * FINE;
+    })
+    .onEnd(() => {
+      const dw = Math.round(previewW.value / FINE);
+      const dh = Math.round(previewH.value / FINE);
+      const newFw = Math.max(2, Math.min(MAX_FW, fw + dw));
+      const newFh = Math.max(2, Math.min(MAX_FW, fh + dh));
+      previewW.value = withTiming(0, { duration: 120 });
+      previewH.value = withTiming(0, { duration: 120 });
+      if (newFw !== fw || newFh !== fh) runOnJS(onResize)(newFw, newFh);
+    })
+  , [fw, fh, onResize, previewW, previewH]);
+
+  // Style: right pill follows the tile's right edge + previewW growth
+  const rightPillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: previewW.value }],
+  }));
+  const bottomPillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: previewH.value }],
+  }));
+  const brCornerStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: previewW.value },
+      { translateY: previewH.value },
+    ],
+  }));
+
+  if (!editMode) return null;
+
+  const handleColor = t.colors.primary;
+  const handleBg = t.colors.surface;
+
+  return (
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+      {/* Right edge pill — functional */}
+      <GestureDetector gesture={rightPan}>
+        <Reanimated.View
+          hitSlop={12}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Resize ${tileLabel} width`}
+          style={[
+            {
+              position: 'absolute',
+              right: -HANDLE_PILL_THICK / 2,
+              top: height / 2 - HANDLE_PILL_LEN / 2,
+              width: HANDLE_PILL_THICK,
+              height: HANDLE_PILL_LEN,
+              borderRadius: HANDLE_PILL_THICK / 2,
+              backgroundColor: handleBg,
+              borderWidth: 2,
+              borderColor: handleColor,
+            },
+            rightPillStyle,
+          ]}
+        />
+      </GestureDetector>
+
+      {/* Bottom edge pill — functional */}
+      <GestureDetector gesture={bottomPan}>
+        <Reanimated.View
+          hitSlop={12}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Resize ${tileLabel} height`}
+          style={[
+            {
+              position: 'absolute',
+              bottom: -HANDLE_PILL_THICK / 2,
+              left: width / 2 - HANDLE_PILL_LEN / 2,
+              width: HANDLE_PILL_LEN,
+              height: HANDLE_PILL_THICK,
+              borderRadius: HANDLE_PILL_THICK / 2,
+              backgroundColor: handleBg,
+              borderWidth: 2,
+              borderColor: handleColor,
+            },
+            bottomPillStyle,
+          ]}
+        />
+      </GestureDetector>
+
+      {/* Bottom-right corner — functional (grows both dimensions) */}
+      <GestureDetector gesture={cornerPan}>
+        <Reanimated.View
+          hitSlop={10}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Resize ${tileLabel}`}
+          style={[
+            {
+              position: 'absolute',
+              right: -HANDLE_CORNER_SIZE / 2,
+              bottom: -HANDLE_CORNER_SIZE / 2,
+              width: HANDLE_CORNER_SIZE,
+              height: HANDLE_CORNER_SIZE,
+              borderRadius: HANDLE_CORNER_SIZE / 2,
+              backgroundColor: handleColor,
+              borderWidth: 2,
+              borderColor: handleBg,
+            },
+            brCornerStyle,
+          ]}
+        />
+      </GestureDetector>
+
+      {/* Non-functional visual affordances (top/left/tl/tr/bl corners) —
+          shown as dimmed to hint "resize from other sides coming soon". */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: -HANDLE_PILL_THICK / 2,
+          top: height / 2 - HANDLE_PILL_LEN / 2,
+          width: HANDLE_PILL_THICK,
+          height: HANDLE_PILL_LEN,
+          borderRadius: HANDLE_PILL_THICK / 2,
+          backgroundColor: handleBg,
+          borderWidth: 2,
+          borderColor: handleColor,
+          opacity: 0.35,
+        }}
+      />
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: -HANDLE_PILL_THICK / 2,
+          left: width / 2 - HANDLE_PILL_LEN / 2,
+          width: HANDLE_PILL_LEN,
+          height: HANDLE_PILL_THICK,
+          borderRadius: HANDLE_PILL_THICK / 2,
+          backgroundColor: handleBg,
+          borderWidth: 2,
+          borderColor: handleColor,
+          opacity: 0.35,
+        }}
+      />
+      {/* Dimmed TL/TR/BL corners */}
+      {[
+        { left: -HANDLE_CORNER_SIZE / 2, top: -HANDLE_CORNER_SIZE / 2 },
+        { right: -HANDLE_CORNER_SIZE / 2, top: -HANDLE_CORNER_SIZE / 2 },
+        { left: -HANDLE_CORNER_SIZE / 2, bottom: -HANDLE_CORNER_SIZE / 2 },
+      ].map((pos, i) => (
+        <View
+          key={i}
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            width: HANDLE_CORNER_SIZE,
+            height: HANDLE_CORNER_SIZE,
+            borderRadius: HANDLE_CORNER_SIZE / 2,
+            backgroundColor: handleColor,
+            borderWidth: 2,
+            borderColor: handleBg,
+            opacity: 0.35,
+            ...pos,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
 interface BoardTileButtonProps {
   tile: BoardTile;
+  /** Coarse slot size (88) — used for drag-snap grid math. */
   size: number;
+  /** Actual visual width (default = size). Enables non-square resized tiles. */
+  width?: number;
+  /** Actual visual height (default = size). */
+  height?: number;
+  /** Width in FINE units (44px each). Default 2 = 88px. */
+  fw?: number;
+  /** Height in FINE units (44px each). Default 2 = 88px. */
+  fh?: number;
   onPress: (rect: WindowRect | null) => void;
   onMeasuredPress?: () => void;
   resolved?: ResolvedSymbol;
   // ── Drag + edit-mode plumbing ──
   editMode?: boolean;
   onLongPressEnterEdit?: () => void;
-  onSwap?: (fromId: string, toId: string) => void;
+  /** Slot index of this tile in the grid (0-based, row-major). */
+  slot?: number;
+  /** Total tile count for clamping the snap target. */
+  totalSlots?: number;
+  /** Called on the JS thread after the tile springs to its new slot. */
+  onMoveToSlot?: (tileId: string, targetSlot: number) => void;
+  /** Shared value written on every drag frame so DragPlaceholder tracks snap target. */
+  snapSlot?: SharedValue<number>;
+  /** Shared value set to this tile's slot when it starts dragging, cleared on drop. */
+  dragSourceSlot?: SharedValue<number>;
+  /** Written to on drag start: the dragged tile's fw/fh so DragPlaceholder highlights match its footprint. */
+  dragFw?: SharedValue<number>;
+  dragFh?: SharedValue<number>;
   onHide?: (tile: BoardTile) => void;
   onAccessibilityReorder?: (tileId: string, direction: 'forward' | 'back') => void;
-  tileRects?: TileRectsRef;
+  /** Called when the user commits a resize via the corner/edge handles. */
+  onResize?: (tileId: string, newFw: number, newFh: number) => void;
   jiggle?: SharedValue<number>;
 }
 
 function BoardTileButton({
   tile,
   size,
+  width,
+  height,
+  fw = 2,
+  fh = 2,
   onPress,
   onMeasuredPress,
   resolved,
   editMode = false,
   onLongPressEnterEdit,
-  onSwap,
+  slot = 0,
+  totalSlots = 1,
+  onMoveToSlot,
+  snapSlot,
+  dragSourceSlot,
+  dragFw,
+  dragFh,
   onHide,
   onAccessibilityReorder,
-  tileRects,
+  onResize,
   jiggle,
 }: BoardTileButtonProps) {
+  // Actual visual dimensions default to a square of `size` for backwards
+  // compatibility with existing single-slot tiles.
+  const tileWidth = width ?? size;
+  const tileHeightPx = height ?? size;
   const t = useTheme();
   const pressableRef = useRef<View>(null);
   const scale = useRef(new RNAnimated.Value(1)).current;
-  // Item 2 — RM: swap spring scale for an opacity dip so the tile
-  // still acknowledges the press without moving (principle 18).
   const tileOpacity = useRef(new RNAnimated.Value(1)).current;
   const reduceMotion = useReduceMotion();
 
@@ -471,6 +1043,108 @@ function BoardTileButton({
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
   const lifted = useSharedValue(0);
+  // ── Live-displacement state ────────────────────────────────────────────
+  // Non-dragging tiles spring to the dragger's source slot when they are
+  // the hover target. This is the iOS app-rearrange "shuffle" behaviour:
+  // tile B moves into tile A's spot while A hovers over B. Release commits
+  // the data swap; leaving the hover springs B back to its home slot.
+  const displaceX = useSharedValue(0);
+  const displaceY = useSharedValue(0);
+
+  // ── Live-swap slot tracking ────────────────────────────────────────────
+  // currentSlotSV mirrors the `slot` prop on the UI thread so the pan
+  // gesture can always read the latest slot without being recreated on
+  // every live swap (which would drop the gesture mid-drag).
+  const currentSlotSV = useSharedValue(slot);
+  // lastSwapSlotSV gates runOnJS calls — only fires when the hover target
+  // genuinely crosses a new slot boundary.
+  const lastSwapSlotSV = useSharedValue(-1);
+
+  // Keep currentSlotSV in sync with the prop (runs on JS thread, fast).
+  useEffect(() => {
+    currentSlotSV.value = slot;
+  }, [slot, currentSlotSV]);
+
+  // After a swap commits and the `slot` prop changes, the absolutely-
+  // positioned container moves to the new slot's coords. We must snap
+  // dragX/dragY back to 0 so the tile renders AT the new slot, not
+  // offset from it. Otherwise the leftover gesture translation stacks
+  // on top of the new slot position — a 2-row drag visually looks like
+  // a 4-row drag.
+  const prevSlotRef = useRef(slot);
+  useLayoutEffect(() => {
+    const prev = prevSlotRef.current;
+    prevSlotRef.current = slot;
+    if (prev !== slot) {
+      dragX.value = 0;
+      dragY.value = 0;
+      // Also snap displacement to 0 — after a commit the displaced tile
+      // is now AT the source slot for real, no offset needed.
+      displaceX.value = 0;
+      displaceY.value = 0;
+    }
+  });
+
+  // ── Live shuffle reaction ─────────────────────────────────────────────
+  // Watches snapSlot + dragSourceSlot. When this tile is the hover target
+  // and is NOT the one being dragged, spring it to the dragger's source
+  // slot. When the hover leaves, spring back to home.
+  //
+  // CRITICAL: reaction dependencies are ENCODED AS PRIMITIVES (a packed
+  // integer for X, one for Y), not objects. Returning `{ snap, src, ... }`
+  // creates a new object every read, and Reanimated's default equality
+  // check (Object.is) treats every new reference as a change — that
+  // restarts withSpring on every frame and the tile never converges to
+  // its displaced position until the drag ends. Primitives fire the
+  // reaction ONLY on genuine transitions.
+  const SHUFFLE_SPRING = { damping: 18, stiffness: 220, mass: 0.6 } as const;
+
+  // Encode "where should I visually sit right now?" as a single number.
+  // Any tile-relevant state change (snap crosses into or out of this
+  // tile, drag source changes, dragger status flips) produces a distinct
+  // packed value. `useDerivedValue` runs on the UI thread and only
+  // notifies dependents when the value changes.
+  const targetDX = useDerivedValue(() => {
+    if (lifted.value > 0.1) return 0; // I'm the dragger — no displacement
+    const snap = snapSlot ? snapSlot.value : -1;
+    const src = dragSourceSlot ? dragSourceSlot.value : -1;
+    const mine = currentSlotSV.value;
+    if (snap < 0 || src < 0) return 0;
+    if (snap !== mine) return 0;    // hover is on a different tile
+    if (src === mine) return 0;     // dragger hovering its own home
+    const myCol = mine % BOARD_COLUMNS;
+    const srcCol = src % BOARD_COLUMNS;
+    return (srcCol - myCol) * (size + TILE_GAP);
+  });
+  const targetDY = useDerivedValue(() => {
+    if (lifted.value > 0.1) return 0;
+    const snap = snapSlot ? snapSlot.value : -1;
+    const src = dragSourceSlot ? dragSourceSlot.value : -1;
+    const mine = currentSlotSV.value;
+    if (snap < 0 || src < 0) return 0;
+    if (snap !== mine) return 0;
+    if (src === mine) return 0;
+    const myRow = Math.floor(mine / BOARD_COLUMNS);
+    const srcRow = Math.floor(src / BOARD_COLUMNS);
+    return (srcRow - myRow) * (size + TILE_V_GAP);
+  });
+
+  useAnimatedReaction(
+    () => targetDX.value,
+    (target, prev) => {
+      if (target !== prev) {
+        displaceX.value = withSpring(target, SHUFFLE_SPRING);
+      }
+    },
+  );
+  useAnimatedReaction(
+    () => targetDY.value,
+    (target, prev) => {
+      if (target !== prev) {
+        displaceY.value = withSpring(target, SHUFFLE_SPRING);
+      }
+    },
+  );
 
   const animateTo = useCallback((toValue: number) => {
     if (reduceMotion) {
@@ -491,11 +1165,10 @@ function BoardTileButton({
 
   const isNav = tile.id === 'back' || tile.id === 'home';
   const isDraggable = editMode && !isNav;
-  // Every kind — folder, word, action, nav — renders as a square so the
-  // grid is visually consistent. `size` is already clamped against the
-  // available board width up the tree, so this also satisfies the 44pt
-  // minimum touch-target rule.
-  const tileHeight = Math.round(size * TILE_HEIGHT_RATIO);
+  // All tiles are perfectly square: the gesture area, wrapper, and content
+  // all match `size`. This prevents the old 1.25× height wrapper from
+  // overflowing into the row below and misaligning the grid.
+  const tileHeight = tileHeightPx;
 
   const handlePress = useCallback(() => {
     if (editMode) return; // taps do nothing in edit mode — long-press exits
@@ -511,72 +1184,129 @@ function BoardTileButton({
     ? `Word type: ${tile.wordType}`
     : undefined;
 
-  // ── Drag gesture — runs only when editMode is on and the tile isn't nav.
-  // Hit-tests against other tile rects on release and swaps the two IDs.
+  // ── Drag gesture — swap on release, no spring/rubber-band ────────────────
+  // Uses currentSlotSV so the gesture closure is never recreated mid-drag.
+  // Swap is committed only on release for precise, intentional placement.
+  const SNAP_TIMING = { duration: 160, easing: ReanimatedEasing.out(ReanimatedEasing.quad) } as const;
+
+  // Single JS callback fired from the timing-end worklet. Commits the
+  // swap, then defers clearing snapSlot / dragSourceSlot to the next
+  // animation frame — by then React has committed the new slot props
+  // and each tile's useLayoutEffect has hard-reset displaceX/Y to 0.
+  // Clearing earlier would let the shuffle reaction fire a redundant
+  // spring-back animation on the displaced tile, causing a visual jitter.
+  const finalizeSwap = useCallback((tileId: string, target: number) => {
+    onMoveToSlot?.(tileId, target);
+    requestAnimationFrame(() => {
+      if (snapSlot) snapSlot.value = -1;
+      if (dragSourceSlot) dragSourceSlot.value = -1;
+    });
+  }, [onMoveToSlot, snapSlot, dragSourceSlot]);
+
   const pan = useMemo(() => Gesture.Pan()
     .enabled(isDraggable)
     .onStart(() => {
-      lifted.value = withTiming(1, { duration: 120 });
+      lifted.value = withTiming(1, { duration: 100 });
+      // Record source slot — drives both the SourceGhost outline AND
+      // the live-shuffle reaction in sibling tiles.
+      if (dragSourceSlot) dragSourceSlot.value = currentSlotSV.value;
+      // Publish the dragged tile's size so DragPlaceholder highlights match.
+      if (dragFw) dragFw.value = fw;
+      if (dragFh) dragFh.value = fh;
+      // Start "hovering own slot" so the first slot crossing is detected
+      // cleanly and no stale snapSlot from a previous drag bleeds in.
+      if (snapSlot) snapSlot.value = currentSlotSV.value;
+      // Haptic on pickup — matches iOS app-rearrange "lift" feedback.
+      runOnJS(hapticSelection)();
     })
     .onUpdate((e) => {
       dragX.value = e.translationX;
       dragY.value = e.translationY;
-    })
-    .onEnd((e) => {
-      const myRect = tileRects?.current?.[tile.id];
-      const settle = () => {
-        dragX.value = withTiming(0, { duration: reduceMotion ? 0 : 220 });
-        dragY.value = withTiming(0, { duration: reduceMotion ? 0 : 220 });
-        lifted.value = withTiming(0, { duration: reduceMotion ? 0 : 120 });
-      };
-      if (!myRect || !tileRects) {
-        settle();
-        return;
-      }
-      const dropX = myRect.x + myRect.width / 2 + e.translationX;
-      const dropY = myRect.y + myRect.height / 2 + e.translationY;
-      let nearestId: string | null = null;
-      let nearestDist = Infinity;
-      const rects = tileRects.current;
-      for (const otherId in rects) {
-        if (otherId === tile.id) continue;
-        const r = rects[otherId];
-        if (!r) continue;
-        const cx = r.x + r.width / 2;
-        const cy = r.y + r.height / 2;
-        const d = Math.hypot(cx - dropX, cy - dropY);
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearestId = otherId;
+
+      // Compute snap target and update DragPlaceholder + hover-dim effect.
+      // Multi-slot tiles (fw>2 or fh>2) can't go past the right edge or
+      // bottom edge — their coarse footprint (cCols × cRows) must fit.
+      const mySlot = currentSlotSV.value;
+      const myCol = mySlot % BOARD_COLUMNS;
+      const myRow = Math.floor(mySlot / BOARD_COLUMNS);
+      const maxRow = Math.floor((totalSlots - 1) / BOARD_COLUMNS);
+      const colStep = size + TILE_GAP;
+      const rowStep = size + TILE_V_GAP;
+      const cCols = Math.max(1, Math.ceil(fw / 2));
+      const cRows = Math.max(1, Math.ceil(fh / 2));
+      const tCol = Math.max(0, Math.min(BOARD_COLUMNS - cCols,
+        Math.round(myCol + e.translationX / colStep)));
+      const tRow = Math.max(0, Math.min(maxRow - (cRows - 1),
+        Math.round(myRow + e.translationY / rowStep)));
+      const hoverSlot = Math.min(totalSlots - 1, tRow * BOARD_COLUMNS + tCol);
+      if (snapSlot) {
+        // Fire a selection-style haptic each time the hover crosses a
+        // new slot boundary (excluding our own home slot). lastSwapSlotSV
+        // gates duplicates so we don't fire on every frame.
+        if (hoverSlot !== snapSlot.value && hoverSlot !== mySlot) {
+          runOnJS(hapticSelection)();
         }
+        snapSlot.value = hoverSlot;
       }
-      // Only commit a swap if the drop is well inside another slot's bounds
-      // (within ~70% of a tile width). Prevents accidental swaps on tiny
-      // pan-ends.
-      if (nearestId && nearestDist < myRect.width * 0.7 && onSwap) {
-        runOnJS(onSwap)(tile.id, nearestId);
+    })
+    .onEnd((_e) => {
+      const mySlot = currentSlotSV.value;
+      const myCol = mySlot % BOARD_COLUMNS;
+      const myRow = Math.floor(mySlot / BOARD_COLUMNS);
+      const colStep = size + TILE_GAP;
+      const rowStep = size + TILE_V_GAP;
+
+      // Use the LAST highlighted snapSlot (computed fresh each onUpdate frame)
+      // rather than re-deriving from e.translationX/Y — finger-lift drift
+      // can shift the translation by a few px, putting the target one slot off.
+      const snapped = snapSlot && snapSlot.value >= 0 ? snapSlot.value : mySlot;
+      const target = snapped;
+      const tCol = target % BOARD_COLUMNS;
+      const tRow = Math.floor(target / BOARD_COLUMNS);
+
+      lifted.value = withTiming(0, { duration: 120 });
+
+      if (target !== mySlot && onMoveToSlot) {
+        // Glide to target slot, then commit swap. snapSlot/dragSourceSlot
+        // are KEPT until the commit lands so the displaced tile stays at
+        // the source position. Once slot props update, each tile's
+        // useLayoutEffect resets its own displacement to 0 cleanly.
+        const dX = (tCol - myCol) * colStep;
+        const dY = (tRow - myRow) * rowStep;
+        dragX.value = withTiming(dX, SNAP_TIMING);
+        dragY.value = withTiming(dY, SNAP_TIMING, (finished) => {
+          if (!finished) return;
+          runOnJS(finalizeSwap)(tile.id, target);
+        });
+      } else {
+        // Return cleanly to home slot.
+        if (snapSlot) snapSlot.value = -1;
+        if (dragSourceSlot) dragSourceSlot.value = -1;
+        dragX.value = withTiming(0, SNAP_TIMING);
+        dragY.value = withTiming(0, SNAP_TIMING);
       }
-      settle();
-    }), [dragX, dragY, isDraggable, lifted, onSwap, reduceMotion, tile.id, tileRects]);
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    , [currentSlotSV, dragSourceSlot, dragX, dragY, finalizeSwap, isDraggable, lifted, onMoveToSlot, size, snapSlot, tile.id, totalSlots]);
 
   const animatedDragStyle = useAnimatedStyle(() => {
-    const jiggleDeg = isDraggable && jiggle && !reduceMotion ? jiggle.value : 0;
+    // Jiggle drives a continuous gentle wobble during edit mode.
+    // We only rotate when NOT dragging so the dragged tile stays visually stable.
+    const rotateDeg = (!isDraggable || lifted.value < 0.1) && jiggle
+      ? jiggle.value
+      : 0;
     return {
       transform: [
-        { translateX: dragX.value },
-        { translateY: dragY.value },
+        // Drag offset (only set on the dragger) + shuffle displacement
+        // (only set on hovered-over tiles). They never both apply.
+        { translateX: dragX.value + displaceX.value },
+        { translateY: dragY.value + displaceY.value },
         { scale: 1 + lifted.value * 0.06 },
-        { rotate: `${jiggleDeg}deg` },
+        { rotate: `${rotateDeg}deg` },
       ],
       zIndex: lifted.value > 0 ? 100 : 1,
     };
   });
-
-  const handleLayout = useCallback((e: LayoutChangeEvent) => {
-    if (!tileRects) return;
-    const { x, y, width, height } = e.nativeEvent.layout;
-    tileRects.current[tile.id] = { x, y, width, height };
-  }, [tile.id, tileRects]);
 
   const handleAccessibilityAction = useCallback((event: AccessibilityActionEvent) => {
     if (!onAccessibilityReorder) return;
@@ -596,12 +1326,12 @@ function BoardTileButton({
 
   const tileContent = (
     <>
-      {tile.id === 'back' || tile.id === 'home' ? (
+      {isNav ? (
         <BoardNavTile tile={tile} size={size} />
       ) : tile.kind === 'folder' ? (
-        <BoardFolderTile tile={tile} size={size} resolved={resolved} />
+        <BoardFolderTile tile={tile} width={tileWidth} height={tileHeightPx} resolved={resolved} />
       ) : (
-        <BoardWordTile tile={tile} size={size} resolved={resolved} />
+        <BoardWordTile tile={tile} width={tileWidth} height={tileHeightPx} resolved={resolved} />
       )}
       {isDraggable && onHide ? (
         <Pressable
@@ -619,9 +1349,8 @@ function BoardTileButton({
 
   const inner = (
     <Reanimated.View
-      onLayout={handleLayout}
       style={[
-        { width: size, height: tileHeight },
+        { width: tileWidth, height: tileHeight },
         animatedDragStyle,
       ]}
     >
@@ -652,6 +1381,21 @@ function BoardTileButton({
           {tileContent}
         </Pressable>
       </RNAnimated.View>
+      {/* Resize handles — visible in edit mode, absolute-positioned around
+          the tile edges. Right/bottom/BR-corner are functional; other
+          handles are dimmed placeholders. Nav tiles skip handles. */}
+      {editMode && !isNav && onResize ? (
+        <ResizeHandles
+          editMode={editMode}
+          width={tileWidth}
+          height={tileHeight}
+          fw={fw}
+          fh={fh}
+          isDragging={lifted}
+          tileLabel={tile.label}
+          onResize={(newFw, newFh) => onResize(tile.id, newFw, newFh)}
+        />
+      ) : null}
     </Reanimated.View>
   );
 
@@ -666,13 +1410,45 @@ const MemoBoardTileButton = React.memo(BoardTileButton);
 const BoardTileCell = React.memo(function BoardTileCell({
   tile,
   size,
+  width,
+  height,
+  fw,
+  fh,
+  slot,
+  totalSlots,
   resolved,
   onTilePress,
+  editMode,
+  onLongPressEnterEdit,
+  onMoveToSlot,
+  onHide,
+  onResize,
+  snapSlot,
+  dragSourceSlot,
+  dragFw,
+  dragFh,
+  jiggle,
 }: {
   tile: BoardTile;
   size: number;
+  width?: number;
+  height?: number;
+  fw?: number;
+  fh?: number;
+  slot?: number;
+  totalSlots?: number;
   resolved?: ResolvedSymbol;
   onTilePress: (tile: BoardTile, rect: WindowRect | null) => void;
+  editMode?: boolean;
+  onLongPressEnterEdit?: () => void;
+  onMoveToSlot?: (tileId: string, targetSlot: number) => void;
+  onHide?: (tile: BoardTile) => void;
+  onResize?: (tileId: string, newFw: number, newFh: number) => void;
+  snapSlot?: SharedValue<number>;
+  dragSourceSlot?: SharedValue<number>;
+  dragFw?: SharedValue<number>;
+  dragFh?: SharedValue<number>;
+  jiggle?: SharedValue<number>;
 }) {
   const handlePress = useCallback(
     (rect: WindowRect | null) => onTilePress(tile, rect),
@@ -682,8 +1458,24 @@ const BoardTileCell = React.memo(function BoardTileCell({
     <MemoBoardTileButton
       tile={tile}
       size={size}
+      width={width}
+      height={height}
+      fw={fw}
+      fh={fh}
+      slot={slot}
+      totalSlots={totalSlots}
       onPress={handlePress}
       resolved={resolved}
+      editMode={editMode}
+      onLongPressEnterEdit={onLongPressEnterEdit}
+      onMoveToSlot={onMoveToSlot}
+      onHide={onHide}
+      onResize={onResize}
+      snapSlot={snapSlot}
+      dragSourceSlot={dragSourceSlot}
+      dragFw={dragFw}
+      dragFh={dragFh}
+      jiggle={jiggle}
     />
   );
 });
@@ -701,8 +1493,8 @@ function TopNavTab({
   // Items 3 & 4 — RM: zero duration + no scale lift (principle 18).
   const reduceMotion = useReduceMotion();
   const t = useTheme();
-  const idleColor = t.isDark ? t.colors.textTertiary : TOP_TAB_IDLE_COLOR;
-  const activeColor = t.colors.symbolOutline;
+  const idleColor = t.colors.textMuted;
+  const activeColor = t.colors.text;
 
   // Single shared value drives both colour and scale so the active tab
   // brightens and lifts together. JS-driver because of the colour
@@ -743,11 +1535,13 @@ function TopNavTab({
       ]}
     >
       <RNAnimated.View style={[styles.topTabContent, { transform: [{ scale }] }]}>
-        <Ionicons
-          name={meta.icon}
-          size={28}
-          color={active ? activeColor : idleColor}
-        />
+        <View style={styles.topTabIconMount}>
+          <Ionicons
+            name={meta.icon}
+            size={30}
+            color={active ? activeColor : idleColor}
+          />
+        </View>
         <RNAnimated.Text style={[styles.topTabLabel, { color: tintColor }]}>
           {meta.label}
         </RNAnimated.Text>
@@ -826,7 +1620,7 @@ function TopNav({
 }
 
 export default function TalkScreen() {
-  const { width } = useWindowDimensions();
+  const { width, height: screenHeight } = useWindowDimensions();
   const rootRef = useRef<View>(null);
   const messageSlotRefs = useRef<Array<View | null>>([]);
   const ghostsRef = useRef<GhostTile[]>([]);
@@ -842,6 +1636,27 @@ export default function TalkScreen() {
   const [activeTab, setActiveTab] = useState<TopTab>('taptalk');
   const [ghosts, setGhosts] = useState<GhostTile[]>([]);
   const [resolvedSymbols, setResolvedSymbols] = useState<Map<string, ResolvedSymbol>>(new Map());
+  // ── Edit mode & drag-and-snap state ─────────────────────────────────────
+  const [editMode, setEditMode] = useState(false);
+  // Sparse slot map: { slotIndex → tileId } per board mode.
+  // Supports moving tiles to ANY grid slot (including empty ones) and leaving
+  // gaps in the layout — just like the iOS home screen editor.
+  // Falls back to the default sequential layout when no entry exists.
+  // Per-mode variable-size layouts. Each placement records the tile's
+  // top-left coarse slot and its size in FINE (44px) units. Default is
+  // fw=fh=2 for 88×88 tiles.
+  const [layouts, setLayouts] = useState<Partial<Record<BoardMode, BoardLayout>>>({});
+  // Shared values live on the UI thread so drag updates never cross the bridge.
+  const snapSlot = useSharedValue(-1);
+  // Tracks the grid slot where the current drag started — used to render
+  // the "source ghost" outline (the empty-slot shadow the tile left behind).
+  const dragSourceSlot = useSharedValue(-1);
+  // Size of the current dragged tile in FINE units — drives multi-cell
+  // DragPlaceholder highlights. Coarse cell count = ceil(fw/2) × ceil(fh/2).
+  const dragFw = useSharedValue(2);
+  const dragFh = useSharedValue(2);
+  const gridOverlayOpacity = useSharedValue(0);
+  const jiggle = useSharedValue(0);
   const scrollRef = useRef<ScrollView>(null);
   const scrollPositions = useRef<Partial<Record<BoardMode, number>>>({});
   const reduceMotion = useReduceMotion();
@@ -850,6 +1665,166 @@ export default function TalkScreen() {
   const hapticIfEnabled = useCallback(() => {
     if (state.accessibility.hapticsEnabled !== false) hapticSelection();
   }, [state.accessibility.hapticsEnabled]);
+
+  // ── Edit mode effects ────────────────────────────────────────────────────
+  // Fade the grid overlay in/out and start/stop the jiggle animation when
+  // edit mode toggles. Both run without touching the JS thread during the
+  // transition (pure Reanimated shared value writes).
+  useEffect(() => {
+    gridOverlayOpacity.value = withTiming(editMode ? 1 : 0, { duration: 200 });
+    if (editMode && !reduceMotion) {
+      // Gentle continuous wobble while in edit mode — ±0.7° at ~80ms per
+      // half-cycle. Subtle enough to not be annoying, clear enough to signal
+      // "you're in rearrange mode." Stops the moment edit mode exits.
+      jiggle.value = withRepeat(
+        withSequence(
+          withTiming(-0.7, { duration: 80 }),
+          withTiming( 0.7, { duration: 80 }),
+        ),
+        -1,   // loop forever
+        true, // reverse direction each cycle
+      );
+    } else {
+      cancelAnimation(jiggle);
+      jiggle.value = withTiming(0, { duration: 80 });
+    }
+  }, [editMode, gridOverlayOpacity, jiggle, reduceMotion]);
+
+  // ── Edit mode callbacks ──────────────────────────────────────────────────
+  const handleEnterEdit = useCallback(() => {
+    hapticIfEnabled();
+    setEditMode(true);
+  }, [hapticIfEnabled]);
+
+  const handleExitEdit = useCallback(() => {
+    hapticIfEnabled();
+    setEditMode(false);
+    snapSlot.value = -1;
+  }, [hapticIfEnabled, snapSlot]);
+
+  const handleMoveToSlot = useCallback((tileId: string, targetSlot: number) => {
+    setLayouts(prev => {
+      const current: BoardLayout = prev[activeMode]
+        ?? BOARD_TILES[activeMode].map((t, i) => ({
+          id: t.id, slot: i, fw: 2, fh: 2,
+        }));
+      const draggedIdx = current.findIndex(p => p.id === tileId);
+      const dragged = draggedIdx >= 0 ? current[draggedIdx] : undefined;
+      if (!dragged) return prev;
+      if (dragged.slot === targetSlot) return prev;
+
+      // Is there a tile at the target slot?
+      const targetIdx = current.findIndex(
+        (p, i) => i !== draggedIdx && p.slot === targetSlot,
+      );
+      const target = targetIdx >= 0 ? current[targetIdx] : undefined;
+
+      if (target) {
+        // Same-size swap only. Different sizes → reject (spring back).
+        if (target.fw !== dragged.fw || target.fh !== dragged.fh) {
+          return prev;
+        }
+        const next = [...current];
+        next[draggedIdx] = { ...dragged, slot: targetSlot };
+        next[targetIdx]  = { ...target,  slot: dragged.slot };
+        return { ...prev, [activeMode]: next };
+      }
+
+      // Empty target — simple move.
+      const next = [...current];
+      next[draggedIdx] = { ...dragged, slot: targetSlot };
+      return { ...prev, [activeMode]: next };
+    });
+  }, [activeMode]);
+
+  const handleHide = useCallback((_tile: BoardTile) => {
+    // Placeholder — hide/remove tile support is a future feature.
+    hapticIfEnabled();
+  }, [hapticIfEnabled]);
+
+  // ── Push-aside resize handler ─────────────────────────────────────────
+  // When a tile is resized, cascade-shift any tiles whose footprint now
+  // overlaps the new one. Cascaded tiles walk to the nearest empty slot
+  // (search forward, wrap rows). Coarse footprint uses ceil(fw/2) cols
+  // and ceil(fh/2) rows — a fw=3 tile occupies 2 coarse cols.
+  const handleResize = useCallback((tileId: string, newFw: number, newFh: number) => {
+    hapticIfEnabled();
+    setLayouts(prev => {
+      const current: BoardLayout = prev[activeMode]
+        ?? BOARD_TILES[activeMode].map((t, i) => ({
+          id: t.id, slot: i, fw: 2, fh: 2,
+        }));
+      const idx = current.findIndex(p => p.id === tileId);
+      const original = idx >= 0 ? current[idx] : undefined;
+      if (!original) return prev;
+
+      // Coarse footprint helpers. fw/fh are in FINE (44px) units; the
+      // coarse (88px) footprint is Math.ceil(fw/2) cols × Math.ceil(fh/2) rows.
+      const footprint = (p: TilePlacement) => {
+        const startCol = p.slot % BOARD_COLUMNS;
+        const startRow = Math.floor(p.slot / BOARD_COLUMNS);
+        return {
+          startCol, startRow,
+          endCol: startCol + coarseCols(p.fw) - 1,
+          endRow: startRow + coarseRows(p.fh) - 1,
+        };
+      };
+      const overlaps = (a: ReturnType<typeof footprint>, b: ReturnType<typeof footprint>) =>
+        !(a.startCol > b.endCol || b.startCol > a.endCol ||
+          a.startRow > b.endRow || b.startRow > a.endRow);
+
+      const resized: TilePlacement = { ...original, fw: newFw, fh: newFh };
+      const resizedFp = footprint(resized);
+
+      // Reject if the resized tile would extend past the right edge.
+      if (resizedFp.endCol >= BOARD_COLUMNS) return prev;
+
+      // Fixed footprints for collision checking: start with the resized tile.
+      const placed: { p: TilePlacement; fp: ReturnType<typeof footprint> }[] = [
+        { p: resized, fp: resizedFp },
+      ];
+
+      // Walk other tiles in slot order; keep each at its current slot if
+      // possible, otherwise search for next empty slot that fits.
+      const others = current
+        .filter((_, i) => i !== idx)
+        .sort((a, b) => a.slot - b.slot);
+
+      for (const other of others) {
+        const desiredFp = footprint(other);
+        const fits = (fp: typeof desiredFp) =>
+          fp.endCol < BOARD_COLUMNS &&
+          !placed.some(pl => overlaps(pl.fp, fp));
+
+        if (fits(desiredFp)) {
+          placed.push({ p: other, fp: desiredFp });
+          continue;
+        }
+
+        // Search forward for a slot that fits.
+        const cw = coarseCols(other.fw);
+        const ch = coarseRows(other.fh);
+        let found = -1;
+        for (let s = other.slot + 1; s < 500; s++) {
+          const col = s % BOARD_COLUMNS;
+          if (col + cw > BOARD_COLUMNS) continue;
+          const row = Math.floor(s / BOARD_COLUMNS);
+          const testFp = {
+            startCol: col, startRow: row,
+            endCol: col + cw - 1, endRow: row + ch - 1,
+          };
+          if (fits(testFp)) { found = s; placed.push({ p: { ...other, slot: s }, fp: testFp }); break; }
+        }
+        if (found < 0) {
+          // Give up gracefully — keep in original slot (may overlap; unlikely).
+          placed.push({ p: other, fp: desiredFp });
+        }
+      }
+
+      const next = placed.map(x => x.p);
+      return { ...prev, [activeMode]: next };
+    });
+  }, [activeMode, hapticIfEnabled]);
 
   // Item 8 — error banner shake animation (principle 13 + 14).
   const bannerShakeX = useSharedValue(0);
@@ -885,7 +1860,32 @@ export default function TalkScreen() {
     TILE_SIZE,
     Math.floor((boardWidth - TILE_LEFT_PADDING * 2 - TILE_GAP * (BOARD_COLUMNS - 1)) / BOARD_COLUMNS),
   );
-  const tiles = BOARD_TILES[activeMode];
+
+  // Lookup map: tileId → BoardTile for the active mode.
+  const tileMapForMode = useMemo(
+    () => new Map(BOARD_TILES[activeMode].map(t => [t.id, t])),
+    [activeMode],
+  );
+
+  // Active layout for the current mode. Falls back to a sequential
+  // default (each tile at its own slot, 2×2 fine size = 88×88).
+  const activeLayout = useMemo<BoardLayout>(() => {
+    const custom = layouts[activeMode];
+    if (custom) return custom;
+    return BOARD_TILES[activeMode].map((t, i) => ({
+      id: t.id, slot: i, fw: 2, fh: 2,
+    }));
+  }, [activeMode, layouts]);
+
+  // Fast lookup: slot index → placement (for collision checks + swap).
+  const layoutBySlot = useMemo(() => {
+    const m = new Map<number, TilePlacement>();
+    activeLayout.forEach(p => m.set(p.slot, p));
+    return m;
+  }, [activeLayout]);
+
+  // Keep `tiles` for the Mulberry prewarm effect (all tiles in active mode).
+  const tiles = useMemo(() => BOARD_TILES[activeMode], [activeMode]);
 
   useEffect(() => {
     const y = scrollPositions.current[activeMode] ?? 0;
@@ -1203,16 +2203,23 @@ export default function TalkScreen() {
           onTabPress={handleTopTab}
         />
 
+        {/* Tap-outside overlay exits edit mode without consuming tile presses */}
+        {editMode ? (
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={handleExitEdit}
+            accessible={false}
+            importantForAccessibility="no"
+          />
+        ) : null}
+
         <ScrollView
           ref={scrollRef}
           style={[styles.board, { backgroundColor: t.colors.background }]}
           contentContainerStyle={[
             styles.boardContent,
             {
-              // Start from the safe-zone inset, then add TILE_LEFT_PADDING
-              // (16pt) inside it. The extra `(availableWidth - boardWidth)/2`
-              // term centres the board on wider devices (iPhone Plus / Pro
-              // Max / iPad) once `availableWidth` exceeds the Figma cap.
+              // Horizontal padding centres the grid on Plus / Pro Max / iPad.
               paddingLeft:  insets.left  + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
               paddingRight: insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
             },
@@ -1221,15 +2228,103 @@ export default function TalkScreen() {
           onScroll={handleScroll}
           scrollEventThrottle={50}
         >
-          {tiles.map(tile => (
-            <BoardTileCell
-              key={tile.id}
-              tile={tile}
-              size={tileSize}
-              onTilePress={handleTilePress}
-              resolved={resolvedSymbols.get(tile.id)}
-            />
-          ))}
+          {/* Absolute-positioned tile grid — enables free drag + math-based snap.
+              The grid always renders with enough rows to fill the visible board
+              area, so the user sees the full slot layout even on empty boards. */}
+          {(() => {
+            const colStep = tileSize + TILE_GAP;
+            const rowStep = tileSize + TILE_V_GAP;
+            // Highest slot the layout reaches determines minimum rows.
+            const maxSlot = activeLayout.reduce(
+              (m, p) => Math.max(m, p.slot), -1,
+            );
+            const tileRows = maxSlot >= 0 ? Math.floor(maxSlot / BOARD_COLUMNS) + 1 : 0;
+            const boardViewH = screenHeight - MESSAGE_HEIGHT - BOARD_TOP_GAP - 100 - 50;
+            const viewportRows = Math.ceil(boardViewH / rowStep) + 1;
+            const gridRows = Math.max(tileRows, viewportRows);
+            const totalGridSlots = gridRows * BOARD_COLUMNS;
+            const gridH = gridRows * rowStep - TILE_V_GAP;
+            return (
+              <View style={{ width: boardWidth - TILE_LEFT_PADDING * 2, height: gridH, position: 'relative' }}>
+                <GridOverlay
+                  cols={BOARD_COLUMNS}
+                  totalSlots={totalGridSlots}
+                  tileSize={tileSize}
+                  gap={TILE_GAP}
+                  rowGap={TILE_V_GAP}
+                  opacity={gridOverlayOpacity}
+                />
+                {/* Iterate placements — each tile knows its own slot + fine size.
+                    Non-square tiles compute their visual width/height from fw/fh. */}
+                {activeLayout.map((placement) => {
+                  const tile = tileMapForMode.get(placement.id);
+                  if (!tile) return null;
+                  const col = placement.slot % BOARD_COLUMNS;
+                  const row = Math.floor(placement.slot / BOARD_COLUMNS);
+                  const w = placement.fw * FINE;
+                  const h = placement.fh * FINE;
+                  return (
+                    <View
+                      key={tile.id}
+                      style={{
+                        position: 'absolute',
+                        left: col * colStep,
+                        top: row * rowStep,
+                        width: w,
+                        height: h,
+                      }}
+                    >
+                      <BoardTileCell
+                        tile={tile}
+                        size={tileSize}
+                        width={w}
+                        height={h}
+                        fw={placement.fw}
+                        fh={placement.fh}
+                        slot={placement.slot}
+                        totalSlots={totalGridSlots}
+                        onTilePress={handleTilePress}
+                        resolved={resolvedSymbols.get(tile.id)}
+                        editMode={editMode}
+                        onLongPressEnterEdit={editMode ? handleExitEdit : handleEnterEdit}
+                        onMoveToSlot={handleMoveToSlot}
+                        onHide={handleHide}
+                        onResize={handleResize}
+                        snapSlot={snapSlot}
+                        dragSourceSlot={dragSourceSlot}
+                        dragFw={dragFw}
+                        dragFh={dragFh}
+                        jiggle={jiggle}
+                      />
+                    </View>
+                  );
+                })}
+                {editMode ? (
+                  <>
+                    {/* Highlight where the dragged tile will land */}
+                    <DragPlaceholder
+                      snapSlot={snapSlot}
+                      dragFw={dragFw}
+                      dragFh={dragFh}
+                      tileSize={tileSize}
+                      gap={TILE_GAP}
+                      rowGap={TILE_V_GAP}
+                      cols={BOARD_COLUMNS}
+                    />
+                    {/* Phantom card trail at the drag origin slot */}
+                    <SourceGhost
+                      dragSourceSlot={dragSourceSlot}
+                      tileSize={tileSize}
+                      gap={TILE_GAP}
+                      rowGap={TILE_V_GAP}
+                      cols={BOARD_COLUMNS}
+                    />
+                  </>
+                ) : null}
+              </View>
+            );
+          })()}
+
           {activeMode !== 'home' ? (
             <View
               style={[
@@ -1362,10 +2457,11 @@ const styles = StyleSheet.create({
     height: TOP_NAV_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
+    gap: 32,
     paddingTop: 12,
     paddingBottom: 9,
-    paddingHorizontal: 14,
+    paddingHorizontal: 20,
   },
   // Full-width bottom border of the top nav. Rendered as a view rather than
   // a border so it isn't clipped by the animated slot's overflow:hidden.
@@ -1388,25 +2484,34 @@ const styles = StyleSheet.create({
   },
   topTabContent: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     height: '100%',
+    width: '100%',
+    paddingTop: 2,
+    paddingBottom: 1,
+  },
+  topTabIconMount: {
+    height: 30,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
   },
   topTabLabel: {
-    marginTop: 4,
     fontSize: 10,
+    lineHeight: 12,
     fontWeight: '800',
     letterSpacing: 0.6,
+    textAlign: 'center',
   },
   board: {
     flex: 1,
   },
   boardContent: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    columnGap: TILE_GAP,
-    rowGap: TILE_GAP,
+    // Tiles are absolutely positioned inside the grid container View.
+    // This contentContainerStyle only provides the outer padding.
     paddingTop: BOARD_TOP_GAP,
-    paddingBottom: 28,
+    paddingBottom: 10,
+    alignItems: 'flex-start',
   },
   tilePressable: {
     width: '100%',
@@ -1451,12 +2556,12 @@ const styles = StyleSheet.create({
   },
   folderLabel: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    top: 16,
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '600',
+    left: 8,
+    right: 8,
+    top: 10,
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: '700',
     textAlign: 'center',
   },
   // Symbol mount sits below the label and centers the Mulberry pictogram.
@@ -1466,8 +2571,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    top: 42,
-    bottom: 4,
+    top: 34,
+    bottom: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1491,12 +2596,12 @@ const styles = StyleSheet.create({
   // Typography mirrors `folderLabel` so words and folders read as one family.
   wordLabel: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    top: 16,
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '600',
+    left: 8,
+    right: 8,
+    top: 10,
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: '700',
     textAlign: 'center',
   },
   ghostOverlay: {

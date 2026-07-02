@@ -147,76 +147,80 @@ export const TalkMessageStrip = React.memo(function TalkMessageStrip({
         {
           backgroundColor: t.colors.surface,
           borderBottomColor: t.colors.border,
-          borderBottomWidth: 1.4,
+          borderBottomWidth: 1.2,
         },
       ]}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={hasWords ? `Speak ${messageText}` : 'Tap symbols to build a sentence'}
-        onPress={handleSpeak}
-        style={styles.messageButton}
-      >
-        {!hasWords && ghostCount === 0 ? (
-          <Text
-            style={[
-              styles.messageText,
-              styles.messagePlaceholder,
-              { color: t.colors.textTertiary },
-            ]}
-            numberOfLines={1}
+      <View style={styles.messageContentRow}>
+        <View style={styles.messageButtonSlot}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={hasWords ? `Speak ${messageText}` : 'Tap symbols to build a sentence'}
+            onPress={handleSpeak}
+            style={styles.messageButton}
           >
-            Tap to speak....
-          </Text>
-        ) : null}
-        <View
-          style={[
-            styles.messageSlotRow,
-            !hasWords && ghostCount === 0 && styles.messageSlotRowHidden,
-          ]}
-        >
-          {Array.from({ length: MESSAGE_SLOT_COUNT }).map((_, index) => {
-            const word = visibleMessageWords[index];
-            return (
-              <View
-                key={index}
-                ref={ref => {
-                  messageSlotRefs.current[index] = ref;
-                }}
-                style={styles.messageSlot}
+            {!hasWords && ghostCount === 0 ? (
+              <Text
+                style={[
+                  styles.messageText,
+                  styles.messagePlaceholder,
+                  { color: t.colors.textTertiary },
+                ]}
+                numberOfLines={1}
               >
-                {word ? (
-                  <MessageChip
-                    label={word.label}
-                    tile={
-                      chipTileLookup.get(word.label.toLowerCase()) ?? {
-                        id: word.label,
-                        label: word.label,
-                        kind: 'word',
-                        color: '#5CC9E8',
-                        background: 'cyan',
-                      }
-                    }
-                    onRemove={() => onRemoveWord(index, word.label)}
-                    wordBackgroundForTile={wordBackgroundForTile}
-                  />
-                ) : null}
-              </View>
-            );
-          })}
+                Tap to speak....
+              </Text>
+            ) : null}
+            <View
+              style={[
+                styles.messageSlotRow,
+                !hasWords && ghostCount === 0 && styles.messageSlotRowHidden,
+              ]}
+            >
+              {Array.from({ length: MESSAGE_SLOT_COUNT }).map((_, index) => {
+                const word = visibleMessageWords[index];
+                return (
+                  <View
+                    key={index}
+                    ref={ref => {
+                      messageSlotRefs.current[index] = ref;
+                    }}
+                    style={styles.messageSlot}
+                  >
+                    {word ? (
+                      <MessageChip
+                        label={word.label}
+                        tile={
+                          chipTileLookup.get(word.label.toLowerCase()) ?? {
+                            id: word.label,
+                            label: word.label,
+                            kind: 'word',
+                            color: '#5CC9E8',
+                            background: 'cyan',
+                          }
+                        }
+                        onRemove={() => onRemoveWord(index, word.label)}
+                        wordBackgroundForTile={wordBackgroundForTile}
+                      />
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </Pressable>
         </View>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={hasWords ? 'Backspace' : 'Return to home board'}
-        accessibilityHint={hasWords ? 'Hold to clear all words' : undefined}
-        onPress={handleBackspace}
-        onLongPress={handleBackspaceLongPress}
-        delayLongPress={500}
-        style={styles.backspace}
-      >
-        <BackspaceIcon size={40} />
-      </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={hasWords ? 'Backspace' : 'Return to home board'}
+          accessibilityHint={hasWords ? 'Hold to clear all words' : undefined}
+          onPress={handleBackspace}
+          onLongPress={handleBackspaceLongPress}
+          delayLongPress={500}
+          style={styles.backspace}
+        >
+          <BackspaceIcon size={40} />
+        </Pressable>
+      </View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={navVisible ? 'Hide board navigation' : 'Show board navigation'}
@@ -244,7 +248,6 @@ export const TalkMessageStrip = React.memo(function TalkMessageStrip({
           name={navVisible ? 'chevron-up' : 'chevron-down'}
           size={20}
           style={{ marginTop: -4 }}
-          thickness={5}
           color={navVisible ? t.colors.primaryDark : t.colors.textMuted}
         />
       </Pressable>
@@ -257,20 +260,29 @@ const styles = StyleSheet.create({
     height: MESSAGE_HEIGHT,
     paddingLeft: 21,
     paddingRight: 17,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    justifyContent: 'center',
     paddingBottom: 15,
+    position: 'relative',
     // borderBottomWidth is applied inline (conditional on navVisible)
   },
-  messageButton: {
+  messageContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: -2,
+  },
+  messageButtonSlot: {
     flex: 1,
-    height: 48,
+    height: 73,
+    position: 'relative',
+  },
+  messageButton: {
+    height: '100%',
     justifyContent: 'center',
     position: 'relative',
   },
   messageText: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: '700',
   },
   messagePlaceholder: {
@@ -309,8 +321,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   backspace: {
-    width: 56,
-    height: 48,
+    width: 61,
+    height: 73,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: spacing.sm,
@@ -319,9 +331,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: '50%',
     bottom: -15,
-    width: 66,
+    width: 62,
     height: 14,
-    marginLeft: -33,
+    marginLeft: -13,
     borderWidth: 1.5,
     borderTopWidth: 0,
     borderBottomLeftRadius: 5,

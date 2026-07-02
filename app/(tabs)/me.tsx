@@ -591,6 +591,8 @@ export default function MeScreen() {
     <Screen
       title="Profile"
       subtitle="Your voice, access, and app controls."
+      subtitleTopSpacing={spacing.sm}
+      headerBottomSpacing={spacing.xl}
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
@@ -1061,7 +1063,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.xxl,
   },
   saveNotice: {
     fontFamily: fonts.displayBold,
@@ -1093,19 +1095,19 @@ const styles = StyleSheet.create({
   },
   userMeta: {
     fontFamily: fonts.body,
-    marginTop: 2,
+    marginTop: spacing.sm,
     fontSize: typography.caption,
   },
 
   // ── Section ──
   sectionWrap: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xxl,
   },
   sectionEyebrow: {
     fontFamily: fonts.bodyHeavy,
     fontSize: typography.caption,
     letterSpacing: 0.8,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
     marginLeft: spacing.xs,
   },
   sectionCard: {
@@ -1125,7 +1127,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   sectionBody: {
-    paddingBottom: spacing.xs,
+    paddingBottom: spacing.sm,
   },
   sectionNote: {
     fontFamily: fonts.body,
@@ -1141,7 +1143,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-    paddingBottom: 4,
+    paddingBottom: spacing.sm,
   },
   subSectionLabel: {
     fontFamily: fonts.bodyHeavy,
@@ -1183,7 +1185,7 @@ const styles = StyleSheet.create({
   mascotRow: {
     alignItems: 'center',
     gap: spacing.sm,
-    marginVertical: spacing.lg,
+    marginVertical: spacing.xxl,
     paddingHorizontal: spacing.xl,
   },
   mascotImage: {
@@ -1200,7 +1202,7 @@ const styles = StyleSheet.create({
   // ── Sign Out ──
   signOutContainer: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.xxl,
   },
   signOutButton: {
     width: 240,

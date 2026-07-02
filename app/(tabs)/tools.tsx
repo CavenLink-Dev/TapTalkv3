@@ -88,7 +88,7 @@ const TOOLS: Tool[] = [
 ];
 
 const TOOL_BY_ID = new Map<ToolId, Tool>(TOOLS.map(t => [t.id, t]));
-const CARD_GAP = spacing.lg;
+const CARD_GAP = spacing.xxl;
 const CARD_HEIGHT = 214;
 
 // Six evenly-spaced angles for the star burst particles.
@@ -248,7 +248,7 @@ function ToolCard({
   const starGlow  = useRef(new Animated.Value(favourite ? 1 : 0)).current;
   const [particleTrigger, setParticleTrigger] = useState(0);
 
-  // Shimmer: faint diagonal stripe sweeps across hero periodically
+  // Shimmer: favourites only, with a slightly stronger pass
   const shimmerProgress = useRef(new Animated.Value(0)).current;
 
   // Drag handle: slides in from left when edit mode opens
@@ -274,27 +274,27 @@ function ToolCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Shimmer loop — each card has a unique start time so they never sync up
+  // Shimmer loop — favourites only, each card has a unique start time
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || !favourite) return;
     let timeout: ReturnType<typeof setTimeout>;
 
     const runShimmer = () => {
       shimmerProgress.setValue(0);
       Animated.timing(shimmerProgress, {
         toValue: 1,
-        duration: 680,
+        duration: 760,
         easing: Easing.inOut(Easing.sin),
         useNativeDriver: true,
       }).start(() => {
-        timeout = setTimeout(runShimmer, 9000 + Math.random() * 7000);
+        timeout = setTimeout(runShimmer, 5500 + Math.random() * 2500);
       });
     };
 
-    timeout = setTimeout(runShimmer, 2600 + index * 800 + Math.random() * 2000);
+    timeout = setTimeout(runShimmer, 1500 + index * 500 + Math.random() * 1200);
     return () => clearTimeout(timeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduceMotion]);
+  }, [favourite, reduceMotion]);
 
   // Drag handle slide in/out
   useEffect(() => {
@@ -527,15 +527,17 @@ function ToolCard({
             />
           </Animated.View>
 
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              { transform: [{ translateX: shimmerTranslateX }] },
-            ]}
-          >
-            <View style={styles.shimmerStripe} />
-          </Animated.View>
+          {favourite ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                { transform: [{ translateX: shimmerTranslateX }] },
+              ]}
+            >
+              <View style={styles.shimmerStripe} />
+            </Animated.View>
+          ) : null}
         </View>
 
         {/* Card body */}
@@ -772,7 +774,10 @@ export default function ToolsScreen() {
   return (
     <Screen
       title="Tools"
-      subtitle="Tap a tool to open it. Hold a tool to organise."
+      subtitle="Tap tool to open it."
+      backgroundColor={t.isDark ? t.colors.inputBgWhite : t.colors.background}
+      subtitleTopSpacing={spacing.sm}
+      headerBottomSpacing={spacing.xl}
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
@@ -875,7 +880,7 @@ const styles = StyleSheet.create({
     left: 0,
     width: 54,
     height: 200,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.30)',
     transform: [{ rotate: '18deg' }]},
   cardBody: {
     padding: spacing.md,
@@ -934,7 +939,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF0B3'},
   section: {
     gap: spacing.sm,
-    marginBottom: spacing.lg},
+    marginBottom: spacing.xxl},
   // Favourites section gets a warm golden tint strip — visually separates it
   favouritesSection: {
     backgroundColor: 'rgba(245, 180, 0, 0.06)',
@@ -946,7 +951,7 @@ const styles = StyleSheet.create({
     minHeight: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: spacing.sm,
     paddingHorizontal: spacing.xs},
   sectionTitle: {
     fontFamily: fonts.displayHeavy,

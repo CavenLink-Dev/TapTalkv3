@@ -10,6 +10,9 @@ interface ScreenProps {
   subtitle?: string;
   children?: React.ReactNode;
   scroll?: boolean;
+  backgroundColor?: string;
+  subtitleTopSpacing?: number;
+  headerBottomSpacing?: number;
   /** Pull-to-refresh — only active when `scroll` is true. */
   refreshing?: boolean;
   onRefresh?: () => void;
@@ -20,15 +23,19 @@ export function Screen({
   subtitle,
   children,
   scroll = true,
+  backgroundColor,
+  subtitleTopSpacing = spacing.sm,
+  headerBottomSpacing = spacing.xl,
   refreshing = false,
   onRefresh,
 }: ScreenProps) {
   const t = useTheme();
+  const resolvedBackgroundColor = backgroundColor ?? t.colors.background;
 
   const content = (
     <>
       {title ? (
-        <View style={styles.header}>
+        <View style={[styles.header, { marginBottom: headerBottomSpacing }]}>
           <ThemedText
             variant="title"
             accessibilityRole="header"
@@ -39,7 +46,7 @@ export function Screen({
             <ThemedText
               variant="callout"
               color={t.colors.textMuted}
-              style={styles.subtitle}
+              style={[styles.subtitle, { marginTop: subtitleTopSpacing }]}
             >
               {subtitle}
             </ThemedText>
@@ -51,9 +58,10 @@ export function Screen({
   );
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: t.colors.background }]}>
+    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: resolvedBackgroundColor }]}>
       {scroll ? (
         <ScrollView
+          style={{ backgroundColor: resolvedBackgroundColor }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           bounces
@@ -73,16 +81,14 @@ export function Screen({
           {content}
         </ScrollView>
       ) : (
-        <View style={styles.staticContent}>{content}</View>
+        <View style={[styles.staticContent, { backgroundColor: resolvedBackgroundColor }]}>{content}</View>
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    marginBottom: spacing.lg,
-  },
+  header: {},
   safeArea: {
     flex: 1,
   },
@@ -94,7 +100,5 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.lg,
   },
-  subtitle: {
-    marginTop: 4,
-  },
+  subtitle: {},
 });

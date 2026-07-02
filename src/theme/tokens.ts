@@ -11,7 +11,7 @@ import { fonts } from './fonts';
 export const colorsLight = {
   // ── UI foundation
   /** main_background_colour — VariableID:1:1123 */
-  background:         '#F1F5F9',
+  background:         '#ECECEC',
   /** secondary_main_background_white / content_background_for_icons_etc_pure_white */
   surface:            '#FFFFFF',
   /** light_nav_background */

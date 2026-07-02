@@ -69,7 +69,7 @@ const ACTIVITIES: Activity[] = [
 
 const CARD_HEIGHT = 214;
 const HERO_HEIGHT = 112;
-const CARD_GAP    = spacing.lg;
+const CARD_GAP    = spacing.xxl;
 
 const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300] as const;
 
@@ -270,25 +270,25 @@ function ActivityCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Shimmer loop
+  // Shimmer loop — favourites only, with a slightly stronger pass
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || !favourite) return;
     let timeout: ReturnType<typeof setTimeout>;
     const runShimmer = () => {
       shimmerProgress.setValue(0);
       Animated.timing(shimmerProgress, {
         toValue:  1,
-        duration: 680,
+        duration: 760,
         easing:   Easing.inOut(Easing.sin),
         useNativeDriver: true,
       }).start(() => {
-        timeout = setTimeout(runShimmer, 9_000 + Math.random() * 7_000);
+        timeout = setTimeout(runShimmer, 5_500 + Math.random() * 2_500);
       });
     };
-    timeout = setTimeout(runShimmer, 2_600 + index * 800 + Math.random() * 2_000);
+    timeout = setTimeout(runShimmer, 1_500 + index * 500 + Math.random() * 1_200);
     return () => clearTimeout(timeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduceMotion]);
+  }, [favourite, reduceMotion]);
 
   // Star bounce + glow + particles
   const isMounted    = useRef(false);
@@ -409,15 +409,17 @@ function ActivityCard({
             />
           </Animated.View>
 
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              { transform: [{ translateX: shimmerTranslateX }] },
-            ]}
-          >
-            <View style={styles.shimmerStripe} />
-          </Animated.View>
+          {favourite ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                { transform: [{ translateX: shimmerTranslateX }] },
+              ]}
+            >
+              <View style={styles.shimmerStripe} />
+            </Animated.View>
+          ) : null}
         </View>
 
         <View
@@ -519,6 +521,9 @@ export default function ActivitiesScreen() {
     <Screen
       title="Activities"
       subtitle="Tap an activity to begin."
+      backgroundColor={t.isDark ? t.colors.inputBgWhite : t.colors.background}
+      subtitleTopSpacing={spacing.sm}
+      headerBottomSpacing={spacing.xl}
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
@@ -584,7 +589,7 @@ const styles = StyleSheet.create({
 
   section: {
     gap: spacing.sm,
-    marginBottom: spacing.lg},
+    marginBottom: spacing.xxl},
 
   favouritesSection: {
     borderRadius:     radii.card,
@@ -596,7 +601,7 @@ const styles = StyleSheet.create({
     minHeight:         24,
     flexDirection:     'row',
     alignItems:        'center',
-    gap:               6,
+    gap:               spacing.sm,
     paddingHorizontal: spacing.xs},
 
   sectionTitle: {
@@ -629,7 +634,7 @@ const styles = StyleSheet.create({
     left:            0,
     width:           54,
     height:          200,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.30)',
     transform:       [{ rotate: '18deg' }]},
 
   cardBody: {

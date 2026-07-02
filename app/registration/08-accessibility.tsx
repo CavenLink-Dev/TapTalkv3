@@ -115,7 +115,7 @@ export default function RegStep8Accessibility() {
     >
       <View style={styles.list}>
         {/* ── Live preview ── */}
-        <View style={[styles.previewCard, { backgroundColor: isDark ? '#0B1117' : '#F1F5F9' }]}>
+        <View style={[styles.previewCard, { backgroundColor: isDark ? '#0B1117' : '#ECECEC' }]}>
           <Text style={[styles.previewLabel, { color: isDark ? '#94A3B8' : colors.textTertiary }]}>
             Preview
           </Text>
