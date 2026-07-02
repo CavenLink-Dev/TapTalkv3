@@ -1,167 +1,158 @@
-# TapTalk — Current State
+# TapTalk - Current State
 
-> **Read `RULES.md` first. Then `git status` / `git log -10`. Then start here.**
-> Completed architecture + locked decisions → `NEXT-ARCHIVE.md`.
-> Building an activity? → `activity_implementation_rules.md` is binding (Shape Match is the reference).
-
----
-
-## Current status
-
-### Step 9 — Polish pass (complete)
-
-- [x] **Animations audit** - activity screens, onboarding, registration, Visual Timer, and Step by Step motion reviewed for purposeful motion (Rule 15).
-- [x] **Haptics audit** - strict import check confirms raw `expo-haptics` is only imported by `src/utils/haptics.ts`; callers use helpers (Rule 19).
-- [x] **Speech audit** - raw `expo-speech` only imported by `src/hooks/useSpeech.ts`; Quick Talk and Voice Settings use `useSpeech`.
-- [x] **Reduce Motion sweep** - registration/onboarding animation points use `useReduceMotion` (Rule 18).
-- [x] **Activity completion overlay** - soft-corner card with stats, Again, Cancel.
-
-### Step 10 — Uncommitted changes (not yet committed — July 2, 2026)
-
-45 files changed. Key additions:
-
-| Area | What landed |
-|------|-------------|
-| `app/(tabs)/talk.tsx` | Contextual dock actions, board control bar (+934 lines) |
-| `app/(tabs)/activities.tsx` | Progress tracking hooks (+48) |
-| `app/(tabs)/me.tsx` | Profile section refinements (+170) |
-| `app/activities/progress.tsx` | **New** — therapist-friendly progress screen (+383) |
-| `app/board/settings.tsx` | **New** — board customisation settings (+542) |
-| `app/calendar/index.tsx` | Calendar UI improvements (+247) |
-| `app/legal/*` | **New** — privacy, terms, medical disclaimer, data choices (+5 files) |
-| `src/components/native/Icon.tsx` | **New** — custom SVG icon system (+136) |
-| `src/components/native/HelperCaption.tsx` | **New** — form helper text component (+39) |
-| `src/features/activities/progress-store.ts` | **New** — session history store (+93) |
-| `src/features/activities/sound-settings.ts` | **New** — activity sound config (+68) |
-| `src/screens/LegalDocumentScreen.tsx` | **New** — shared legal doc scaffold (+142) |
-| `src/features/calendar/store.ts` | Calendar store additions (+46) |
-| `src/components/activities/ActivityCompletionOverlay.tsx` | Overlay refinements (+31) |
+> Read `RULES.md` first. Then `git status` / `git log -10`.
+> Completed architecture + locked decisions live in `NEXT-ARCHIVE.md`.
+> Building or editing an activity? `activity_implementation_rules.md` is binding.
 
 ---
 
-## TypeScript baseline
+## Current Snapshot
 
-`npx tsc --noEmit` last run: **2026-07-02**. Baseline is **4 pre-existing errors** — none in files above.
+Date: 2026-07-02
 
-| Error | File |
-|-------|------|
-| `PrimaryButtonProps` does not accept `accessibilityHint` | `app/(tabs)/me.tsx:998` |
-| Object possibly undefined (×2) | `src/features/symbol-brain/__tests__/resolveSymbolForKeyword.test.ts:453,454` |
-| `string \| undefined` assigned to `string` | `src/features/symbol-brain/resolveSymbolForKeyword.ts:116` |
+Latest committed baseline:
+- `36fa545 v1.0.0 PR - feat(activities): enhance activity tracking and user interface`
+- Working tree has local cleanup edits only. Do not commit or push unless the user asks.
 
-Do **not** add new errors.
-
----
-
-## Implementation plan — Step 11
-
-> 30 candidates generated, filtered to the 10 highest-impact items. Full fix spec in `to_do/touch-font-fix-plan.md`. Sweep subagent at `.cursor/agents/touch-sweeper.md`.
-
-### 1. Add `touchTarget` token _(unblocks everything below — do first)_
-**File:** `src/theme/tokens.ts`
-Add `touchTarget` export with `min: 44`, `icon` and `headerIcon` style spreads.
-Prevents the same drift from recurring on new screens.
-
-### 2. Fix edit-mode delete + reorder controls _(critical — smallest targets in the app)_
-**Files:** `app/board/quick-talk/index.tsx`, `app/first-then/index.tsx`
-- `deleteHandle` 28×28 → 44×44
-- `arrowBtn` 32×32 → 44×44
-- `editHandles` column width 36 → 44
-- `burgerHit` 36×36 → 44×44
-
-### 3. Fix contradictory play-button styles _(the code claims 44pt but overrides to 38)_
-**Files:** `app/(tabs)/activities.tsx`, `app/(tabs)/tools.tsx`
-- `playButton` width/height 38 → 44 (remove conflict with `iconButton: minHeight 44`)
-- `doneChip` minHeight 30 → 44
-
-### 4. Fix login back button + all activity game headers + overlay cancel
-**Files:** `app/auth/login.tsx`, `app/activities/colour-pop.tsx`, `app/activities/memory-match.tsx`, `app/activities/shape-match.tsx`, `src/components/activities/ActivityCompletionOverlay.tsx`
-- `backBtn` 32×32 → 44×44
-- `headerIconBtn` 40×40 → 44×44 (three games)
-- `cancelBtn` 32×32 → 44×44 (one fix, all games benefit)
-
-### 5. Fix calendar & board keyboard navigation
-**Files:** `app/calendar/day/[date].tsx`, `app/board/keyboard/index.tsx`, `app/calendar/index.tsx`
-- `headerIconBtn` width 36 → 44 (two files)
-- `clearBtn` 36×36 → 44×44
-- `monthNavBtn` 36×36 → 44×44
-
-### 6. Fix shared components _(one fix, many screens)_
-**Files:** `src/components/native/Pill.tsx`, `src/components/native/DisclosureRow.tsx`
-- `Pill` hit area: minHeight 34 → 44
-- `DisclosureRow` iconChip: 36×36 → 44×44
-
-### 7. Visual timer fonts _(design system compliance — needs decision first)_
-**File:** `app/visual-timer/index.tsx`
-- ModernFace: `fontFamily: undefined` → `fonts.displayHeavy`
-- OldSchoolFace: `Courier New` → **decision required**: keep retro Courier (add design-exception comment) or switch to `fonts.displayBold` + `fontVariant: ['tabular-nums']`
-
-### 8. Wire legal screens to Profile _(screens exist but no navigation entry point)_
-**File:** `app/(tabs)/me.tsx`
-Add tappable rows in the Profile section that push to `app/legal/privacy-policy`, `terms-of-use`, `medical-disclaimer`, `data-choices`. Use `DisclosureRow` or the existing `rowTouchable` pattern. All legal screens are built and ready.
-
-### 9. Connect ActivityCompletionOverlay → progress-store _(pipeline exists but may be incomplete)_
-**Files:** `src/components/activities/ActivityCompletionOverlay.tsx`, `app/activities/progress.tsx`
-Verify `ActivityCompletionOverlay` calls `recordSession()` from `progress-store.ts` with the correct `ActivitySession` shape on completion. Check `progress.tsx` reads from the store and renders real data (not stubs). Wire any gaps.
-
-### 10. Fix onboarding + dev screen remaining targets
-**Files:** `app/onboarding/tour.tsx`, `src/features/guardian-settings/GuardianSymbolOverrideScreen.tsx`
-- `skipBtn` / `prevBtn`: add `minHeight: 44, justifyContent: 'center'`
-- GuardianSymbolOverride `button`: add `minHeight: 44`
+Live app shape:
+- Bottom nav: Talk, Activities, Tools, Me.
+- Calendar remains inside Tools, not a bottom tab.
+- Talk Board has the contextual bottom dock and board control bar.
+- Activities currently expose Shape Match, Colour Pop, Memory Match, and the progress screen.
+- Profile already links legal/privacy/data documents.
+- Symbol search and Talk Board use Mulberry symbols through the generated asset map and bundled symbol database.
+- `npx tsc --noEmit` passes cleanly after the cleanup.
 
 ---
 
-## Verification for Step 11
+## Cleanup Pass - Local
 
-After all 10 items:
+Purpose: trim files that are not touched by a full app run, without weakening AAC, disability access, or future symbol safety.
+
+Already removed in this local cleanup:
+- Backup/temp/system files: `.DS_Store`, `.tmp`, `app/(tabs)/tools.tsx.bak`.
+- Old standalone planning/design files now folded into this file or no longer used by runtime.
+- Unused bottom-tab Calendar SVGs after removing the unused Calendar icon entry from `BottomNavIcon`.
+- Unused Figma/export artwork folders that are not imported by app code.
+- Unused old activity/card/icon/loading images that no route imports.
+- Unloaded SF Compact font files. Keep only the five files registered in `src/theme/fonts.ts`.
+- Orphan source modules that are not reached from any Expo route import graph.
+- Keep `src/assets/icons/setting-board.png`; it is still used by the board settings icon.
+
+Protected - do not delete:
+- `src/assets/symbols/mulberry/svg/`
+- `src/assets/symbols/mulberry/svg-normalised/`
+- `src/data/imports/mulberry/`
+- `src/data/mulberryAssetMap.generated.ts`
+- `assets/databases/taptalk_symbol_brain.db`
+
+Mulberry note:
+- Mulberry is core AAC content. Keep both original and normalised SVG sets unless the user explicitly approves a storage change.
+- Runtime currently uses `svg-normalised` via `src/data/mulberryAssetMap.generated.ts`.
+- The original `svg` set is still kept as source/attachment material for rebuilds and review.
+- Duplicate check found no second downloaded Mulberry library elsewhere in the workspace.
+- Counts to preserve: 3,436 files in `svg/` and 3,436 files in `svg-normalised/`.
+- Folder convention after cleanup: `assets/` holds normal runtime app assets; `src/assets/` is Mulberry-only.
+
+Cleanup verification:
 ```bash
-npx tsc --noEmit   # must stay at 4 pre-existing errors
+npx tsc --noEmit   # passes
 ```
-Then grep for remaining sub-44 interactive sizes:
+
+---
+
+## TypeScript Baseline
+
+Current baseline after cleanup: 0 errors from `npx tsc --noEmit`.
+
+---
+
+## Next Small Fixes
+
+These are still worth doing before a wider redesign:
+
+1. Add a shared `touchTarget` token in `src/theme/tokens.ts` for 44 x 44 icon/header controls.
+2. Sweep remaining sub-44 interactive controls in Quick Talk, Step by Step, Calendar, activity headers, onboarding, and shared native rows.
+3. Replace remaining non-SF timer fonts in Visual Timer with `fonts.displayBold` or `fonts.displayHeavy`.
+4. Check that activity completion recording and `app/activities/progress.tsx` read/write the same real progress data.
+5. Keep `ActivityProgressBar` and `activity_implementation_rules.md` aligned. Code now draws the progress bar inline while the rules still mention SVG assets.
+
+Verification after these:
 ```bash
-rg "width:\s*(2[0-9]|3[0-9])\b" app/ src/components/ --include="*.tsx"
-rg "height:\s*(2[0-9]|3[0-9])\b" app/ src/components/ --include="*.tsx"
+npx tsc --noEmit
+rg "width:\s*(2[0-9]|3[0-9])\b" app/ src/components/ --glob "*.tsx"
+rg "height:\s*(2[0-9]|3[0-9])\b" app/ src/components/ --glob "*.tsx"
+rg "Courier New|monospace|sans-serif|fontFamily:\s*undefined" app/ src/ --glob "*.tsx"
 ```
-Audit each hit — most will be icons or decorative views, not touch targets.
 
 ---
 
-## Polish rules reminder
+## Implementation Ideas For User Approval
 
-| Rule | Summary |
-|------|---------|
-| 15 | Every animation must serve a purpose — no decorative motion. |
-| 18 | **Reduce Motion is required.** `useReduceMotion()` must gate all non-trivial animations. |
-| 19 | Haptics sparingly — selection on tap, success/error on outcomes only. |
-| 20 | **44×44 pt minimum touch target.** Primary actions ≥60 pt where layout allows. |
+Ask the user yes/no before implementing any of these.
+
+1. **Board Focus Mode**
+   - Hide the bottom tab bar only while the user is actively communicating, with an obvious exit control.
+   - Keeps stable navigation normally while giving AAC more screen space.
+   - Supports Rule 4, Rule 5, Rule 20, Rule 30.
+
+2. **Remove Board Top Nav From The First View**
+   - Move Talk, Quick, Edit, and Clear into the contextual dock or a More menu.
+   - The first Talk screen becomes just message strip, symbol grid, and essential controls.
+   - Supports Rule 1, Rule 2, Rule 10, Rule 29.
+
+3. **Emergency And Help Phrases**
+   - Add a protected quick folder for phrases such as "I use AAC", "Please wait", "I need help", "I am in pain", and "Call my support person".
+   - For South Australia, verify exact emergency/support wording before shipping.
+   - Supports Rule 7, Rule 12, Rule 13, Rule 21.
+
+4. **Adelaide Daily Places Board**
+   - Add a starter folder for GP, pharmacy, hospital, bus, train, tram, home, support worker, NDIS appointment, and family contact.
+   - Keep it editable so users can localise their own real places.
+   - Supports Rule 2, Rule 5, Rule 27.
+
+5. **My Communication Passport**
+   - Profile page that explains how the user communicates, what helps, what overwhelms them, trusted contacts, access needs, and emergency notes.
+   - Useful for support workers, therapists, hospital visits, and disability services.
+   - Supports Rule 21, Rule 22, Rule 23, Rule 30.
+
+6. **Motor Access Mode**
+   - Larger controls, fewer columns, no required drag-only actions, and tap alternatives for reorder/resize.
+   - Good for tremor, one-handed use, switch access planning, and fatigue.
+   - Supports Rule 20, Rule 21, Rule 25, Rule 30.
+
+7. **Mulberry Add Symbol Flow**
+   - Finish the Add Symbol and Add Folder flow using Mulberry search, category suggestions, and simple folder placement.
+   - This is the highest-value AAC growth feature.
+   - Supports Rule 5, Rule 7, Rule 28, Rule 29.
+
+8. **Therapist Progress Export**
+   - Export activity sessions and communication practice as a plain, readable summary.
+   - Keep language non-judgmental: progress, support, and observations, not scores that shame the user.
+   - Supports Rule 13, Rule 21, Rule 30.
+
+9. **Reduce Sensory Load Setting**
+   - One switch that quiets shimmer, particles, sound effects, haptics, and non-essential animation.
+   - This should layer on top of system Reduce Motion, not replace it.
+   - Supports Rule 14, Rule 15, Rule 18, Rule 19.
+
+10. **AAC-First Onboarding**
+    - Let the user try a tiny Talk Board immediately before account/profile setup.
+    - Registration still exists, but the app proves its value as a voice first.
+    - Supports Rule 1, Rule 5, Rule 13, Rule 30.
 
 ---
 
-## iOS-native components reference
-
-| Need | Use |
-|------|-----|
-| Confirm / yes-no prompts | `Alert.alert` |
-| Date / time selection | `@react-native-community/datetimepicker` |
-| Wheel pickers (number, choices) | `@react-native-picker/picker` |
-| Notifications, chimes | `expo-notifications` + `expo-av` |
-| Haptics | `expo-haptics` via `src/utils/haptics.ts` helpers |
-| Action sheets (long-press menus) | `ActionSheetIOS` |
-| Modals / sheets | `Modal` with `presentationStyle="formSheet"` |
-| Speech | `expo-speech` via `src/hooks/useSpeech.ts` |
-
----
-
-## Repo conventions
+## Repo Conventions
 
 - Routes in `app/<area>/`. Co-locate `_layout.tsx` + `index.tsx` per area.
 - Reusable UI in `src/components/native/` or `src/components/<feature>/`.
-- Feature state in `src/features/<feature>/store.ts` (`useSyncExternalStore` + AsyncStorage).
-- Tokens from `src/theme/tokens.ts`. No hex literals unless geometry demands.
-- Accessibility on every interactive element: `accessibilityRole`, `accessibilityLabel`, `accessibilityState`.
+- Feature state in `src/features/<feature>/store.ts` using `useSyncExternalStore` + AsyncStorage.
+- Tokens from `src/theme/tokens.ts`. Do not hardcode hex unless geometry, game art, or symbol/category colour requires it.
+- Every interactive element needs `accessibilityRole`, `accessibilityLabel`, and `accessibilityState` where relevant.
 
 ---
 
-## Branching and pushing
+## Branching And Pushing
 
-User pushes from their own editor. Make local edits only. Do **not** run `git push`, do **not** create commits unless explicitly asked.
+User pushes from their own editor. Make local edits only. Do not run `git push`; do not create commits unless explicitly asked.

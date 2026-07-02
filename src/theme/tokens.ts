@@ -1,7 +1,7 @@
 /**
  * TapTalk design tokens — single source of truth.
- * All source values are derived from `src/theme/figma_source/Mode 1.tokens.json`.
- * Variable names are preserved as comments so you can cross-reference the Figma file.
+ * Values were imported from the Figma token handoff, with variable names
+ * preserved as comments for cross-reference.
  */
 
 import { fonts } from './fonts';

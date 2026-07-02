@@ -4,7 +4,7 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { SvgUri } from 'react-native-svg';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
 
-export type BottomNavIconName = 'board' | 'activity' | 'calendar' | 'profile' | 'tools';
+export type BottomNavIconName = 'board' | 'activity' | 'profile' | 'tools';
 
 type IconVariants = { kind: 'svg'; selected: number; unselected: number };
 
@@ -20,11 +20,6 @@ const ICONS: Record<BottomNavIconName, IconVariants> = {
     kind: 'svg',
     selected: require('../../../assets/bottom_nav_icons/activity-selected.svg'),
     unselected: require('../../../assets/bottom_nav_icons/activity-unselected.svg'),
-  },
-  calendar: {
-    kind: 'svg',
-    selected: require('../../../assets/bottom_nav_icons/calendar-selected.svg'),
-    unselected: require('../../../assets/bottom_nav_icons/calendar-unselected.svg'),
   },
   profile: {
     kind: 'svg',
@@ -73,12 +68,6 @@ const ICON_DISPLAY: Record<BottomNavIconName, { selected: DisplayDim; unselected
   activity: {
     selected:   { w: rr(61 * 50 / 45), h: rr(51 * 50 / 45) },  // 68×57
     unselected: { w: rr(49 * 50 / 37), h: rr(39 * 50 / 37) },  // 66×53
-  },
-  // calendar-selected  57×57: tick marks at top + shadow; glyph span ≈51pt
-  // calendar-unselected 50×49: ticks + body ≈46pt glyph
-  calendar: {
-    selected:   { w: rr(57 * 50 / 51), h: rr(57 * 50 / 51) },  // 56×56
-    unselected: { w: rr(50 * 50 / 46), h: rr(49 * 50 / 46) },  // 54×53
   },
   // profile-selected  51×55: shadow ≈6pt → glyph ≈49pt
   // profile-unselected 46×48: no shadow, glyph ≈46pt
