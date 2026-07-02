@@ -69,6 +69,11 @@ export const initialState: AppState = {
   talkStats: { totalWords: 0, sessionsToday: 0, streakDays: 0 },
   activityStats: { gamesPlayed: 0, minutesToday: 0 },
   habits: [],
+  sentenceHistory: [],
+  tileTapCounts: {},
+  tileLastTappedAt: {},
+  showUsageHeatmap: false,
+  ngramModel: {},
 };
 
 function mergeStoredState(storedState: Partial<AppState>): AppState {
@@ -323,7 +328,52 @@ export function appReducer(state: AppState, action: Action): AppState {
       };
     case 'DELETE_HABIT':
       return { ...state, habits: state.habits.filter((h) => h.id !== action.payload) };
-    default:
+    case 'PUSH_SENTENCE_HISTORY': {
+      const words = action.payload.words;
+      if (words.length === 0) return state;
+      const labelKey = words.map(w => w.label).join('|');
+      const last = state.sentenceHistory[0];
+      if (last && last.words.map(w => w.label).join('|') === labelKey) {
+        return state; // deduplicate consecutive identical sentences
+      }
+      const entry = { id: `sent-${Date.now()}`, words, spokenAt: new Date().toISOString() };
+      return { ...state, sentenceHistory: [entry, ...state.sentenceHistory].slice(0, 20) };
+    }
+    case 'INCREMENT_TILE_TAP': {
+      const tileId = action.payload.tileId;
+      return {
+        ...state,
+        tileTapCounts: {
+          ...state.tileTapCounts,
+          [tileId]: (state.tileTapCounts[tileId] ?? 0) + 1,
+        },
+        tileLastTappedAt: {
+          ...state.tileLastTappedAt,
+          [tileId]: new Date().toISOString(),
+        },
+      };
+    }
+    case 'SET_SHOW_USAGE_HEATMAP':
+      return { ...state, showUsageHeatmap: action.payload };
+    case 'UPDATE_NGRAM_MODEL': {
+      const words = action.payload.words;
+      if (words.length < 2) return state;
+      const newModel: Record<string, Record<string, number>> = {};
+      for (const [key, inner] of Object.entries(state.ngramModel)) {
+        newModel[key] = { ...inner };
+      }
+      for (let i = 0; i < words.length - 1; i++) {
+        const current = words[i];
+        const next = words[i + 1];
+        if (!current || !next) continue;
+        if (!newModel[current]) {
+          newModel[current] = {};
+        }
+        newModel[current][next] = (newModel[current][next] ?? 0) + 1;
+      }
+      return { ...state, ngramModel: newModel };
+    }
+  default:
       return state;
   }
 }

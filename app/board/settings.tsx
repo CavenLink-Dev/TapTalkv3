@@ -30,6 +30,7 @@ import { radii, spacing, symbolColors, typography } from '../../src/theme/tokens
 import { hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { useTheme } from '../../src/theme/useTheme';
+import { useAppContext } from '../../src/hooks/useAppContext';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -276,6 +277,7 @@ export default function BoardSettingsScreen() {
   const t = useTheme();
   const router = useRouter();
   const reduceMotion = useReduceMotion();
+  const { state, dispatch } = useAppContext();
 
   // ── Simple settings (visible) — local state only in this pass ──
   const [symbolSize, setSymbolSize] = useState<SizeChoice>('medium');
@@ -398,6 +400,26 @@ export default function BoardSettingsScreen() {
             a later update.
           </Text>
         </DisclosureSection>
+
+        {/* ── Board Health ── */}
+        <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>DIAGNOSTICS</Text>
+        <View style={[styles.card, { backgroundColor: t.colors.surface }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Run board health check"
+            onPress={() => router.push('/board/health')}
+            style={({ pressed }) => [styles.healthRow, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={{ fontSize: typography.body, fontWeight: '600', color: t.colors.text }}>Board Health</Text>
+            <Icon name="chevron-forward" size={22} color={t.colors.textMuted} />
+          </Pressable>
+          <View style={[styles.divider, { backgroundColor: t.colors.background }]} />
+          <ToggleRow
+            label="Show usage heatmap"
+            value={state.showUsageHeatmap}
+            onChange={(v) => dispatch({ type: 'SET_SHOW_USAGE_HEATMAP', payload: v })}
+          />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -466,6 +488,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.md,
+  },
+  healthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 50,
+    paddingVertical: spacing.md,
   },
   settingLabel: {
     fontSize: typography.body,

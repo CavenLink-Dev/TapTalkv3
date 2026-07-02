@@ -20,6 +20,10 @@ export type HotPersistedState = Pick<
   | 'boardLayouts'
   | 'boardPlacements'
   | 'hiddenTileIds'
+  | 'sentenceHistory'
+  | 'tileTapCounts'
+  | 'tileLastTappedAt'
+  | 'ngramModel'
 >;
 
 export type ColdPersistedState = Pick<
@@ -38,6 +42,7 @@ export type ColdPersistedState = Pick<
   | 'goals'
   | 'activityStats'
   | 'habits'
+  | 'showUsageHeatmap'
 >;
 
 export function splitAppState(state: AppState): {
@@ -55,6 +60,10 @@ export function splitAppState(state: AppState): {
       boardLayouts: state.boardLayouts,
       boardPlacements: state.boardPlacements,
       hiddenTileIds: state.hiddenTileIds,
+      sentenceHistory: state.sentenceHistory,
+      tileTapCounts: state.tileTapCounts,
+      tileLastTappedAt: state.tileLastTappedAt,
+      ngramModel: state.ngramModel,
     },
     cold: {
       onboardingComplete: state.onboardingComplete,
@@ -71,6 +80,7 @@ export function splitAppState(state: AppState): {
       goals: state.goals,
       activityStats: state.activityStats,
       habits: state.habits,
+      showUsageHeatmap: state.showUsageHeatmap,
     },
   };
 }
@@ -98,6 +108,9 @@ export function isHotAction(type: string): boolean {
     case 'SET_FIRST_THEN':
     case 'CLEAR_FIRST_THEN':
     case 'INCREMENT_TALK_STATS':
+    case 'PUSH_SENTENCE_HISTORY':
+    case 'INCREMENT_TILE_TAP':
+    case 'UPDATE_NGRAM_MODEL':
       return true;
     default:
       return false;

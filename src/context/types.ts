@@ -90,6 +90,17 @@ export interface AppState {
 
   // Today — Habits
   habits: Habit[];
+
+  // Talk — Sentence History (last 20 spoken/cleared sentences for quick replay)
+  sentenceHistory: { id: string; words: AACWord[]; spokenAt: string }[];
+
+  // Talk — Usage analytics
+  tileTapCounts: Record<string, number>;
+  tileLastTappedAt: Record<string, string>;
+  showUsageHeatmap: boolean;
+
+  // Talk — N-gram next-word prediction model
+  ngramModel: Record<string, Record<string, number>>;
 }
 
 export interface AACWord {
@@ -203,4 +214,8 @@ export type Action =
   | { type: 'INCREMENT_ACTIVITY_STATS'; payload: { minutes: number } }
   | { type: 'ADD_HABIT'; payload: Habit }
   | { type: 'TOGGLE_HABIT_TODAY'; payload: { id: string; date: string } }
-  | { type: 'DELETE_HABIT'; payload: string };
+  | { type: 'DELETE_HABIT'; payload: string }
+  | { type: 'PUSH_SENTENCE_HISTORY'; payload: { words: AACWord[] } }
+  | { type: 'INCREMENT_TILE_TAP'; payload: { tileId: string } }
+  | { type: 'SET_SHOW_USAGE_HEATMAP'; payload: boolean }
+  | { type: 'UPDATE_NGRAM_MODEL'; payload: { words: string[] } };

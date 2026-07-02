@@ -47,11 +47,13 @@ import { buildMessageUtterances } from '../../src/utils/speechRules';
 import { animation, CHROME_SEPARATOR_WIDTH, colors, radii, spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
+import { predictNextWords } from '../../src/utils/ngram';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import {
   resolveSymbolForKeyword,
   ResolvedSymbol,
 } from '../../src/features/symbol-brain/resolveSymbolForKeyword';
+import type { AACWord } from '../../src/context/types';
 
 type TileKind = 'folder' | 'word' | 'action';
 type BoardMode = 'home' | 'foods' | 'animals' | 'tools' | 'quick' | 'settings' | 'emergency';
@@ -293,7 +295,7 @@ const EMERGENCY_TILES: BoardTile[] = [
   { id: 'back-emergency', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
 ];
 
-const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
+export const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
   home: HOME_TILES,
   foods: [
     { id: 'cheese', label: 'Cheese', kind: 'word',   color: SYMBOL_YELLOW, speech: 'cheese', mulberrySymbolId: 'mulberry_cheese_qsgfck', wordType: 'noun' },
@@ -2221,6 +2223,7 @@ export default function TalkScreen() {
   // ── Add Symbol / Add Folder modals (Priority 2) ────────────────────────
   const [addSymbolModalVisible, setAddSymbolModalVisible] = useState(false);
   const [addFolderModalVisible, setAddFolderModalVisible] = useState(false);
+  const [showSentenceHistory, setShowSentenceHistory] = useState(true);
   const folderCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dockFade = useRef(new RNAnimated.Value(1)).current;
   const messageWordsRef = useRef(state.messageWords);
@@ -2441,7 +2444,7 @@ export default function TalkScreen() {
   }, [activeMode, hapticIfEnabled]);
 
   // ── Add Folder confirm: insert folder tile ──────────────────────────
-  const handleAddFolderConfirm = useCallback((result: { label: string; boardKey: string }) => {
+  const handleAddFolderConfirm = useCallback((result: { label: string; boardKey: string; color: string; mulberrySymbolId?: string }) => {
     setAddFolderModalVisible(false);
     const tileId = `folder_${result.boardKey}`;
     setLayouts(prev => {
@@ -2454,8 +2457,9 @@ export default function TalkScreen() {
       id: tileId,
       label: result.label,
       kind: 'folder',
-      color: '#1DCDFF',
+      color: result.color,
       target: result.boardKey as BoardMode,
+      mulberrySymbolId: result.mulberrySymbolId,
     };
     userTilesRef.current.set(tileId, newTile);
     // Register the empty child board
@@ -2934,9 +2938,33 @@ export default function TalkScreen() {
       announce('No message to speak');
       return;
     }
+    if (messageWordsRef.current.length > 0) {
+      dispatch({ type: 'PUSH_SENTENCE_HISTORY', payload: { words: messageWordsRef.current } });
+      dispatch({ type: 'UPDATE_NGRAM_MODEL', payload: { words: messageWordsRef.current.map(w => w.label) } });
+    }
     speakChained(messageText);
     announce(`Speaking: ${messageText}`);
-  }, [announce, speakChained]);
+  }, [announce, speakChained, dispatch]);
+
+  const handleReplaySentence = useCallback((words: AACWord[]) => {
+    hapticIfEnabled();
+    dispatch({ type: 'CLEAR_WORDS' });
+    words.forEach((word) => {
+      dispatch({
+        type: 'APPEND_WORD',
+        payload: {
+          id: `replay-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          label: word.label,
+          wordType: word.wordType,
+          source: word.source ?? 'board',
+        },
+      });
+    });
+    const messageText = words.map(w => w.label).join(' ');
+    setTimeout(() => {
+      speakChained(messageText);
+    }, 50);
+  }, [dispatch, hapticIfEnabled, speakChained]);
 
   const handleStripBackspace = useCallback((hasWords: boolean) => {
     hapticIfEnabled();
@@ -3011,6 +3039,10 @@ export default function TalkScreen() {
     stopSpeech();
     ghostsRef.current = [];
     setGhosts([]);
+    if (messageWordsRef.current.length > 0) {
+      dispatch({ type: 'PUSH_SENTENCE_HISTORY', payload: { words: messageWordsRef.current } });
+      dispatch({ type: 'UPDATE_NGRAM_MODEL', payload: { words: messageWordsRef.current.map(w => w.label) } });
+    }
     dispatch({ type: 'CLEAR_WORDS' });
     announce('Message cleared');
   }, [announce, dispatch, stopSpeech]);
@@ -3091,6 +3123,7 @@ export default function TalkScreen() {
 
   const handleTilePress = useCallback((tile: BoardTile, rect: WindowRect | null) => {
     hapticIfEnabled();
+    dispatch({ type: 'INCREMENT_TILE_TAP', payload: { tileId: tile.id } });
     if (tile.id === 'back') {
       const dest = previousMode ?? 'home';
       setActiveMode(dest);
@@ -3225,6 +3258,107 @@ export default function TalkScreen() {
           }}
         />
 
+        {/* N-gram Predictions */}
+        {(() => {
+          const lastWord = state.messageWords[state.messageWords.length - 1]?.label;
+          const preds = lastWord ? predictNextWords(lastWord, state.ngramModel, 3) : [];
+          if (preds.length === 0) return null;
+          return (
+            <View style={{ marginTop: spacing.sm, paddingHorizontal: spacing.lg }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: t.colors.textMuted, marginBottom: spacing.xs }}>
+                Suggestions
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: spacing.sm }}
+              >
+                {preds.map((word) => (
+                  <Pressable
+                    key={word}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add ${word}`}
+                    onPress={() => {
+                      hapticIfEnabled();
+                      dispatch({
+                        type: 'APPEND_WORD',
+                        payload: {
+                          id: `pred-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                          label: word,
+                          wordType: 'core',
+                          source: 'suggestion',
+                        },
+                      });
+                    }}
+                    style={({ pressed }) => ({
+                      backgroundColor: pressed ? t.colors.selectionBg : t.colors.inputBg,
+                      borderRadius: radii.pill,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      minHeight: 36,
+                      justifyContent: 'center',
+                    })}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: t.colors.text }}>
+                      {word}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          );
+        })()}
+
+        {/* Sentence History */}
+        {state.sentenceHistory.length > 0 && (
+          <View style={{ marginTop: spacing.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: t.colors.textMuted }}>Recent Sentences</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={showSentenceHistory ? 'Hide recent sentences' : 'Show recent sentences'}
+                onPress={() => setShowSentenceHistory(v => !v)}
+                hitSlop={12}
+              >
+                <Ionicons name={showSentenceHistory ? 'chevron-up' : 'chevron-down'} size={18} color={t.colors.textMuted} />
+              </Pressable>
+            </View>
+            {showSentenceHistory && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm }}
+                accessibilityLabel="Recent sentences"
+              >
+                {state.sentenceHistory.map((entry) => {
+                  const summary = entry.words.slice(0, 3).map(w => w.label).join(' ');
+                  const hasMore = entry.words.length > 3;
+                  return (
+                    <Pressable
+                      key={entry.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Replay sentence: ${summary}${hasMore ? ' and more' : ''}`}
+                      onPress={() => handleReplaySentence(entry.words)}
+                      style={({ pressed }) => ({
+                        backgroundColor: pressed ? t.colors.selectionBg : t.colors.inputBg,
+                        borderRadius: radii.pill,
+                        paddingHorizontal: spacing.md,
+                        paddingVertical: spacing.sm,
+                        minHeight: 36,
+                        justifyContent: 'center',
+                      })}
+                    >
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: t.colors.text }} numberOfLines={1}>
+                        {summary}{hasMore ? '…' : ''}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        )}
+
         <TopNav
           visible={showTopNav}
           activeTab={activeTab}
@@ -3338,6 +3472,29 @@ export default function TalkScreen() {
                           jiggle={jiggle}
                           onEditTap={motorAccessEnabled ? handleMotorAccessMenu : undefined}
                         />
+                        {editMode && state.showUsageHeatmap && (state.tileTapCounts[tile.id] ?? 0) > 0 && (
+                          <View
+                            style={{
+                              position: 'absolute',
+                              top: 4,
+                              right: 4,
+                              minWidth: 20,
+                              height: 20,
+                              borderRadius: 10,
+                              backgroundColor: t.colors.primary,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              paddingHorizontal: 4,
+                              pointerEvents: 'none',
+                              zIndex: 10,
+                            }}
+                            accessibilityLabel={`${state.tileTapCounts[tile.id]} taps`}
+                          >
+                            <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>
+                              {state.tileTapCounts[tile.id]}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                     );
                   })}
