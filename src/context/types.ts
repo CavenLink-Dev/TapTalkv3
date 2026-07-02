@@ -30,6 +30,10 @@ export interface AppState {
     speechPitch: number;
     /** Whether haptic feedback fires on taps. Default true. */
     hapticsEnabled: boolean;
+    /** Tap-based editing alternatives — no drag or pinch required (Rule 20/25). */
+    motorAccessMode: boolean;
+    /** Reduce non-essential animation/particles/sound beyond system Reduce Motion. */
+    reduceSensoryLoad: boolean;
   };
   user: {
     legalName: string;
@@ -60,6 +64,13 @@ export interface AppState {
    * Empty arrays / missing keys mean "use the code default order".
    */
   boardLayouts: Record<string, string[]>;
+  /**
+   * Per-board variable-size placements. Each entry records the tile ID, its
+   * coarse grid slot, and its size in FINE (44px) units (fw/fh). This is
+   * the authoritative layout representation that preserves resize state across
+   * relaunches. `boardLayouts` is kept for backward-compat/migration.
+   */
+  boardPlacements: Record<string, { id: string; slot: number; fw: number; fh: number }[]>;
   /** IDs of tiles the user has hidden via the edit-mode delete badge. */
   hiddenTileIds: string[];
 
@@ -172,6 +183,7 @@ export type Action =
   | { type: 'REMOVE_WORD_AT_INDEX'; payload: number }
   | { type: 'SET_BOARD'; payload: string }
   | { type: 'SET_BOARD_ORDER'; payload: { board: string; order: string[] } }
+  | { type: 'SET_BOARD_PLACEMENTS'; payload: { board: string; placements: { id: string; slot: number; fw: number; fh: number }[] } }
   | { type: 'HIDE_TILE'; payload: string }
   | { type: 'RESTORE_TILE'; payload: string }
   | { type: 'SET_KEYBOARD_TEXT'; payload: string }

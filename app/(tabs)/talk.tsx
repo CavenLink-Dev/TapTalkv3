@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import {
   AccessibilityActionEvent,
   AccessibilityInfo,
+  ActionSheetIOS,
   Alert,
   Animated as RNAnimated,
   Easing as RNEasing,
@@ -37,11 +38,13 @@ import { Icon } from '../../src/components/native/Icon';
 import { Href, useRouter } from 'expo-router';
 import { BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
 import { TalkMessageStrip, type MessageStripTile } from '../../src/components/talk/TalkMessageStrip';
+import { AddSymbolModal } from '../../src/components/talk/AddSymbolModal';
+import { AddFolderModal } from '../../src/components/talk/AddFolderModal';
 import { MulberrySymbol, prewarmMulberryAssets } from '../../src/components/symbols/MulberrySymbol';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
 import { buildMessageUtterances } from '../../src/utils/speechRules';
-import { animation, CHROME_SEPARATOR_WIDTH, colors, spacing } from '../../src/theme/tokens';
+import { animation, CHROME_SEPARATOR_WIDTH, colors, radii, spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
@@ -51,7 +54,7 @@ import {
 } from '../../src/features/symbol-brain/resolveSymbolForKeyword';
 
 type TileKind = 'folder' | 'word' | 'action';
-type BoardMode = 'home' | 'foods' | 'animals' | 'tools' | 'quick' | 'settings';
+type BoardMode = 'home' | 'foods' | 'animals' | 'tools' | 'quick' | 'settings' | 'emergency';
 // New top-nav vocabulary: TAPTALK opens the keyboard page, QUICK opens
 // Quick Talk, EDIT is a stub for now (no behaviour), CLEAR clears the
 // message strip in place. See to_do/NEXT.md "Board top nav" for the lock.
@@ -76,6 +79,8 @@ type BoardTile = {
   // accessibilityHint so VoiceOver users get the same semantic layer
   // that colour gives sighted users (principle 23).
   wordType?: string;
+  /** Protected tiles cannot be deleted or hidden in edit mode (Priority 4). */
+  isProtected?: boolean;
 };
 
 type WindowRect = LayoutRectangle;
@@ -271,6 +276,21 @@ const HOME_TILES: BoardTile[] = [
   { id: 'foods',  label: 'Foods',  kind: 'folder', target: 'foods',   color: '#1DCDFF', mulberrySymbolId: 'mulberry_food_atkyaz' },
   { id: 'places', label: 'Places', kind: 'folder', target: 'animals', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
   { id: 'actions',label: 'Actions',kind: 'folder', target: 'tools',   color: '#1DCDFF', mulberrySymbolId: 'mulberry_run_1l6fpg7' },
+  // Emergency & Help folder — visually distinct with danger colour + icon
+  // prefix (Rule 23: not colour alone). Protected / non-deletable.
+  { id: 'emergency-folder', label: '⚠ Help', kind: 'folder', target: 'emergency', color: '#FF3B30', isProtected: true, mulberrySymbolId: 'mulberry_help_1g1ppr' },
+];
+
+// ── Emergency & Help phrases (Priority 4) ──────────────────────────────────
+// Protected quick-access phrases. Speaks on tap via useSpeech. Non-deletable
+// in edit mode. Contact wording is user-editable (not hardcoded emergency #s).
+const EMERGENCY_TILES: BoardTile[] = [
+  { id: 'emer-aac',     label: 'I use AAC',            kind: 'word', color: '#FF3B30', speech: 'I use A A C to communicate', isProtected: true, wordType: 'phrase' },
+  { id: 'emer-wait',    label: 'Please wait',          kind: 'word', color: '#FF9500', speech: 'Please wait',                isProtected: true, wordType: 'phrase' },
+  { id: 'emer-help',    label: 'I need help',          kind: 'word', color: '#FF3B30', speech: 'I need help',                isProtected: true, wordType: 'phrase' },
+  { id: 'emer-pain',    label: 'I am in pain',         kind: 'word', color: '#FF3B30', speech: 'I am in pain',               isProtected: true, wordType: 'phrase' },
+  { id: 'emer-call',    label: 'Call my support person',kind: 'word', color: '#FF9500', speech: 'Please call my support person', isProtected: true, wordType: 'phrase' },
+  { id: 'back-emergency', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
 ];
 
 const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
@@ -318,6 +338,7 @@ const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
     { id: 'home-settings',   label: 'Home',     kind: 'folder', target: 'home', color: '#1DCDFF' },
     { id: 'repeat-settings', label: 'Repeat',   kind: 'action', color: SYMBOL_GREEN  },
   ],
+  emergency: EMERGENCY_TILES,
 };
 
 const BACK_TILE: BoardTile = { id: 'back', label: 'Back', kind: 'action', color: '#6B7580' };
@@ -1511,6 +1532,8 @@ interface BoardTileButtonProps {
   /** Called when the user commits a resize via the corner/edge handles. */
   onResize?: (tileId: string, newFw: number, newFh: number, dCols: number, dRows: number) => void;
   jiggle?: SharedValue<number>;
+  /** Motor Access Mode: called on tile tap in edit mode for action sheet (Priority 5). */
+  onEditTap?: (tileId: string) => void;
 }
 
 function BoardTileButton({
@@ -1536,6 +1559,7 @@ function BoardTileButton({
   onAccessibilityReorder,
   onResize,
   jiggle,
+  onEditTap,
 }: BoardTileButtonProps) {
   // Actual visual dimensions default to a square of `size` for backwards
   // compatibility with existing single-slot tiles.
@@ -1679,12 +1703,16 @@ function BoardTileButton({
   const tileHeight = tileHeightPx;
 
   const handlePress = useCallback(() => {
-    if (editMode) return; // taps do nothing in edit mode — long-press exits
+    if (editMode) {
+      // Motor Access Mode: tile taps show context menu instead of doing nothing
+      if (onEditTap) { onEditTap(tile.id); return; }
+      return;
+    }
     onMeasuredPress?.();
     pressableRef.current?.measureInWindow((x, y, width, height) => {
       onPress({ x, y, width, height });
     });
-  }, [editMode, onMeasuredPress, onPress]);
+  }, [editMode, onEditTap, onMeasuredPress, onPress, tile.id]);
 
   // Item 7 — word-type hint for VoiceOver (principle 23: don't rely on
   // colour alone). Folder tiles already say "Open …" in the label.
@@ -1843,7 +1871,7 @@ function BoardTileButton({
       ) : (
         <BoardWordTile tile={tile} width={tileWidth} height={tileHeightPx} resolved={resolved} />
       )}
-      {isDraggable && onHide ? (
+      {isDraggable && onHide && !tile.isProtected ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Remove ${tile.label}`}
@@ -1938,6 +1966,7 @@ const BoardTileCell = React.memo(function BoardTileCell({
   dragFw,
   dragFh,
   jiggle,
+  onEditTap,
 }: {
   tile: BoardTile;
   size: number;
@@ -1959,6 +1988,7 @@ const BoardTileCell = React.memo(function BoardTileCell({
   dragFw?: SharedValue<number>;
   dragFh?: SharedValue<number>;
   jiggle?: SharedValue<number>;
+  onEditTap?: (tileId: string) => void;
 }) {
   const handlePress = useCallback(
     (rect: WindowRect | null) => onTilePress(tile, rect),
@@ -1986,6 +2016,7 @@ const BoardTileCell = React.memo(function BoardTileCell({
       dragFw={dragFw}
       dragFh={dragFh}
       jiggle={jiggle}
+      onEditTap={onEditTap}
     />
   );
 });
@@ -2138,6 +2169,7 @@ export default function TalkScreen() {
   const { speak, stop: stopSpeech, lastError, clearError } = useSpeech();
   const router = useRouter();
   const t = useTheme();
+  const motorAccessEnabled = state.accessibility.motorAccessMode;
   // Default to closed — board is the hero, top nav stays out of the way
   // until the user explicitly taps the chevron to open it.
   const [showTopNav, setShowTopNav] = useState(false);
@@ -2183,10 +2215,18 @@ export default function TalkScreen() {
   // Add + / Board Settings / < (rule 1 — simple first, advanced later).
   const [homeDockExpanded, setHomeDockExpanded] = useState(false);
   const [editFocusTileId, setEditFocusTileId] = useState<string | null>(null);
+  // ── Undo toast for tile hide/delete (Rule 26) ─────────────────────────
+  const [undoToast, setUndoToast] = useState<{ tileId: string; placement: TilePlacement; board: BoardMode } | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── Add Symbol / Add Folder modals (Priority 2) ────────────────────────
+  const [addSymbolModalVisible, setAddSymbolModalVisible] = useState(false);
+  const [addFolderModalVisible, setAddFolderModalVisible] = useState(false);
   const folderCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dockFade = useRef(new RNAnimated.Value(1)).current;
   const messageWordsRef = useRef(state.messageWords);
   messageWordsRef.current = state.messageWords;
+  // User-added tiles (symbols/folders) that don't exist in the static BOARD_TILES data.
+  const userTilesRef = useRef<Map<string, BoardTile>>(new Map());
 
   // Chained-utterance run tracking — cancels any in-flight clause chain so
   // rapid re-taps on the strip never overlap audio (board_speech_rules.md).
@@ -2196,13 +2236,47 @@ export default function TalkScreen() {
     if (state.accessibility.hapticsEnabled !== false) hapticSelection();
   }, [state.accessibility.hapticsEnabled]);
 
+  // ── Hydrate local layouts from persisted boardPlacements on mount ─────────
+  // Seeds the in-memory `layouts` state with any previously saved variable-size
+  // placements so custom arrangements survive relaunch. Tiles added in future
+  // code releases that aren't in stored placements get appended with default
+  // fw=fh=2 at the next free slot.
+  useEffect(() => {
+    const persisted = state.boardPlacements;
+    if (!persisted || Object.keys(persisted).length === 0) return;
+    const seeded: Partial<Record<BoardMode, BoardLayout>> = {};
+    for (const key of Object.keys(persisted) as BoardMode[]) {
+      const stored = persisted[key];
+      if (!stored || stored.length === 0) continue;
+      const boardTiles = BOARD_TILES[key];
+      if (!boardTiles) continue;
+      // Start from stored placements
+      const layout: BoardLayout = stored.map(p => ({ id: p.id, slot: p.slot, fw: p.fw, fh: p.fh }));
+      // Append any new tiles from code that aren't in stored placements
+      const storedIds = new Set(stored.map(p => p.id));
+      const maxSlot = stored.reduce((max, p) => Math.max(max, p.slot + coarseCols(p.fw)), 0);
+      let nextSlot = maxSlot;
+      for (const tile of boardTiles) {
+        if (!storedIds.has(tile.id)) {
+          layout.push({ id: tile.id, slot: nextSlot, fw: 2, fh: 2 });
+          nextSlot += 1;
+        }
+      }
+      seeded[key] = layout;
+    }
+    if (Object.keys(seeded).length > 0) {
+      setLayouts(prev => ({ ...prev, ...seeded }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Edit mode effects ────────────────────────────────────────────────────
   // Fade the grid overlay in/out and start/stop the jiggle animation when
   // edit mode toggles. Both run without touching the JS thread during the
   // transition (pure Reanimated shared value writes).
   useEffect(() => {
     gridOverlayOpacity.value = withTiming(editMode ? 1 : 0, { duration: 200 });
-    if (editMode && !reduceMotion) {
+    if (editMode && !reduceMotion && !state.accessibility.reduceSensoryLoad) {
       // Gentle continuous wobble while in edit mode — ±0.7° at ~80ms per
       // half-cycle. Subtle enough to not be annoying, clear enough to signal
       // "you're in rearrange mode." Stops the moment edit mode exits.
@@ -2218,7 +2292,7 @@ export default function TalkScreen() {
       cancelAnimation(jiggle);
       jiggle.value = withTiming(0, { duration: 80 });
     }
-  }, [editMode, gridOverlayOpacity, jiggle, reduceMotion]);
+  }, [editMode, gridOverlayOpacity, jiggle, reduceMotion, state.accessibility.reduceSensoryLoad]);
 
   // ── Edit mode callbacks ──────────────────────────────────────────────────
   const enterEditFromTile = useCallback((tileId: string) => {
@@ -2243,8 +2317,20 @@ export default function TalkScreen() {
   }, [hapticIfEnabled, snapSlot]);
 
   const handleSaveEdit = useCallback(() => {
+    // Persist the current layout placements for the active board mode so
+    // variable-size arrangements survive relaunch (PRIORITY 1).
+    const current = layouts[activeMode];
+    if (current) {
+      dispatch({
+        type: 'SET_BOARD_PLACEMENTS',
+        payload: {
+          board: activeMode,
+          placements: current.map(p => ({ id: p.id, slot: p.slot, fw: p.fw, fh: p.fh })),
+        },
+      });
+    }
     exitEditClean();
-  }, [exitEditClean]);
+  }, [activeMode, dispatch, exitEditClean, layouts]);
 
   const handleCancelEdit = useCallback(() => {
     if (!layoutDirty) { exitEditClean(); return; }
@@ -2320,13 +2406,67 @@ export default function TalkScreen() {
 
   const handleDockSymbol = useCallback(() => {
     hapticIfEnabled();
-    Alert.alert('Add symbol', 'Adding new symbols is coming soon.', [{ text: 'OK' }]);
+    setAddSymbolModalVisible(true);
   }, [hapticIfEnabled]);
 
   const handleDockAddFolder = useCallback(() => {
     hapticIfEnabled();
-    Alert.alert('Add folder', 'Adding new folders is coming soon.', [{ text: 'OK' }]);
+    setAddFolderModalVisible(true);
   }, [hapticIfEnabled]);
+
+  // ── Add Symbol confirm: insert tile at first free slot ──────────────
+  const handleAddSymbolConfirm = useCallback((result: { symbolId: string; label: string; color: string; wordType: string }) => {
+    setAddSymbolModalVisible(false);
+    const tileId = `user_${result.label.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
+    setLayouts(prev => {
+      const current: BoardLayout = prev[activeMode]
+        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+      const maxSlot = current.reduce((max, p) => Math.max(max, p.slot + 1), 0);
+      return { ...prev, [activeMode]: [...current, { id: tileId, slot: maxSlot, fw: 2, fh: 2 }] };
+    });
+    // Register the tile in BOARD_TILES dynamically isn't possible with static data,
+    // so we store a user-added tile map. For now, add to the board tiles at runtime.
+    const newTile: BoardTile = {
+      id: tileId,
+      label: result.label,
+      kind: 'word',
+      color: result.color,
+      speech: result.label.toLowerCase(),
+      mulberrySymbolId: result.symbolId,
+      wordType: result.wordType,
+    };
+    userTilesRef.current.set(tileId, newTile);
+    setLayoutDirty(true);
+    hapticIfEnabled();
+  }, [activeMode, hapticIfEnabled]);
+
+  // ── Add Folder confirm: insert folder tile ──────────────────────────
+  const handleAddFolderConfirm = useCallback((result: { label: string; boardKey: string }) => {
+    setAddFolderModalVisible(false);
+    const tileId = `folder_${result.boardKey}`;
+    setLayouts(prev => {
+      const current: BoardLayout = prev[activeMode]
+        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+      const maxSlot = current.reduce((max, p) => Math.max(max, p.slot + 1), 0);
+      return { ...prev, [activeMode]: [...current, { id: tileId, slot: maxSlot, fw: 2, fh: 2 }] };
+    });
+    const newTile: BoardTile = {
+      id: tileId,
+      label: result.label,
+      kind: 'folder',
+      color: '#1DCDFF',
+      target: result.boardKey as BoardMode,
+    };
+    userTilesRef.current.set(tileId, newTile);
+    // Register the empty child board
+    if (!BOARD_TILES[result.boardKey as BoardMode]) {
+      (BOARD_TILES as Record<string, BoardTile[]>)[result.boardKey] = [
+        { id: `back-${result.boardKey}`, label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF' },
+      ];
+    }
+    setLayoutDirty(true);
+    hapticIfEnabled();
+  }, [activeMode, hapticIfEnabled]);
 
   const handleFolderCollapse = useCallback(() => {
     hapticIfEnabled();
@@ -2464,10 +2604,65 @@ export default function TalkScreen() {
     });
   }, [activeMode]);
 
-  const handleHide = useCallback((_tile: BoardTile) => {
-    // Placeholder — hide/remove tile support is a future feature.
+  const handleHide = useCallback((tile: BoardTile) => {
     hapticIfEnabled();
-  }, [hapticIfEnabled]);
+    // Protected tiles cannot be deleted (Priority 4 — emergency phrases)
+    if (tile.isProtected) {
+      Alert.alert('Protected', 'This tile cannot be removed.', [{ text: 'OK' }]);
+      return;
+    }
+    // Rule 12: destructive action requires confirmation
+    Alert.alert(
+      `Remove "${tile.label}"?`,
+      'The tile will be hidden from this board.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            // Capture current placement for undo (Rule 26)
+            const currentLayout: BoardLayout = layouts[activeMode]
+              ?? BOARD_TILES[activeMode].map((t, i) => ({ id: t.id, slot: i, fw: 2, fh: 2 }));
+            const removedPlacement = currentLayout.find(p => p.id === tile.id);
+
+            // Remove from local placements
+            setLayouts(prev => {
+              const curr: BoardLayout = prev[activeMode]
+                ?? BOARD_TILES[activeMode].map((t, i) => ({ id: t.id, slot: i, fw: 2, fh: 2 }));
+              return { ...prev, [activeMode]: curr.filter(p => p.id !== tile.id) };
+            });
+            setLayoutDirty(true);
+
+            // Persist hide across relaunch
+            dispatch({ type: 'HIDE_TILE', payload: tile.id });
+
+            // Show undo toast
+            if (removedPlacement) {
+              if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+              setUndoToast({ tileId: tile.id, placement: removedPlacement, board: activeMode });
+              undoTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
+            }
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [activeMode, dispatch, hapticIfEnabled, layouts]);
+
+  const handleUndoHide = useCallback(() => {
+    if (!undoToast) return;
+    hapticIfEnabled();
+    // Restore the tile placement
+    setLayouts(prev => {
+      const curr: BoardLayout = prev[undoToast.board] ?? [];
+      return { ...prev, [undoToast.board]: [...curr, undoToast.placement] };
+    });
+    // Unpersist the hide
+    dispatch({ type: 'RESTORE_TILE', payload: undoToast.tileId });
+    setUndoToast(null);
+    if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
+  }, [dispatch, hapticIfEnabled, undoToast]);
 
   // ── Push-aside resize handler ─────────────────────────────────────────
   // When a tile is resized, cascade-shift any tiles whose footprint now
@@ -2562,11 +2757,63 @@ export default function TalkScreen() {
   const dockPadLeft = insets.left + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2);
   const dockPadRight = insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2);
 
-  // Lookup map: tileId → BoardTile for the active mode.
-  const tileMapForMode = useMemo(
-    () => new Map(BOARD_TILES[activeMode].map(t => [t.id, t])),
-    [activeMode],
-  );
+  // Lookup map: tileId → BoardTile for the active mode (includes user-added tiles).
+  const tileMapForMode = useMemo(() => {
+    const map = new Map(BOARD_TILES[activeMode]?.map(t => [t.id, t]) ?? []);
+    // Merge user-added tiles so they resolve in the board renderer
+    for (const [id, tile] of userTilesRef.current) {
+      if (!map.has(id)) map.set(id, tile);
+    }
+    return map;
+  }, [activeMode, layouts]);
+
+  // ── Motor Access Mode: tap-based context menu (Priority 5, Rule 20/25) ──
+  const handleMotorAccessMenu = useCallback((tileId: string) => {
+    const tile = tileMapForMode.get(tileId);
+    if (!tile) return;
+    hapticIfEnabled();
+    const options = ['Move left', 'Move right', 'Resize larger', 'Resize smaller', 'Delete', 'Cancel'];
+    const cancelButtonIndex = options.length - 1;
+    const destructiveButtonIndex = 4;
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex,
+        destructiveButtonIndex,
+        title: tile.label,
+        message: 'Choose an action',
+      },
+      (buttonIndex) => {
+        if (buttonIndex === 0) {
+          const layout = layouts[activeMode]
+            ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+          const p = layout.find(lp => lp.id === tileId);
+          if (p && p.slot > 0) handleMoveToSlot(tileId, p.slot - 1);
+        } else if (buttonIndex === 1) {
+          const layout = layouts[activeMode]
+            ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+          const p = layout.find(lp => lp.id === tileId);
+          if (p) handleMoveToSlot(tileId, p.slot + 1);
+        } else if (buttonIndex === 2) {
+          const layout = layouts[activeMode]
+            ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+          const p = layout.find(lp => lp.id === tileId);
+          if (p) handleResize(tileId, Math.min(p.fw + 2, 8), Math.min(p.fh + 2, 8), 0, 0);
+        } else if (buttonIndex === 3) {
+          const layout = layouts[activeMode]
+            ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+          const p = layout.find(lp => lp.id === tileId);
+          if (p) handleResize(tileId, Math.max(p.fw - 2, 2), Math.max(p.fh - 2, 2), 0, 0);
+        } else if (buttonIndex === 4) {
+          if (tile.isProtected) {
+            Alert.alert('Protected', 'This tile cannot be removed.', [{ text: 'OK' }]);
+          } else {
+            handleHide(tile);
+          }
+        }
+      },
+    );
+  }, [activeMode, handleHide, handleMoveToSlot, handleResize, hapticIfEnabled, layouts, tileMapForMode]);
 
   // Active layout for the current mode. Falls back to a sequential
   // default (each tile at its own slot, 2×2 fine size = 88×88).
@@ -2891,6 +3138,12 @@ export default function TalkScreen() {
   const handleDockDelete = useCallback(() => {
     if (!editFocusTileId) return;
     hapticIfEnabled();
+    // Check if the focused tile is protected (Priority 4)
+    const focusedTile = tileMapForMode.get(editFocusTileId);
+    if (focusedTile?.isProtected) {
+      Alert.alert('Protected', 'This tile cannot be removed.', [{ text: 'OK' }]);
+      return;
+    }
     const target = editFocusTileId;
     setLayouts(prev => {
       const current: BoardLayout = prev[activeMode]
@@ -2901,7 +3154,7 @@ export default function TalkScreen() {
     setLayoutDirty(true);
     setEditFocusTileId(null);
     announce('Tile deleted');
-  }, [activeMode, announce, editFocusTileId, hapticIfEnabled]);
+  }, [activeMode, announce, editFocusTileId, hapticIfEnabled, tileMapForMode]);
 
   const handleTopTab = useCallback((tab: TopTab) => {
     hapticIfEnabled();
@@ -3083,6 +3336,7 @@ export default function TalkScreen() {
                           dragFw={dragFw}
                           dragFh={dragFh}
                           jiggle={jiggle}
+                          onEditTap={motorAccessEnabled ? handleMotorAccessMenu : undefined}
                         />
                       </View>
                     );
@@ -3260,12 +3514,40 @@ export default function TalkScreen() {
           </RNAnimated.View>
         </View>
 
+        {/* ── Undo toast (Rule 26) ─────────────────────────────────────── */}
+        {undoToast ? (
+          <View style={styles.undoToast} accessibilityRole="alert" accessibilityLiveRegion="polite">
+            <Text style={styles.undoToastText}>Tile removed</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Undo remove tile"
+              onPress={handleUndoHide}
+              hitSlop={12}
+              style={styles.undoToastButton}
+            >
+              <Text style={styles.undoToastButtonText}>Undo</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <View pointerEvents="none" style={styles.ghostOverlay}>
           {ghosts.map(ghost => (
             <GhostTileClone key={ghost.id} ghost={ghost} onDone={finishGhost} />
           ))}
         </View>
       </View>
+
+      {/* ── Add Symbol / Folder modals (Priority 2) ───────────────────── */}
+      <AddSymbolModal
+        visible={addSymbolModalVisible}
+        onDismiss={() => setAddSymbolModalVisible(false)}
+        onAdd={handleAddSymbolConfirm}
+      />
+      <AddFolderModal
+        visible={addFolderModalVisible}
+        onDismiss={() => setAddFolderModalVisible(false)}
+        onAdd={handleAddFolderConfirm}
+      />
     </SafeAreaView>
   );
 }
@@ -3606,5 +3888,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     paddingBottom: 6,
+  },
+  // ── Undo toast ──────────────────────────────────────────────────────────
+  undoToast: {
+    position: 'absolute',
+    bottom: 100,
+    left: spacing.lg,
+    right: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#323232',
+    borderRadius: radii.button,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  undoToastText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  undoToastButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  undoToastButtonText: {
+    color: '#62C1FF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

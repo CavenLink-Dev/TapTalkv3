@@ -18,6 +18,7 @@ export type HotPersistedState = Pick<
   | 'firstThen'
   | 'talkStats'
   | 'boardLayouts'
+  | 'boardPlacements'
   | 'hiddenTileIds'
 >;
 
@@ -52,6 +53,7 @@ export function splitAppState(state: AppState): {
       firstThen: state.firstThen,
       talkStats: state.talkStats,
       boardLayouts: state.boardLayouts,
+      boardPlacements: state.boardPlacements,
       hiddenTileIds: state.hiddenTileIds,
     },
     cold: {
@@ -88,6 +90,7 @@ export function isHotAction(type: string): boolean {
     case 'REMOVE_WORD_AT_INDEX':
     case 'SET_BOARD':
     case 'SET_BOARD_ORDER':
+    case 'SET_BOARD_PLACEMENTS':
     case 'HIDE_TILE':
     case 'RESTORE_TILE':
     case 'SET_KEYBOARD_TEXT':

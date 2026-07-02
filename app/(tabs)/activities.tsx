@@ -32,6 +32,7 @@ import {
 } from '../../src/features/activities/favourites-store';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
+import { useReduceSensoryLoad } from '../../src/hooks/useReduceSensoryLoad';
 import { useTheme } from '../../src/theme/useTheme';
 
 // --- Data ---
@@ -254,6 +255,7 @@ function ActivityCard({
 }) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
+  const reduceSensory = useReduceSensoryLoad();
 
   const mountProgress   = useRef(new Animated.Value(0)).current;
   const pressScale      = useRef(new Animated.Value(1)).current;
@@ -281,7 +283,7 @@ function ActivityCard({
 
   // Shimmer loop — favourites only, with a slightly stronger pass
   useEffect(() => {
-    if (reduceMotion || !favourite) return;
+    if (reduceMotion || reduceSensory || !favourite) return;
     let timeout: ReturnType<typeof setTimeout>;
     const runShimmer = () => {
       shimmerProgress.setValue(0);
@@ -338,10 +340,10 @@ function ActivityCard({
       }),
     ]).start();
 
-    if (favourite && !wasFav && !reduceMotion) {
+    if (favourite && !wasFav && !reduceMotion && !reduceSensory) {
       setParticleTrigger(t => t + 1);
     }
-  }, [favourite, reduceMotion]);
+  }, [favourite, reduceMotion, reduceSensory]);
 
   const handlePressIn = () => {
     if (reduceMotion) return;

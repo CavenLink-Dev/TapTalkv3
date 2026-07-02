@@ -61,12 +61,22 @@ export default function DisplaySettingsScreen() {
     dispatch({ type: 'SET_ACCESSIBILITY', payload: { highContrast: !highContrast } });
   }, [dispatch, highContrast]);
 
-  const { hapticsEnabled } = state.accessibility;
+  const { hapticsEnabled, motorAccessMode, reduceSensoryLoad } = state.accessibility;
   const toggleHaptics = useCallback(() => {
     const next = !hapticsEnabled;
     if (next) hapticSelection();
     dispatch({ type: 'SET_ACCESSIBILITY', payload: { hapticsEnabled: next } });
   }, [dispatch, hapticsEnabled]);
+
+  const toggleMotorAccess = useCallback(() => {
+    hapticSelection();
+    dispatch({ type: 'SET_ACCESSIBILITY', payload: { motorAccessMode: !motorAccessMode } });
+  }, [dispatch, motorAccessMode]);
+
+  const toggleReduceSensory = useCallback(() => {
+    hapticSelection();
+    dispatch({ type: 'SET_ACCESSIBILITY', payload: { reduceSensoryLoad: !reduceSensoryLoad } });
+  }, [dispatch, reduceSensoryLoad]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
@@ -242,6 +252,36 @@ export default function DisplaySettingsScreen() {
             </View>
             <Ionicons name="information-circle-outline" size={22} color={t.colors.textTertiary} />
           </Pressable>
+          <View style={[styles.toggleRow, { borderTopColor: t.colors.border }]}>
+            <View style={styles.toggleLeft}>
+              <Text style={[styles.toggleTitle, { color: t.colors.text }]}>Motor Access Mode</Text>
+              <Text style={[styles.toggleDesc, { color: t.colors.textMuted }]}>
+                Tap-based editing — no drag or pinch needed to move and resize tiles.
+              </Text>
+            </View>
+            <Switch
+              value={motorAccessMode}
+              onValueChange={toggleMotorAccess}
+              trackColor={{ false: t.colors.disabled, true: t.colors.primary }}
+              ios_backgroundColor={t.colors.disabled}
+              accessibilityLabel="Motor Access Mode"
+            />
+          </View>
+          <View style={[styles.toggleRow, { borderTopColor: t.colors.border }]}>
+            <View style={styles.toggleLeft}>
+              <Text style={[styles.toggleTitle, { color: t.colors.text }]}>Reduce Sensory Load</Text>
+              <Text style={[styles.toggleDesc, { color: t.colors.textMuted }]}>
+                Quiets shimmer, particles, sound effects, and non-essential animation.
+              </Text>
+            </View>
+            <Switch
+              value={reduceSensoryLoad}
+              onValueChange={toggleReduceSensory}
+              trackColor={{ false: t.colors.disabled, true: t.colors.primary }}
+              ios_backgroundColor={t.colors.disabled}
+              accessibilityLabel="Reduce Sensory Load"
+            />
+          </View>
           <View style={[styles.infoRow, { borderTopColor: t.colors.border }]}>
             <View style={styles.toggleLeft}>
               <Text style={[styles.toggleTitle, { color: t.colors.text }]}>VoiceOver</Text>

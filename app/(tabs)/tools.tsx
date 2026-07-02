@@ -37,6 +37,7 @@ import {
 import { setToolOrder, useToolOrder } from '../../src/features/tools/order-store';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
+import { useReduceSensoryLoad } from '../../src/hooks/useReduceSensoryLoad';
 import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -231,6 +232,7 @@ function ToolCard({
 }) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
+  const reduceSensory = useReduceSensoryLoad();
   const suppressOpenAfterLongPress = useRef(false);
 
   // Staggered entrance
@@ -276,7 +278,7 @@ function ToolCard({
 
   // Shimmer loop — favourites only, each card has a unique start time
   useEffect(() => {
-    if (reduceMotion || !favourite) return;
+    if (reduceMotion || reduceSensory || !favourite) return;
     let timeout: ReturnType<typeof setTimeout>;
 
     const runShimmer = () => {
@@ -395,10 +397,10 @@ function ToolCard({
       }),
     ]).start();
 
-    if (favourite && !wasFav && !reduceMotion) {
+    if (favourite && !wasFav && !reduceMotion && !reduceSensory) {
       setParticleTrigger(t => t + 1);
     }
-  }, [favourite, reduceMotion]);
+  }, [favourite, reduceMotion, reduceSensory]);
 
   const panResponder = useMemo(
     () =>

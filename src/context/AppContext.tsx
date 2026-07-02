@@ -37,6 +37,8 @@ export const initialState: AppState = {
     speechRate: 0.9,
     speechPitch: 1.0,
     hapticsEnabled: true,
+    motorAccessMode: false,
+    reduceSensoryLoad: false,
   },
   user: {
     legalName: '',
@@ -58,6 +60,7 @@ export const initialState: AppState = {
   currentBoard: 'main',
   keyboardText: '',
   boardLayouts: {},
+  boardPlacements: {},
   hiddenTileIds: [],
   tasks: [],
   lists: [],
@@ -90,6 +93,10 @@ function mergeStoredState(storedState: Partial<AppState>): AppState {
     boardLayouts: {
       ...initialState.boardLayouts,
       ...(storedState.boardLayouts ?? {}),
+    },
+    boardPlacements: {
+      ...initialState.boardPlacements,
+      ...(storedState.boardPlacements ?? {}),
     },
     hiddenTileIds: storedState.hiddenTileIds ?? initialState.hiddenTileIds,
     firstThen: {
@@ -188,6 +195,14 @@ export function appReducer(state: AppState, action: Action): AppState {
         boardLayouts: {
           ...state.boardLayouts,
           [action.payload.board]: action.payload.order,
+        },
+      };
+    case 'SET_BOARD_PLACEMENTS':
+      return {
+        ...state,
+        boardPlacements: {
+          ...state.boardPlacements,
+          [action.payload.board]: action.payload.placements,
         },
       };
     case 'HIDE_TILE':
