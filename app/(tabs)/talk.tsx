@@ -1625,7 +1625,7 @@ export default function TalkScreen() {
   const messageSlotRefs = useRef<Array<View | null>>([]);
   const ghostsRef = useRef<GhostTile[]>([]);
   const { state, dispatch } = useAppContext();
-  const { speak, lastError, clearError } = useSpeech();
+  const { speak, stop: stopSpeech, lastError, clearError } = useSpeech();
   const router = useRouter();
   const t = useTheme();
   // Default to closed — board is the hero, top nav stays out of the way
@@ -1939,12 +1939,15 @@ export default function TalkScreen() {
       announce('No message to speak');
       return;
     }
+    // Cancel any in-flight speech so a re-tap never overlaps audio
+    // (board_speech_rules.md — always stop before a new run).
+    stopSpeech();
     speak(messageText, {
       rate: state.accessibility.speechRate,
       pitch: state.accessibility.speechPitch,
     });
     announce(`Speaking: ${messageText}`);
-  }, [announce, speak, state.accessibility.speechPitch, state.accessibility.speechRate]);
+  }, [announce, speak, stopSpeech, state.accessibility.speechPitch, state.accessibility.speechRate]);
 
   const handleStripBackspace = useCallback((hasWords: boolean) => {
     hapticIfEnabled();
@@ -2005,9 +2008,10 @@ export default function TalkScreen() {
       announce('No message to speak');
       return;
     }
+    stopSpeech(); // cancel in-flight speech before a new run
     speak(messageText, { rate: state.accessibility.speechRate, pitch: state.accessibility.speechPitch });
     announce(`Speaking: ${messageText}`);
-  }, [announce, speak, state.accessibility.speechPitch, state.accessibility.speechRate]);
+  }, [announce, speak, stopSpeech, state.accessibility.speechPitch, state.accessibility.speechRate]);
 
   const clearMessage = useCallback(() => {
     ghostsRef.current = [];
@@ -2019,6 +2023,9 @@ export default function TalkScreen() {
   const startGhostToMessage = useCallback((tile: BoardTile, fromRect: WindowRect | null) => {
     // Speak immediately on press — don't wait for the 430ms ghost animation
     // to complete. This eliminates the perceived delay between tapping and hearing.
+    // Stop first so rapid tile taps replace the previous word instead of
+    // queueing/overlapping (board_speech_rules.md — cancel before a new run).
+    stopSpeech();
     speak(tile.speech ?? tile.label, {
       rate: state.accessibility.speechRate,
       pitch: state.accessibility.speechPitch,
@@ -2061,7 +2068,7 @@ export default function TalkScreen() {
         });
       });
     });
-  }, [addGhost, appendWord, speak, state.accessibility.speechPitch, state.accessibility.speechRate, tileSize]);
+  }, [addGhost, appendWord, speak, stopSpeech, state.accessibility.speechPitch, state.accessibility.speechRate, tileSize]);
 
   useEffect(() => {
     prewarmMulberryAssets({

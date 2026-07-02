@@ -2,13 +2,15 @@
  * ActivityCompletionOverlay
  *
  * Shared completion card shown at the end of every activity game.
- * Design principles (per activity design rules):
- *   • Square card with soft 22-pt corners — never a tall pill modal.
- *   • Cancel X always visible top-right — no dark-pattern trapping.
- *   • Effort-first language — celebrates completion, not score.
- *   • No star ratings or accuracy % — avoids shame for slower users.
- *   • Bright per-activity accent colour passed via `theme` prop.
- *   • Time badge shown only when `gameStartedAt` is provided.
+ * Design (activity rules §7 + completion-screen spec):
+ *   • Square card with soft continuous corners — never a tall pill modal.
+ *   • Green check badge — positive, non-comparative.
+ *   • Title "Great work!" with a per-game sub line (§7 structure).
+ *   • Quiet session stats: levels, time, difficulty. No scores, no star
+ *     ratings, no accuracy % — effort-first, never shaming.
+ *   • Actions stacked: Play Again (primary), Next Activity (secondary),
+ *     Back to Activities (ghost). Cancel X stays top-right — no trapping.
+ *   • Copy is calm and sentence case. No emoji, no praise spam.
  */
 
 import React, { useMemo } from 'react';
@@ -19,25 +21,22 @@ import {
   Text,
   View,
 } from 'react-native';
-import { radii, spacing, typography } from '../../theme/tokens';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, radii, spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/useTheme';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
 /** Per-activity visual identity for the completion card. */
 export interface ActivityCompletionTheme {
-  /** Main accent colour: strip, primary button, badge text, left border. */
+  /** Main accent colour: primary button, stat values. */
   primary: string;
-  /** Light tint of primary: icon circle bg, badge bg, secondary button bg, encouragement bg. */
+  /** Light tint of primary: secondary button bg. */
   light: string;
-  /** Emoji shown in the icon circle. */
-  emoji: string;
   /** Short activity name, e.g. "Shape Match". */
   label: string;
-  /** Second badge copy, e.g. "All shapes matched". */
+  /** Sub-line verb phrase, e.g. "You matched every shape". */
   completionLabel: string;
-  /** 1–2 sentence encouragement — effort-focused, never comparative. */
-  encouragement: string;
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -50,7 +49,7 @@ interface ActivityCompletionOverlayProps {
   totalLevels: number;
   /**
    * Unix timestamp (Date.now()) recorded when the game session started.
-   * If provided, an elapsed-time badge is shown.
+   * If provided, a time stat is shown.
    */
   gameStartedAt: number | null;
   /** Restart the same activity from level 1. */
@@ -68,8 +67,8 @@ function formatElapsed(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
-  if (min === 0) return `${sec} sec`;
-  return `${min} min ${sec} sec`;
+  if (min === 0) return `${sec}s`;
+  return `${min}m ${sec}s`;
 }
 
 function capitalize(s: string): string {
@@ -90,7 +89,6 @@ export function ActivityCompletionOverlay({
 }: ActivityCompletionOverlayProps) {
   const t = useTheme();
   // Compute elapsed once when the overlay opens (visible flips to true).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const elapsed = useMemo(() => {
     if (!gameStartedAt || !visible) return null;
     return formatElapsed(Date.now() - gameStartedAt);
@@ -99,6 +97,17 @@ export function ActivityCompletionOverlay({
   }, [visible]);
 
   const diffLabel = capitalize(difficulty);
+
+  const stat = (label: string, value: string) => (
+    <View
+      style={[styles.statCell, { backgroundColor: t.colors.background }]}
+      accessible
+      accessibilityLabel={`${label}: ${value}`}
+    >
+      <Text style={[styles.statValue, { color: t.colors.text }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: t.colors.textMuted }]}>{label}</Text>
+    </View>
+  );
 
   return (
     <Modal
@@ -110,91 +119,58 @@ export function ActivityCompletionOverlay({
       <View style={styles.backdrop}>
         <View style={[styles.card, { backgroundColor: t.colors.surface }]}>
 
-          {/* ── Accent colour strip across the top ── */}
-          <View style={[styles.strip, { backgroundColor: theme.primary }]} />
-
           {/* ── Cancel / dismiss X ── */}
           <Pressable
             onPress={onCancel}
             accessibilityRole="button"
-            accessibilityLabel="Close"
-            hitSlop={10}
+            accessibilityLabel="Close and go back to activities"
+            hitSlop={12}
             style={[styles.cancelBtn, { backgroundColor: t.colors.background }]}
           >
-            <Text style={[styles.cancelX, { color: t.colors.textMuted }]}>✕</Text>
+            <Ionicons name="close" size={18} color={t.colors.textMuted} />
           </Pressable>
 
-          {/* ── Icon + title row ── */}
-          <View style={styles.headerRow}>
-            <View
-              style={[styles.iconCircle, { backgroundColor: theme.light }]}
-              accessibilityElementsHidden
-            >
-              <Text style={styles.iconEmoji}>{theme.emoji}</Text>
-            </View>
-            <View style={styles.titleBlock}>
-              <Text
-                style={[styles.cardTitle, { color: t.colors.text }]}
-                accessibilityRole="header"
-              >
-                You did it! 🎉
-              </Text>
-              <Text style={[styles.cardSub, { color: t.colors.textMuted }]}>
-                {theme.label} · {diffLabel} · All {totalLevels} done
-              </Text>
-            </View>
-          </View>
-
-          {/* ── Achievement badges ── */}
-          <View style={styles.badges} accessibilityElementsHidden>
-            <View style={[styles.badge, { backgroundColor: theme.light }]}>
-              <Text style={[styles.badgeText, { color: theme.primary }]}>
-                ✅  Completed
-              </Text>
-            </View>
-            <View style={[styles.badge, { backgroundColor: theme.light }]}>
-              <Text style={[styles.badgeText, { color: theme.primary }]}>
-                🏆  {theme.completionLabel}
-              </Text>
-            </View>
-            {elapsed ? (
-              <View style={[styles.badge, { backgroundColor: theme.light }]}>
-                <Text style={[styles.badgeText, { color: theme.primary }]}>
-                  ⏱  {elapsed}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
-          {/* ── Encouragement quote ── */}
+          {/* ── Green check badge (§7) ── */}
           <View
-            style={[
-              styles.encourage,
-              { borderLeftColor: theme.primary, backgroundColor: theme.light },
-            ]}
+            style={[styles.checkBadge, { backgroundColor: colors.success }]}
+            accessibilityElementsHidden
           >
-            <Text style={[styles.encourageText, { color: t.colors.text }]}>
-              {theme.encouragement}
-            </Text>
+            <Ionicons name="checkmark" size={48} color="#FFFFFF" />
           </View>
 
-          <View style={[styles.divider, { backgroundColor: t.colors.background }]} />
+          {/* ── Title + sub ── */}
+          <Text
+            style={[styles.cardTitle, { color: t.colors.text }]}
+            accessibilityRole="header"
+          >
+            Great work!
+          </Text>
+          <Text style={[styles.cardSub, { color: t.colors.textMuted }]}>
+            {theme.completionLabel} across {totalLevels} {diffLabel.toLowerCase()} levels.
+          </Text>
 
-          {/* ── Primary action: Play Again ── */}
+          {/* ── Session stats — quiet, factual, never comparative ── */}
+          <View style={styles.statsRow}>
+            {stat('Levels', String(totalLevels))}
+            {elapsed ? stat('Time', elapsed) : null}
+            {stat('Difficulty', diffLabel)}
+          </View>
+
+          {/* ── Actions (§7): Play Again / Next Activity / Back ── */}
           <Pressable
             onPress={onPlayAgain}
             accessibilityRole="button"
-            accessibilityLabel="Play again"
+            accessibilityLabel="Play again from level 1"
             style={({ pressed }) => [
               styles.btnAgain,
               { backgroundColor: theme.primary },
               pressed && { opacity: 0.85 },
             ]}
           >
-            <Text style={styles.btnAgainText}>▶  Play Again</Text>
+            <Ionicons name="refresh" size={20} color="#FFFFFF" />
+            <Text style={styles.btnAgainText}>Play Again</Text>
           </Pressable>
 
-          {/* ── Secondary action: Next Activity ── */}
           <Pressable
             onPress={onNext}
             accessibilityRole="button"
@@ -206,7 +182,18 @@ export function ActivityCompletionOverlay({
             ]}
           >
             <Text style={[styles.btnNextText, { color: theme.primary }]}>
-              Next Activity →
+              Next Activity
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={onCancel}
+            accessibilityRole="button"
+            accessibilityLabel="Back to activities"
+            style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={[styles.btnGhostText, { color: t.colors.textMuted }]}>
+              Back to Activities
             </Text>
           </Pressable>
 
@@ -222,26 +209,20 @@ export const ACTIVITY_THEMES = {
   shapeMatch: {
     primary:          '#1565C0',
     light:            '#E3F2FD',
-    emoji:            '🔷',
     label:            'Shape Match',
-    completionLabel:  'All shapes matched',
-    encouragement:    'Every shape found — that takes real focus. Well done! 👏',
+    completionLabel:  'You matched every shape',
   },
   colourPop: {
     primary:          '#E53935',
     light:            '#FFE9E7',
-    emoji:            '🎈',
     label:            'Colour Pop',
-    completionLabel:  'All colours popped',
-    encouragement:    'Finding the right colours while ignoring distractors takes careful focus. Great work! 🌈',
+    completionLabel:  'You found every colour',
   },
   memoryMatch: {
     primary:          '#6A1B9A',
     light:            '#F3E5F5',
-    emoji:            '🧠',
     label:            'Memory Match',
-    completionLabel:  'All pairs found',
-    encouragement:    'Remembering all those pairs takes real concentration. Amazing work! 🌟',
+    completionLabel:  'You remembered every shape',
   },
 } satisfies Record<string, ActivityCompletionTheme>;
 
@@ -256,119 +237,93 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
 
+  // Square card, soft continuous corners
   card: {
     width: '100%',
     maxWidth: 380,
     borderRadius: 22,
     overflow: 'hidden',
-    // Top padding is larger to clear the colour strip.
-    paddingTop:    spacing.xl + 6,
-    paddingBottom: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
     paddingHorizontal: spacing.xl,
+    alignItems: 'center',
     gap: spacing.md,
-  },
-
-  strip: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 6,
   },
 
   cancelBtn: {
     position: 'absolute',
     top: 14,
     right: 14,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  cancelX: {
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 16,
+    zIndex: 1,
   },
 
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.xs,
-  },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  checkBadge: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
+    marginTop: spacing.sm,
   },
-  iconEmoji: {
-    fontSize: 24,
-    lineHeight: 30,
-  },
-  titleBlock: {
-    flex: 1,
-  },
+
   cardTitle: {
-    fontSize: typography.heading,
-    fontWeight: '900',
-    lineHeight: 26,
-    letterSpacing: typography.trackHeading,
+    fontSize: typography.title,
+    fontWeight: '800',
+    letterSpacing: typography.trackTitle,
+    textAlign: 'center',
   },
   cardSub: {
-    fontSize: typography.caption,
-    marginTop: 2,
-    fontWeight: '600',
-  },
-
-  badges: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  badge: {
-    paddingVertical: 6,
-    paddingHorizontal: 11,
-    borderRadius: 10,
-  },
-  badgeText: {
-    fontSize: typography.caption,
-    fontWeight: '700',
-  },
-
-  encourage: {
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    padding: spacing.md,
-  },
-  encourageText: {
-    fontSize: typography.callout,
-    fontWeight: '600',
+    fontSize: typography.body,
+    fontWeight: '500',
+    textAlign: 'center',
     lineHeight: 22,
   },
 
-  divider: {
-    height: 1,
-    marginHorizontal: -spacing.xl,
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    width: '100%',
+    marginTop: spacing.xs,
+  },
+  statCell: {
+    flex: 1,
+    borderRadius: radii.card,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    gap: 2,
+  },
+  statValue: {
+    fontSize: typography.subheading,
+    fontWeight: '800',
+  },
+  statLabel: {
+    fontSize: typography.caption,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
 
   btnAgain: {
     width: '100%',
-    paddingVertical: 14,
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 15,
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 50,
+    minHeight: 54,
+    marginTop: spacing.xs,
   },
   btnAgainText: {
     fontSize: typography.body,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 
   btnNext: {
@@ -377,10 +332,22 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48,
+    minHeight: 50,
   },
   btnNextText: {
     fontSize: typography.callout,
     fontWeight: '700',
+  },
+
+  btnGhost: {
+    width: '100%',
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  btnGhostText: {
+    fontSize: typography.callout,
+    fontWeight: '600',
   },
 });

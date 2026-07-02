@@ -27,17 +27,18 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Speech from 'expo-speech';
 import { Card } from '../../src/components/native/Card';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
+import { useSpeech } from '../../src/hooks/useSpeech';
 import { ActivityProgressBar } from '../../src/components/activities/ActivityProgressBar';
 import {
   ActivityCompletionOverlay,
   ACTIVITY_THEMES,
 } from '../../src/components/activities/ActivityCompletionOverlay';
 import { useAppContext } from '../../src/hooks/useAppContext';
-import { hapticSelection } from '../../src/utils/haptics';
-import { playSound, playSelectThenConfirm, playStreakSound } from '../../src/utils/sounds';
-import { radii, spacing, typography } from '../../src/theme/tokens';
+import { hapticLight, hapticSelection } from '../../src/utils/haptics';
+import { playSound, playSelectThenConfirm } from '../../src/utils/sounds';
+import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -64,15 +65,6 @@ const SHAPES: { color: string; radius: number; label: string }[] = [
   { color: '#F58625', radius: 50,  label: 'Orange circle'  },
   { color: '#FA838E', radius: 8,   label: 'Pink square'    },
 ];
-
-const CORRECT_MESSAGES = [
-  'Great work!', 'Great job!', 'Nice one!', 'Well done!', 'Awesome!',
-  'Perfect!', 'Brilliant!', 'Keep it up!', 'You got it!', 'Spot on!',
-  'Fantastic!', 'Amazing!', 'Superb!', 'Nailed it!',
-];
-function randomCorrectMessage(): string {
-  return CORRECT_MESSAGES[Math.floor(Math.random() * CORRECT_MESSAGES.length)]!;
-}
 
 function randomRound(): Round {
   const target = Math.floor(Math.random() * SHAPES.length);
@@ -173,7 +165,9 @@ export default function MemoryMatchScreen() {
   const t = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { dispatch } = useAppContext();
+  const reduceMotion = useReduceMotion();
+  const { state, dispatch } = useAppContext();
+  const { speak, stop: stopSpeech } = useSpeech();
 
   const [phase, setPhase] = useState<Phase>('select');
   const [gameStartedAt, setGameStartedAt] = useState<number | null>(null);
@@ -182,21 +176,42 @@ export default function MemoryMatchScreen() {
   const [round, setRound] = useState<Round>(randomRound);
   const [roundPhase, setRoundPhase] = useState<RoundPhase>('show');
   const [chosen, setChosen] = useState<number | null>(null);
-  const [soundOn, setSoundOn] = useState(true);
+  // Sound defaults OFF — the user opts in (activity_implementation_rules §3).
+  const [soundOn, setSoundOn] = useState(false);
   const [levelPillFlash, setLevelPillFlash] = useState(false);
   const [tryAgainVisible, setTryAgainVisible] = useState(false);
-  const [correctToastVisible, setCorrectToastVisible] = useState(false);
-  const [correctMessage, setCorrectMessage] = useState('');
 
   const shapeOpacity    = useRef(new Animated.Value(1)).current;
   const tryAgainFade    = useRef(new Animated.Value(0)).current;
-  const correctToastFade = useRef(new Animated.Value(0)).current;
   const levelPillScale  = useRef(new Animated.Value(1)).current;
+  // Pending auto-advance — cleared by footer nav, reset, and unmount.
+  const advanceTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const totalLevels = TOTAL_LEVELS[difficulty];
 
+  const clearAdvanceTimer = useCallback(() => {
+    if (advanceTimer.current) {
+      clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearAdvanceTimer, [clearAdvanceTimer]);
+
+  // One cue per game (§3): speak the shape name when it is revealed,
+  // through useSpeech and on top of the user's voice preferences.
+  const speakTarget = useCallback((targetIndex: number) => {
+    if (!soundOn) return;
+    stopSpeech();
+    speak(SHAPES[targetIndex]!.label, {
+      rate: state.accessibility.speechRate,
+      pitch: state.accessibility.speechPitch,
+    });
+  }, [soundOn, speak, stopSpeech, state.accessibility.speechRate, state.accessibility.speechPitch]);
+
   const startGame = useCallback(() => {
     hapticSelection();
+    clearAdvanceTimer();
     const newRound = randomRound();
     setLevel(1);
     setRound(newRound);
@@ -205,79 +220,49 @@ export default function MemoryMatchScreen() {
     shapeOpacity.setValue(1);
     setPhase('play');
     setGameStartedAt(Date.now());
-
-    if (soundOn) {
-      Speech.stop();
-      Speech.speak(SHAPES[newRound.target]!.label, { rate: 0.9 });
-    }
-  }, [difficulty, shapeOpacity, soundOn]);
+    speakTarget(newRound.target);
+  }, [clearAdvanceTimer, shapeOpacity, speakTarget]);
 
   // Auto-hide shape after SHOW_DURATION then enter choose phase.
   useEffect(() => {
     if (phase !== 'play' || roundPhase !== 'show') return;
     shapeOpacity.setValue(1);
 
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       Animated.timing(shapeOpacity, {
         toValue: 0,
-        duration: 340,
+        // Reduce Motion: shorter fade, same behaviour (Rule 18 / §8)
+        duration: reduceMotion ? 120 : 340,
         useNativeDriver: true,
       }).start(() => setRoundPhase('choose'));
     }, SHOW_DURATION[difficulty]);
 
-    return () => clearTimeout(t);
-  }, [phase, roundPhase, round, shapeOpacity, difficulty]);
+    return () => clearTimeout(timer);
+  }, [phase, roundPhase, round, shapeOpacity, difficulty, reduceMotion]);
 
   const showTryAgain = useCallback(() => {
     setTryAgainVisible(true);
     Animated.sequence([
-      Animated.timing(tryAgainFade, { toValue: 1, duration: 160, useNativeDriver: true }),
+      Animated.timing(tryAgainFade, { toValue: 1, duration: reduceMotion ? 80 : 160, useNativeDriver: true }),
       Animated.delay(900),
-      Animated.timing(tryAgainFade, { toValue: 0, duration: 220, useNativeDriver: true }),
+      Animated.timing(tryAgainFade, { toValue: 0, duration: reduceMotion ? 80 : 220, useNativeDriver: true }),
     ]).start(() => setTryAgainVisible(false));
-  }, [tryAgainFade]);
-
-  const showCorrectToast = useCallback(() => {
-    setCorrectMessage(randomCorrectMessage());
-    setCorrectToastVisible(true);
-    correctToastFade.setValue(0);
-    Animated.sequence([
-      Animated.timing(correctToastFade, { toValue: 1, duration: 160, useNativeDriver: true }),
-      Animated.delay(700),
-      Animated.timing(correctToastFade, { toValue: 0, duration: 220, useNativeDriver: true }),
-    ]).start(() => setCorrectToastVisible(false));
-  }, [correctToastFade]);
-
-  const handleChoice = useCallback((shapeIndex: number) => {
-    if (roundPhase !== 'choose') return;
-    hapticSelection();
-    playSelectThenConfirm(soundOn);
-    const correct = shapeIndex === round.target;
-    setChosen(shapeIndex);
-    setTimeout(() => {
-      if (correct) {
-        dispatch({ type: 'INCREMENT_ACTIVITY_STATS', payload: { minutes: 1 } });
-        playSound('correct', soundOn);
-        showCorrectToast();
-      } else {
-        playSound('incorrect', soundOn);
-        showTryAgain();
-      }
-    }, 180);
-    setRoundPhase('result');
-  }, [dispatch, round.target, roundPhase, showCorrectToast, showTryAgain, soundOn]);
+  }, [reduceMotion, tryAgainFade]);
 
   const nextRound = useCallback(() => {
-    // Flash level pill
+    // Flash level pill — colour-only under Reduce Motion (Rule 18)
     setLevelPillFlash(true);
-    Animated.sequence([
-      Animated.timing(levelPillScale, { toValue: 1.12, duration: 160, useNativeDriver: true }),
-      Animated.spring(levelPillScale, { toValue: 1, useNativeDriver: true, friction: 5, tension: 120 }),
-    ]).start(() => setLevelPillFlash(false));
+    if (reduceMotion) {
+      setTimeout(() => setLevelPillFlash(false), 600);
+    } else {
+      Animated.sequence([
+        Animated.timing(levelPillScale, { toValue: 1.12, duration: 160, useNativeDriver: true }),
+        Animated.spring(levelPillScale, { toValue: 1, useNativeDriver: true, friction: 5, tension: 120 }),
+      ]).start(() => setLevelPillFlash(false));
+    }
 
     if (level >= totalLevels) {
       playSound('level_complete', soundOn);
-      playStreakSound(level, soundOn);
       setPhase('won');
       return;
     }
@@ -288,14 +273,80 @@ export default function MemoryMatchScreen() {
     setRoundPhase('show');
     setChosen(null);
     shapeOpacity.setValue(1);
+    speakTarget(newRound.target);
+  }, [level, levelPillScale, reduceMotion, shapeOpacity, soundOn, speakTarget, totalLevels]);
 
-    if (soundOn) {
-      Speech.stop();
-      Speech.speak(SHAPES[newRound.target]!.label, { rate: 0.9 });
-    }
-  }, [level, levelPillScale, shapeOpacity, soundOn, totalLevels]);
+  const handleChoice = useCallback((shapeIndex: number) => {
+    if (roundPhase !== 'choose') return;
+    hapticSelection();
+    playSelectThenConfirm(soundOn);
+    const correct = shapeIndex === round.target;
+    setChosen(shapeIndex);
+    setTimeout(() => {
+      if (correct) {
+        dispatch({ type: 'INCREMENT_ACTIVITY_STATS', payload: { minutes: 1 } });
+        hapticLight(); // light impact for the outcome commit (Rule 19)
+        playSound('correct', soundOn);
+      } else {
+        playSound('incorrect', soundOn);
+        showTryAgain();
+      }
+    }, 180);
+    setRoundPhase('result');
+    // Auto-advance — no "Next" tap required (§2.3 / §5.6).
+    clearAdvanceTimer();
+    advanceTimer.current = setTimeout(() => {
+      advanceTimer.current = null;
+      nextRound();
+    }, 1400);
+  }, [clearAdvanceTimer, dispatch, nextRound, round.target, roundPhase, showTryAgain, soundOn]);
+
+  // Footer nav — fresh start at the destination level (§2.4).
+  const goLevel = useCallback((delta: 1 | -1) => {
+    clearAdvanceTimer();
+    setLevel(prev => {
+      const next = prev + delta;
+      if (next < 1 || next > totalLevels) return prev;
+      hapticSelection();
+      const newRound = randomRound();
+      setRound(newRound);
+      setRoundPhase('show');
+      setChosen(null);
+      shapeOpacity.setValue(1);
+      speakTarget(newRound.target);
+      return next;
+    });
+  }, [clearAdvanceTimer, shapeOpacity, speakTarget, totalLevels]);
+
+  const resetLevel = useCallback(() => {
+    clearAdvanceTimer();
+    const newRound = randomRound();
+    setRound(newRound);
+    setRoundPhase('show');
+    setChosen(null);
+    shapeOpacity.setValue(1);
+    speakTarget(newRound.target);
+  }, [clearAdvanceTimer, shapeOpacity, speakTarget]);
+
+  const onReset = useCallback(() => {
+    if (chosen === null) { resetLevel(); return; }
+    // Platform confirm, only when progress has been made (§2.4).
+    Alert.alert(
+      'Reset this level?',
+      'This round will start again.',
+      [
+        { text: 'Keep playing', style: 'cancel' },
+        { text: 'Reset', style: 'destructive', onPress: resetLevel },
+      ],
+      { cancelable: true },
+    );
+  }, [chosen, resetLevel]);
+
+  const canGoBack    = level > 1;
+  const canGoForward = level < totalLevels;
 
   const onPlayAgain = useCallback(() => {
+    clearAdvanceTimer();
     const newRound = randomRound();
     setLevel(1);
     setRound(newRound);
@@ -304,7 +355,7 @@ export default function MemoryMatchScreen() {
     shapeOpacity.setValue(1);
     setPhase('play');
     setGameStartedAt(Date.now());
-  }, [shapeOpacity]);
+  }, [clearAdvanceTimer, shapeOpacity]);
 
   const onNextActivity = useCallback(() => {
     router.replace('/activities/shape-match' as never);
@@ -324,7 +375,6 @@ export default function MemoryMatchScreen() {
   };
 
   const isCorrect = chosen !== null && chosen === round.target;
-  const isLastLevel = level >= totalLevels;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -393,7 +443,7 @@ export default function MemoryMatchScreen() {
             {roundPhase === 'show'   ? 'Look at the shape.' : null}
             {roundPhase === 'choose' ? 'Which shape did you see?' : null}
             {roundPhase === 'result'
-              ? (isCorrect ? 'Correct. Well done.' : 'Not quite. Keep going.')
+              ? (isCorrect ? 'You got it.' : 'Keep going.')
               : null}
           </Text>
 
@@ -408,15 +458,6 @@ export default function MemoryMatchScreen() {
               </View>
             )}
           </View>
-
-          {/* Result banner */}
-          {roundPhase === 'result' && (
-            <View style={[styles.resultBanner, { backgroundColor: isCorrect ? '#D6F0DD' : '#E6F4FD' }]}>
-              <Text style={[styles.resultText, { color: isCorrect ? '#1A7A3A' : t.colors.primary }]}>
-                {isCorrect ? 'You got it.' : 'Keep going.'}
-              </Text>
-            </View>
-          )}
 
           {/* Choice grid */}
           {roundPhase !== 'show' && (
@@ -447,39 +488,66 @@ export default function MemoryMatchScreen() {
             </View>
           )}
 
-          {roundPhase === 'result' && (
-            <Pressable
-              onPress={nextRound}
-              accessibilityRole="button"
-              accessibilityLabel={isLastLevel ? 'Finish' : 'Next round'}
-              style={({ pressed }) => [styles.nextBtn, pressed && { opacity: 0.85 }]}
-            >
-              <Text style={styles.nextBtnText}>{isLastLevel ? 'Finish' : 'Next'}</Text>
-            </Pressable>
-          )}
         </ScrollView>
       ) : (
         <View style={{ flex: 1 }} />
       )}
 
-      {/* ── Toasts ───────────────────────────────────────────────────── */}
+      {/* ── Footer — Back / Reset / Forward (§2.4) ───────────────────── */}
+      {phase === 'play' ? (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+          <Pressable
+            onPress={() => goLevel(-1)}
+            disabled={!canGoBack}
+            accessibilityRole="button"
+            accessibilityLabel={canGoBack ? `Back to level ${level - 1}` : 'No previous level'}
+            accessibilityState={{ disabled: !canGoBack }}
+            style={({ pressed }) => [
+              styles.footerBtn, styles.footerGhost,
+              !canGoBack && styles.footerBtnDisabled,
+              pressed && canGoBack && { opacity: 0.85 },
+            ]}
+          >
+            <Ionicons name="chevron-back" size={20} color={canGoBack ? t.colors.primary : t.colors.textTertiary} />
+            <Text style={[styles.footerBtnText, { color: canGoBack ? t.colors.primary : t.colors.textTertiary }]}>Back</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={onReset}
+            accessibilityRole="button"
+            accessibilityLabel="Reset level"
+            style={({ pressed }) => [styles.footerBtn, styles.footerReset, pressed && { opacity: 0.85 }]}
+          >
+            <Ionicons name="refresh" size={20} color={t.colors.textMuted} />
+            <Text style={[styles.footerBtnText, { color: t.colors.textMuted }]}>Reset</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => goLevel(+1)}
+            disabled={!canGoForward}
+            accessibilityRole="button"
+            accessibilityLabel={canGoForward ? `Skip to level ${level + 1}` : 'No more levels'}
+            accessibilityState={{ disabled: !canGoForward }}
+            style={({ pressed }) => [
+              styles.footerBtn, styles.footerForward,
+              !canGoForward && styles.footerBtnDisabled,
+              pressed && canGoForward && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={[styles.footerBtnText, { color: canGoForward ? '#FFFFFF' : t.colors.textTertiary }]}>Forward</Text>
+            <Ionicons name="chevron-forward" size={20} color={canGoForward ? '#FFFFFF' : t.colors.textTertiary} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* ── Try Again toast — soft amber, auto-dismiss (§4.2) ─────────── */}
       {tryAgainVisible ? (
         <Animated.View
           style={[styles.tryAgain, { bottom: insets.bottom + 90, opacity: tryAgainFade }]}
           pointerEvents="none"
         >
-          <Ionicons name="refresh-circle-outline" size={20} color={t.colors.primary} />
-          <Text style={[styles.tryAgainText, { color: t.colors.primary }]}>Try Again</Text>
-        </Animated.View>
-      ) : null}
-
-      {correctToastVisible ? (
-        <Animated.View
-          style={[styles.correctToast, { bottom: insets.bottom + 90, opacity: correctToastFade }]}
-          pointerEvents="none"
-        >
-          <Ionicons name="checkmark-circle-outline" size={20} color="#1A7A3A" />
-          <Text style={styles.correctToastText}>{correctMessage}</Text>
+          <Ionicons name="refresh-circle-outline" size={20} color="#A65900" />
+          <Text style={styles.tryAgainText}>Try Again</Text>
         </Animated.View>
       ) : null}
 
@@ -562,14 +630,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase'},
 
-  resultBanner: {
-    width: '100%',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: radii.pill,
-    alignItems: 'center'},
-  resultText: { fontSize: typography.body, fontWeight: '800', textAlign: 'center' },
-
   choiceGrid: {
     flexDirection: 'row',
     gap: spacing.lg,
@@ -585,16 +645,29 @@ const styles = StyleSheet.create({
     borderWidth: 2.5},
   choicePressed: {  transform: [{ scale: 0.96 }] },
 
-  nextBtn: {
-
-    borderRadius: radii.button,
-    paddingHorizontal: spacing.xxl,
-    paddingVertical: spacing.md,
+  // ── Footer — Back / Reset / Forward (§2.4) ──────────────────────────
+  footer: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: spacing.lg},
+  footerBtn: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 160},
-  nextBtnText: { color: BG, fontSize: typography.body, fontWeight: '800', letterSpacing: -0.2 },
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: radii.pill,
+    minHeight: 50},
+  footerBtnDisabled: { opacity: 0.4 },
+  footerBtnText: {
+    fontSize: typography.callout,
+    fontWeight: '800'},
+  footerGhost:   { backgroundColor: '#E6F4FD' },
+  footerReset:   { backgroundColor: '#F1F5F9' },
+  footerForward: { backgroundColor: colors.primary },
 
-  // ── Toasts ──────────────────────────────────────────────────────────
+  // ── Try Again toast — soft amber (§4.2) ─────────────────────────────
   tryAgain: {
     position: 'absolute',
     left: spacing.lg,
@@ -605,23 +678,9 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    backgroundColor: '#E6F4FD',
+    backgroundColor: '#FFF4E0',
     borderRadius: radii.pill},
-  tryAgainText: { fontSize: typography.body, fontWeight: '800'},
-
-  correctToast: {
-    position: 'absolute',
-    left: spacing.lg,
-    right: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    backgroundColor: '#D6F0DD',
-    borderRadius: radii.pill},
-  correctToastText: { fontSize: typography.body, fontWeight: '800', color: '#1A7A3A' },
+  tryAgainText: { fontSize: typography.body, fontWeight: '800', color: '#A65900' },
 
   // ── Overlays ────────────────────────────────────────────────────────
   overlayBackdrop: {
@@ -686,7 +745,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: radii.pill,
-
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 50},

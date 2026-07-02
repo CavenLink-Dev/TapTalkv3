@@ -23,7 +23,7 @@
  * confirms before discarding (principle 24 — user control + warning).
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -31,11 +31,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Href, Stack, useRouter } from 'expo-router';
-import * as Speech from 'expo-speech';
-import { radii, spacing, typography } from '../../../src/theme/tokens';
+import { colors, radii, spacing, typography } from '../../../src/theme/tokens';
+import { useAppContext } from '../../../src/hooks/useAppContext';
+import { useSpeech } from '../../../src/hooks/useSpeech';
 import { hapticSelection } from '../../../src/utils/haptics';
 import {
   QUICK_TALK_MAX,
@@ -54,16 +55,30 @@ const PUNCTUATION = ['.', ',', '!', '?'] as const;
 const quickTalkRoute = '/board/quick-talk' as Href;
 
 // ─── Speech ────────────────────────────────────────────────────────────────
-
-function speakLetter(letter: string): void {
-  Speech.stop();
-  Speech.speak(letter, { rate: 0.95 });
-}
+// Per board_speech_rules.md:
+//   . pauses ~350ms (sentence break)
+//   , short pause ~180ms
+//   ! louder toward the end of the clause (rate dip + pitch rise on the
+//     final word — the rest of the clause stays neutral)
+//   ? rising tone at the end of the clause (pitch rise on the final word)
+//   Single-word message → spell-and-speak: each letter, then the word.
+//   Every new run cancels the in-flight run (no overlapping audio).
+// Modifications are applied ON TOP of the user's voice prefs
+// (state.accessibility.speechRate / speechPitch).
 
 interface Clause {
   text: string;
   /** Punctuation that ended the clause, or undefined if none. */
   terminator?: '.' | ',' | '!' | '?';
+}
+
+/** One TTS call in a chained run. */
+interface Utterance {
+  text: string;
+  rate: number;
+  pitch: number;
+  /** Silent wait before the next utterance starts. */
+  gapAfter: number;
 }
 
 function tokeniseClauses(text: string): Clause[] {
@@ -80,54 +95,54 @@ function tokeniseClauses(text: string): Clause[] {
   return result;
 }
 
-function speakMessage(text: string): void {
-  // Per board_speech_rules.md:
-  //   . pauses ~350ms (sentence break)
-  //   , short pause ~180ms
-  //   ! louder toward the end of the clause (rate dip + pitch rise)
-  //   ? rising tone at the end of the clause (pitch rise)
-  // We tokenise the message into clauses, speak each with the right
-  // rate/pitch, then wait the right gap before the next clause.
-  Speech.stop();
+/**
+ * Build the utterance chain for a full-message read.
+ * `rate`/`pitch` are the user's stored voice preferences.
+ */
+function buildMessageUtterances(text: string, rate: number, pitch: number): Utterance[] {
   const trimmed = text.trim();
-  if (!trimmed) return;
-  const clauses = tokeniseClauses(trimmed);
-  if (clauses.length === 0) return;
+  if (!trimmed) return [];
 
-  const speakNext = (i: number) => {
-    const c = clauses[i];
-    if (!c) return;
-    let rate = 1.0;
-    let pitch = 1.0;
-    let gapAfter = 100;
+  // Single word (no spaces, no punctuation) → spell-and-speak.
+  if (!/[\s.,!?]/.test(trimmed)) {
+    const letters: Utterance[] = [...trimmed].map(letter => ({
+      text: letter,
+      rate: rate * 0.95,
+      pitch,
+      gapAfter: 80,
+    }));
+    letters.push({ text: trimmed, rate, pitch, gapAfter: 0 });
+    return letters;
+  }
+
+  const out: Utterance[] = [];
+  for (const c of tokeniseClauses(trimmed)) {
     switch (c.terminator) {
-      case '.': gapAfter = 350; break;
-      case ',': gapAfter = 180; break;
       case '!':
-        rate = 0.94;
-        pitch = 1.15;
-        gapAfter = 220;
+      case '?': {
+        // Modify only the final word of the clause; the head stays neutral.
+        const words = c.text.split(/\s+/);
+        const last = words.pop() ?? '';
+        const head = words.join(' ');
+        const mod = c.terminator === '!'
+          ? { rate: rate * 0.94, pitch: pitch * 1.15, gapAfter: 220 }
+          : { rate: rate * 0.96, pitch: pitch * 1.25, gapAfter: 200 };
+        if (head) out.push({ text: head, rate, pitch, gapAfter: 40 });
+        out.push({ text: last, ...mod });
         break;
-      case '?':
-        rate = 0.96;
-        pitch = 1.25;
-        gapAfter = 200;
+      }
+      case '.':
+        out.push({ text: c.text, rate, pitch, gapAfter: 350 });
+        break;
+      case ',':
+        out.push({ text: c.text, rate, pitch, gapAfter: 180 });
         break;
       default:
+        out.push({ text: c.text, rate, pitch, gapAfter: 100 });
         break;
     }
-    Speech.speak(c.text, {
-      rate,
-      pitch,
-      onDone: () => {
-        if (i + 1 < clauses.length) {
-          setTimeout(() => speakNext(i + 1), gapAfter);
-        }
-      },
-    });
-  };
-
-  speakNext(0);
+  }
+  return out;
 }
 
 // ─── Key components ────────────────────────────────────────────────────────
@@ -197,9 +212,64 @@ function IconKey({
 export default function KeyboardScreen() {
   const t = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { state } = useAppContext();
+  const { speak, stop } = useSpeech();
   const [buffer, setBuffer] = useState('');
   // Subscribe so the Quick Talk badge updates after a save.
   useQuickTalk();
+
+  // User voice preferences — punctuation modifiers apply on top of these.
+  const speechRate = state.accessibility.speechRate;
+  const speechPitch = state.accessibility.speechPitch;
+
+  // Run token + pending-gap timer let us cancel a chained read mid-flight.
+  // Without this, the setTimeout between clauses would resume the old chain
+  // after Speech.stop() — overlapping audio (board_speech_rules.md).
+  const runIdRef = useRef(0);
+  const gapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelSpeech = useCallback(() => {
+    runIdRef.current += 1;
+    if (gapTimerRef.current) {
+      clearTimeout(gapTimerRef.current);
+      gapTimerRef.current = null;
+    }
+    stop();
+  }, [stop]);
+
+  // Never leave a chain running when the screen unmounts.
+  useEffect(() => cancelSpeech, [cancelSpeech]);
+
+  const speakLetter = useCallback((letter: string) => {
+    cancelSpeech();
+    speak(letter, { rate: speechRate * 0.95, pitch: speechPitch });
+  }, [cancelSpeech, speak, speechRate, speechPitch]);
+
+  const speakMessage = useCallback((text: string) => {
+    cancelSpeech();
+    const utterances = buildMessageUtterances(text, speechRate, speechPitch);
+    if (utterances.length === 0) return;
+    const run = runIdRef.current;
+
+    const speakNext = (i: number) => {
+      if (run !== runIdRef.current) return;
+      const u = utterances[i];
+      if (!u) return;
+      speak(u.text, {
+        rate: u.rate,
+        pitch: u.pitch,
+        onDone: () => {
+          if (run !== runIdRef.current) return;
+          if (i + 1 < utterances.length) {
+            gapTimerRef.current = setTimeout(() => speakNext(i + 1), u.gapAfter);
+          }
+        },
+      });
+    };
+
+    speakNext(0);
+  }, [cancelSpeech, speak, speechRate, speechPitch]);
 
   const wordCount = useMemo(
     () => buffer.trim().split(/\s+/).filter(Boolean).length,
@@ -210,7 +280,7 @@ export default function KeyboardScreen() {
     hapticSelection();
     setBuffer(b => b + letter);
     speakLetter(letter);
-  }, []);
+  }, [speakLetter]);
 
   const onPunctuation = useCallback((mark: string) => {
     hapticSelection();
@@ -232,7 +302,7 @@ export default function KeyboardScreen() {
     if (!buffer.trim()) return;
     hapticSelection();
     speakMessage(buffer);
-  }, [buffer]);
+  }, [buffer, speakMessage]);
 
   const onSave = useCallback(() => {
     const t = buffer.trim();
@@ -370,8 +440,8 @@ export default function KeyboardScreen() {
         </Text>
       </View>
 
-      {/* Keyboard */}
-      <View style={styles.keyboard}>
+      {/* Keyboard — bottom padding clears the home indicator */}
+      <View style={[styles.keyboard, { paddingBottom: insets.bottom + spacing.sm }]}>
         <View style={styles.row}>
           {ROW_1.map(l => (
             <LetterKey key={l} value={l} onPress={onLetter} />
@@ -482,7 +552,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
     paddingHorizontal: 4,
-    paddingBottom: spacing.lg,
     gap: 6},
   row: {
     flexDirection: 'row',
@@ -504,14 +573,14 @@ const styles = StyleSheet.create({
 
   iconKey: {
     minHeight: 46,
-    backgroundColor: '#E0E5EA',
+    backgroundColor: colors.inputBg,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center'},
 
   mutedKey: {
     minHeight: 46,
-    backgroundColor: '#E0E5EA',
+    backgroundColor: colors.inputBg,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center'},
@@ -533,5 +602,5 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6},
 
   keyPressed: {
-    backgroundColor: '#D1D7DE'},
+    backgroundColor: colors.progressTrack},
 });

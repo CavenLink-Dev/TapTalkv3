@@ -65,6 +65,15 @@ const ACTIVITIES: Activity[] = [
     heroBg:  '#E0D9FF',
     image:   require('../../assets/activities/colour-pop-logo.png'),
   },
+  {
+    id: 'memory-match',
+    route: '/activities/memory-match' as Href,
+    title: 'Memory Match',
+    subtitle: 'A shape appears then hides. Pick the one you saw.',
+    accent:  '#0A6ED1',
+    heroBg:  '#E1EFFB',
+    image:   require('../../assets/activities/memory-match.png'),
+  },
 ];
 
 const CARD_HEIGHT = 214;

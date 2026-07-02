@@ -6,7 +6,7 @@ import Animated, {
   withTiming,
   FadeInDown,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import { hapticLight } from '../../utils/haptics';
 import { spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/useTheme';
 
@@ -84,7 +84,7 @@ function ProviderIcon({ icon, label, color, surfaceColor, onPress }: ProviderIco
 
   const handlePressIn = () => {
     scale.value = withTiming(0.985, { duration: 100 });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    hapticLight();
   };
 
   const handlePressOut = () => {

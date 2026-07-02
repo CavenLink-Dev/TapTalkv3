@@ -13,7 +13,7 @@
 import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type ActivityId = 'shape-match' | 'colour-pop';
+export type ActivityId = 'shape-match' | 'colour-pop' | 'memory-match';
 
 const STORAGE_KEY = '@taptalk/activities/favourites/v1';
 
@@ -42,7 +42,8 @@ async function hydrate(): Promise<void> {
       const parsed = JSON.parse(raw) as unknown;
       if (Array.isArray(parsed)) {
         favourites = parsed.filter(
-          (v): v is ActivityId => v === 'shape-match' || v === 'colour-pop',
+          (v): v is ActivityId =>
+            v === 'shape-match' || v === 'colour-pop' || v === 'memory-match',
         );
         emit();
       }

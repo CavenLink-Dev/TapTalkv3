@@ -36,6 +36,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Href, Stack, useRouter } from 'expo-router';
 import { Card } from '../../src/components/native/Card';
 import { DisclosureRow } from '../../src/components/native/DisclosureRow';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
@@ -208,9 +209,11 @@ const CONFETTI_COLORS = ['#FF3B30', '#FF9F0A', '#FFD60A', '#34C759', '#0A84FF', 
 const CONFETTI_COUNT = 28;
 const CONFETTI_DURATION = 1600;
 
-function Confetti({ active }: { active: boolean }) {
+function Confetti({ active, reduceMotion }: { active: boolean; reduceMotion: boolean }) {
   // Mount/unmount based on `active`; each particle re-runs on remount.
-  if (!active) return null;
+  // Reduce Motion: skip the burst entirely (Rule 18) — the completed
+  // state itself is the feedback.
+  if (!active || reduceMotion) return null;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
       {Array.from({ length: CONFETTI_COUNT }).map((_, i) => (
@@ -280,6 +283,7 @@ function SequenceRunner({
   onClose: () => void;
 }) {
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
   const [index, setIndex] = useState(0);
   const [remaining, setRemaining] = useState(0);
   const [done, setDone] = useState(false);
@@ -436,7 +440,7 @@ function SequenceRunner({
           </View>
         )}
 
-        <Confetti active={done} />
+        <Confetti active={done} reduceMotion={reduceMotion} />
       </SafeAreaView>
     </Modal>
   );

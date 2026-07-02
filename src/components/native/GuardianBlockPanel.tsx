@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeInDown,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { radii, spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/useTheme';
 
@@ -31,14 +31,14 @@ export function GuardianBlockPanel({
 
   // Trigger warning haptic when component mounts
   useEffect(() => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+    hapticWarning();
   }, []);
 
   const handleLongPress = () => {
     if (onCopyLink) {
       onCopyLink();
       // Success haptic on copy
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      hapticSuccess();
     }
   };
 

@@ -7,15 +7,15 @@
  *   • Animated shape exit: scale-down + fade when placed (not instant opacity:0)
  *   • Wrong-match shake: oscillating translateX on the tapped shape
  *   • Level cross-fade: content fades out, new layout loads, fades back in
- *   • Level-complete confetti burst (14 coloured particles, radial)
- *   • ConfirmModal replaces Alert for Reset (calm, never jarring)
- *   • HelpModal replaces Alert for How To Play
+ *   • Calm level-complete cue (sound + pill flash — celebration saved for the end)
+ *   • Reset confirm + Help use the platform Alert.alert (§2.4 / §10)
  *   • Removed unused dims / useWindowDimensions hack
  *   • Zone eyebrow labels: OUTLINES / SHAPES
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Easing,
   Modal,
@@ -41,9 +41,9 @@ import {
   ACTIVITY_THEMES,
 } from '../../src/components/activities/ActivityCompletionOverlay';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
-import { radii, spacing, typography } from '../../src/theme/tokens';
-import { hapticSelection } from '../../src/utils/haptics';
-import { playSound, playStreakSound } from '../../src/utils/sounds';
+import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { hapticLight, hapticSelection } from '../../src/utils/haptics';
+import { playSound } from '../../src/utils/sounds';
 import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Shapes ────────────────────────────────────────────────────────────────────
@@ -315,100 +315,8 @@ function MatchParticles({ trigger, color }: { trigger: number; color: string }) 
   );
 }
 
-// ─── LevelConfetti — radial burst on level complete ────────────────────────────
-
-const CONFETTI_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#FFD166', '#8E7DFF',
-  '#F39B12', '#E55F8C', '#06A0B5', '#7BC74D',
-];
-
-const CONFETTI_CFG = Array.from({ length: 14 }, (_, i) => ({
-  color:  CONFETTI_COLORS[i % CONFETTI_COLORS.length]!,
-  angle:  (i / 14) * 360,
-  radius: 55 + (i % 3) * 28,
-}));
-
-function LevelConfetti({ trigger }: { trigger: number }) {
-  const particles = useRef(
-    CONFETTI_CFG.map(() => ({
-      opacity:  new Animated.Value(0),
-      progress: new Animated.Value(0),
-    }))
-  ).current;
-
-  const lastTrigger = useRef(0);
-
-  useEffect(() => {
-    if (trigger === 0 || trigger === lastTrigger.current) return;
-    lastTrigger.current = trigger;
-
-    particles.forEach(p => { p.opacity.setValue(0); p.progress.setValue(0); });
-
-    Animated.stagger(
-      22,
-      particles.map(p =>
-        Animated.parallel([
-          Animated.timing(p.progress, {
-            toValue: 1, duration: 480,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.sequence([
-            Animated.timing(p.opacity, { toValue: 1, duration: 55, useNativeDriver: true }),
-            Animated.timing(p.opacity, {
-              toValue: 0, duration: 300, delay: 80,
-              easing: Easing.out(Easing.quad),
-              useNativeDriver: true,
-            }),
-          ]),
-        ])
-      )
-    ).start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trigger]);
-
-  return (
-    <View
-      style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}
-      pointerEvents="none"
-    >
-      {CONFETTI_CFG.map((cfg, i) => {
-        const rad = (cfg.angle * Math.PI) / 180;
-        const p   = particles[i];
-        if (!p) return null;
-        return (
-          <Animated.View
-            key={i}
-            style={{
-              position: 'absolute',
-              width: 11, height: 11,
-              borderRadius: 5.5,
-              backgroundColor: cfg.color,
-              opacity: p.opacity,
-              transform: [
-                {
-                  translateX: p.progress.interpolate({
-                    inputRange: [0, 1], outputRange: [0, Math.cos(rad) * cfg.radius],
-                  }),
-                },
-                {
-                  translateY: p.progress.interpolate({
-                    inputRange: [0, 1], outputRange: [0, Math.sin(rad) * cfg.radius],
-                  }),
-                },
-                {
-                  scale: p.progress.interpolate({
-                    inputRange: [0, 0.2, 1], outputRange: [0, 1.5, 0.5],
-                  }),
-                },
-              ],
-            }}
-          />
-        );
-      })}
-    </View>
-  );
-}
+// Per-level confetti removed — celebration is saved for the
+// end-of-difficulty completion overlay (activity rules §5.5, Rule 15).
 
 // ─── Slot ──────────────────────────────────────────────────────────────────────
 
@@ -746,102 +654,8 @@ function StartOverlay({
   );
 }
 
-// ─── ConfirmModal — replaces Alert for Reset ───────────────────────────────────
-
-function ConfirmModal({
-  visible,
-  onConfirm,
-  onCancel,
-}: {
-  visible: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const t = useTheme();
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={styles.overlayBackdrop}>
-        <Card style={styles.overlayCard}>
-          <Text style={[styles.overlayTitle, { color: t.colors.text }]} accessibilityRole="header">Reset this level?</Text>
-          <Text style={[styles.overlaySub, { color: t.colors.textMuted }]}>Your progress will be cleared.</Text>
-          <View style={styles.overlayActions}>
-            <Pressable
-              onPress={onCancel}
-              accessibilityRole="button"
-              accessibilityLabel="Keep playing"
-              style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}
-            >
-              <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Keep Playing</Text>
-            </Pressable>
-            <Pressable
-              onPress={onConfirm}
-              accessibilityRole="button"
-              accessibilityLabel="Reset level"
-              style={({ pressed }) => [styles.btnReset, pressed && { opacity: 0.85 }]}
-            >
-              <Text style={styles.btnResetText}>Reset</Text>
-            </Pressable>
-          </View>
-        </Card>
-      </View>
-    </Modal>
-  );
-}
-
-// ─── HelpModal — replaces Alert for How To Play ────────────────────────────────
-
-function HelpModal({
-  visible,
-  onClose,
-}: {
-  visible: boolean;
-  onClose: () => void;
-}) {
-  const t = useTheme();
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlayBackdrop}>
-        <Card style={styles.overlayCard}>
-          <Ionicons
-            name="help-circle"
-            size={38}
-            color={t.colors.primary}
-            style={{ alignSelf: 'center' }}
-          />
-          <Text style={[styles.overlayTitle, { color: t.colors.text }]} accessibilityRole="header">How to play</Text>
-          <Text style={[styles.overlaySub, { color: t.colors.textMuted }]}>
-            Tap a shape below, then tap its matching outline above.
-            {'\n\n'}
-            You can also drag a shape directly onto its outline.
-            {'\n\n'}
-            Wrong picks bounce back — keep trying.
-          </Text>
-          <Pressable
-            onPress={onClose}
-            accessibilityRole="button"
-            accessibilityLabel="Got it"
-            style={({ pressed }) => [styles.btnPrimary, pressed && { opacity: 0.85 }]}
-          >
-            <Text style={styles.btnPrimaryText}>Got it</Text>
-          </Pressable>
-        </Card>
-      </View>
-    </Modal>
-  );
-}
-
-// ─── Feedback messages ─────────────────────────────────────────────────────────
-
-const CORRECT_MESSAGES = [
-  'Great work!', 'Great job!', 'Nice one!', 'Well done!',
-  'Awesome!', 'Perfect!', 'Brilliant!', 'Keep it up!',
-  'You got it!', 'Spot on!', 'Fantastic!', 'Amazing!',
-  'Superb!', 'Nailed it!',
-];
-
-function randomCorrectMessage(): string {
-  return CORRECT_MESSAGES[Math.floor(Math.random() * CORRECT_MESSAGES.length)]!;
-}
+// Reset confirm + Help use the platform Alert.alert — iOS-native list in
+// RULES.md and activity rules §2.4 / §10.
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
 
@@ -873,19 +687,14 @@ export default function ShapeMatchScreen() {
   const [selectedShapeId,setSelectedShapeId]= useState<string | null>(null);
   const [hintedShapeId,  setHintedShapeId]  = useState<string | null>(null);
   const [tryAgainVisible,setTryAgainVisible]= useState(false);
-  const [correctToastVisible, setCorrectToastVisible] = useState(false);
-  const [correctMessage, setCorrectMessage] = useState('');
-  const [soundOn,        setSoundOn]        = useState(true);
+  // Sound defaults OFF — the user opts in (activity_implementation_rules §3).
+  const [soundOn,        setSoundOn]        = useState(false);
   const [levelPillFlash, setLevelPillFlash] = useState(false);
 
   // V3 additions
   const [wrongShapeId,      setWrongShapeId]      = useState<string | null>(null);
-  const [confirmResetVisible,setConfirmResetVisible]=useState(false);
-  const [helpVisible,       setHelpVisible]       = useState(false);
-  const [confettiTrigger,   setConfettiTrigger]   = useState(0);
 
   const tryAgainFade     = useRef(new Animated.Value(0)).current;
-  const correctToastFade = useRef(new Animated.Value(0)).current;
   const levelPillScale   = useRef(new Animated.Value(1)).current;
   const contentOpacity   = useRef(new Animated.Value(1)).current; // level cross-fade
   const slotRects        = useRef<Map<ShapeKind, Rect>>(new Map());
@@ -901,21 +710,10 @@ export default function ShapeMatchScreen() {
   useEffect(() => {
     if (phase !== 'play' || !allMatched) return;
 
+    // One calm cue per level end — no praise toast, no per-level confetti
+    // (activity rules §3.1 "do not stack sounds", §5.5 confetti is saved for
+    // the end-of-difficulty overlay, copy rules ban praise messages).
     playSound('level_complete', soundOn);
-    playStreakSound(level, soundOn);
-
-    // Confetti burst
-    setConfettiTrigger(t => t + 1);
-
-    // Correct toast
-    setCorrectMessage(randomCorrectMessage());
-    setCorrectToastVisible(true);
-    correctToastFade.setValue(0);
-    Animated.sequence([
-      Animated.timing(correctToastFade, { toValue: 1, duration: 160, useNativeDriver: true }),
-      Animated.delay(800),
-      Animated.timing(correctToastFade, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start(() => setCorrectToastVisible(false));
 
     // Advance level with cross-fade
     const t = setTimeout(() => {
@@ -931,12 +729,16 @@ export default function ShapeMatchScreen() {
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }).start(() => {
-        // Flash level pill
+        // Flash level pill — colour-only flash under Reduce Motion (Rule 18)
         setLevelPillFlash(true);
-        Animated.sequence([
-          Animated.timing(levelPillScale, { toValue: 1.12, duration: 160, useNativeDriver: true }),
-          Animated.spring(levelPillScale, { toValue: 1, useNativeDriver: true, friction: 5, tension: 120 }),
-        ]).start(() => setLevelPillFlash(false));
+        if (reduceMotion) {
+          setTimeout(() => setLevelPillFlash(false), 600);
+        } else {
+          Animated.sequence([
+            Animated.timing(levelPillScale, { toValue: 1.12, duration: 160, useNativeDriver: true }),
+            Animated.spring(levelPillScale, { toValue: 1, useNativeDriver: true, friction: 5, tension: 120 }),
+          ]).start(() => setLevelPillFlash(false));
+        }
 
         // Load new level
         setLevel(l => l + 1);
@@ -978,7 +780,7 @@ export default function ShapeMatchScreen() {
       if (!shape || placed.has(shape.id)) return;
 
       if (shape.kind === targetKind) {
-        hapticSelection();
+        hapticLight(); // light impact for a commit (Rule 19 / design language)
         playSound('correct', soundOn);
         setPlaced(prev => { const n = new Set(prev); n.add(shape.id); return n; });
         setSelectedShapeId(null);
@@ -1039,13 +841,31 @@ export default function ShapeMatchScreen() {
     setPlaced(new Set());
     setSelectedShapeId(null);
     setHintedShapeId(null);
-    setConfirmResetVisible(false);
   }, []);
 
   const onReset = useCallback(() => {
     if (!progressMade) { resetLevel(); return; }
-    setConfirmResetVisible(true);
+    // Platform confirm — §2.4 (Alert.alert only when progress has been made).
+    Alert.alert(
+      'Reset this level?',
+      'Your progress will be cleared.',
+      [
+        { text: 'Keep playing', style: 'cancel' },
+        { text: 'Reset', style: 'destructive', onPress: resetLevel },
+      ],
+      { cancelable: true },
+    );
   }, [progressMade, resetLevel]);
+
+  const showHelp = useCallback(() => {
+    // Platform alert — §10 (one paragraph, "Got it").
+    Alert.alert(
+      'How to play',
+      'Tap a shape below, then tap its matching outline above. You can also drag a shape onto its outline. If a shape does not fit, it slides back — keep trying.',
+      [{ text: 'Got it' }],
+      { cancelable: true },
+    );
+  }, []);
 
   const goLevel = useCallback((delta: 1 | -1) => {
     setLevel(prev => {
@@ -1154,7 +974,7 @@ export default function ShapeMatchScreen() {
             />
           </Pressable>
           <Pressable
-            onPress={() => setHelpVisible(true)}
+            onPress={showHelp}
             hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel="Help"
@@ -1290,24 +1110,11 @@ export default function ShapeMatchScreen() {
               style={[styles.tryAgain, { bottom: insets.bottom + 90, opacity: tryAgainFade }]}
               pointerEvents="none"
             >
-              <Ionicons name="refresh-circle-outline" size={20} color={t.colors.primary} />
-              <Text style={[styles.tryAgainText, { color: t.colors.primary }]}>Try Again</Text>
+              <Ionicons name="refresh-circle-outline" size={20} color="#A65900" />
+              <Text style={[styles.tryAgainText, { color: '#A65900' }]}>Try Again</Text>
             </Animated.View>
           ) : null}
 
-          {/* Correct toast */}
-          {correctToastVisible ? (
-            <Animated.View
-              style={[styles.correctToast, { bottom: insets.bottom + 90, opacity: correctToastFade }]}
-              pointerEvents="none"
-            >
-              <Ionicons name="checkmark-circle-outline" size={20} color="#1A7A3A" />
-              <Text style={styles.correctToastText}>{correctMessage}</Text>
-            </Animated.View>
-          ) : null}
-
-          {/* Level-complete confetti */}
-          <LevelConfetti trigger={confettiTrigger} />
         </View>
       ) : (
         <View style={styles.body} />
@@ -1319,17 +1126,6 @@ export default function ShapeMatchScreen() {
         onSelectDifficulty={setDifficulty}
         onCancel={onCancelStart}
         onStart={startGame}
-      />
-
-      <ConfirmModal
-        visible={confirmResetVisible}
-        onConfirm={resetLevel}
-        onCancel={() => setConfirmResetVisible(false)}
-      />
-
-      <HelpModal
-        visible={helpVisible}
-        onClose={() => setHelpVisible(false)}
       />
 
       <ActivityCompletionOverlay
@@ -1348,8 +1144,10 @@ export default function ShapeMatchScreen() {
 
 // ─── Styles ────────────────────────────────────────────────────────────────────
 
-const BG      = '#F4FAF6';  // soft mint — gives the field character vs pure white
-const SLOT_BG = '#FFFFFF';  // white slots read clearly against the mint field
+// Bright page per activity rules §2.1 — pure white page, surfaces lift
+// with the standard recessed grey so slots read as raised wells.
+const BG      = '#FFFFFF';
+const SLOT_BG = '#F1F5F9';
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
@@ -1413,18 +1211,12 @@ const styles = StyleSheet.create({
   slotsArea:  { alignItems: 'center', paddingVertical: spacing.sm },
   shapesArea: { alignItems: 'center', paddingVertical: spacing.sm },
 
-  // Slots — white card against the mint BG so they read as target zones
+  // Slots — recessed grey wells against the white page (§2.1, flat surfaces)
   slot: {
     borderRadius: 22,
     backgroundColor: SLOT_BG,
     alignItems: 'center',
-    justifyContent: 'center',
-    // Subtle shadow lifts the slot off the page
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07,
-    shadowRadius: 3,
-    elevation: 2},
+    justifyContent: 'center'},
   slotAwaiting: { backgroundColor: '#E6F4FD' },
   slotHinted:   { backgroundColor: '#FFF4E0' },
 
@@ -1435,12 +1227,7 @@ const styles = StyleSheet.create({
   shapePressable: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: SLOT_BG,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2},
+    backgroundColor: SLOT_BG},
   shapeSelected: {
     backgroundColor: '#E6F4FD',
     borderWidth: 3},
@@ -1462,7 +1249,7 @@ const styles = StyleSheet.create({
     fontWeight: '800'},
   footerGhost:   { backgroundColor: '#E6F4FD' },
   footerReset:   { backgroundColor: SLOT_BG },
-  footerForward: { },
+  footerForward: { backgroundColor: colors.primary },
 
   tryAgain: {
     position: 'absolute',
@@ -1473,27 +1260,12 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    backgroundColor: '#E6F4FD',
+    // Soft amber toast — activity rules §4.2
+    backgroundColor: '#FFF4E0',
     borderRadius: radii.pill},
   tryAgainText: {
     fontSize: typography.body,
     fontWeight: '800'},
-
-  correctToast: {
-    position: 'absolute',
-    left: spacing.lg, right: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    backgroundColor: '#D6F0DD',
-    borderRadius: radii.pill},
-  correctToastText: {
-    fontSize: typography.body,
-    fontWeight: '800',
-    color: '#1A7A3A'},
 
   // ── Modals ──────────────────────────────────────────────────────────────────
   overlayBackdrop: {
@@ -1567,23 +1339,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: radii.pill,
-
+    backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
     minHeight: 50},
   btnPrimaryText: {
     fontSize: typography.body,
     fontWeight: '800',
     color: '#FFFFFF'},
-  // Reset confirm — muted red tint, calm not alarming
-  btnReset: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: radii.pill,
-    backgroundColor: '#FFECEC',
-    alignItems: 'center', justifyContent: 'center',
-    minHeight: 50},
-  btnResetText: {
-    fontSize: typography.body,
-    fontWeight: '800',
-    color: '#C0392B'},
 });

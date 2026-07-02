@@ -6,7 +6,7 @@ import Animated, {
   withSpring,
   FadeInDown,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import { hapticLight } from '../../utils/haptics';
 import { spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/useTheme';
 
@@ -39,7 +39,7 @@ export function ConsentCheckbox({
       damping: 12,
       stiffness: 300,
     });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    hapticLight();
     onToggle();
   };
 

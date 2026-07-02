@@ -40,12 +40,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import Svg, { Circle, G, Line } from 'react-native-svg';
-import * as Haptics from 'expo-haptics';
 import { Card } from '../../src/components/native/Card';
 import { DisclosureRow } from '../../src/components/native/DisclosureRow';
 import { WheelPicker } from '../../src/components/native/WheelPicker';
+import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { radii, spacing, typography } from '../../src/theme/tokens';
-import { hapticSelection } from '../../src/utils/haptics';
+import { hapticSelection, hapticSuccess } from '../../src/utils/haptics';
 import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ function playChime(sound: string): void {
   if (sound === 'none') return;
   // eslint-disable-next-line no-console
   console.log(`[VisualTimer] chime → ${sound}`);
-  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+  hapticSuccess();
 }
 
 // ─── Modern digital face ────────────────────────────────────────────────────
@@ -780,27 +780,31 @@ function RunOverlay({
   onClose: () => void;
 }) {
   const t = useTheme();
+  const reduceMotion = useReduceMotion();
   // Fade the overlay in on mount.
   const fade = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fade, {
       toValue: 1,
-      duration: 220,
+      duration: reduceMotion ? 120 : 220,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [fade]);
+  }, [fade, reduceMotion]);
 
-  // End-state pulse on the face.
+  // End-state pulse on the face — skipped under Reduce Motion (Rule 18);
+  // the success haptic still fires so the outcome is not colour/motion-only.
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (phase !== 'done') return;
-    Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 480, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
-    ]).start();
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-  }, [phase, pulse]);
+    if (!reduceMotion) {
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 480, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+      ]).start();
+    }
+    hapticSuccess();
+  }, [phase, pulse, reduceMotion]);
 
   const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
 
@@ -905,7 +909,7 @@ function HoldToUnlock({ onComplete }: { onComplete: () => void }) {
     });
     holdRef.current.start(({ finished }) => {
       if (finished) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+        hapticSuccess();
         onComplete();
       }
     });

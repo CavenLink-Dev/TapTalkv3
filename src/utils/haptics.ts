@@ -47,6 +47,11 @@ export function hapticSuccess(): Promise<void> {
   return Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined) as Promise<void>;
 }
 
+export function hapticWarning(): Promise<void> {
+  if (!hapticsEnabled) return noop;
+  return Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined) as Promise<void>;
+}
+
 export function hapticError(): Promise<void> {
   if (!hapticsEnabled) return noop;
   return Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined) as Promise<void>;

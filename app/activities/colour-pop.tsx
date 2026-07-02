@@ -3,8 +3,9 @@
  *
  * Shapes fly through the play field in many directions with real gravity feel.
  * Tap the matching colour — one colour stays for 30 s (resets on each correct tap).
- * Fill the goal → sparkle → next colour. 30 s no tap → glitch → next colour.
- * Tap correctly — shapes pop and confetti bursts. Simple, clean, professional.
+ * Fill the goal → sparkle → next colour. 30 s no tap → calm fade → next colour.
+ * Feedback is quiet: a soft pop on correct, an amber Try Again toast on
+ * incorrect (activity rules §4/§5 — no red flash, no shake, no confetti).
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -34,8 +35,8 @@ import {
 } from '../../src/components/activities/ActivityCompletionOverlay';
 import { Card } from '../../src/components/native/Card';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
-import { radii, spacing, typography } from '../../src/theme/tokens';
-import { hapticSelection } from '../../src/utils/haptics';
+import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { hapticLight, hapticSelection } from '../../src/utils/haptics';
 import { playSound } from '../../src/utils/sounds';
 import { useTheme } from '../../src/theme/useTheme';
 
@@ -247,27 +248,27 @@ function polygonPoints(cx: number, cy: number, r: number, sides: number, start: 
   }).join(' ');
 }
 
-// ─── Confetti ─────────────────────────────────────────────────────────────────
-
-const PARTICLE_COUNT = 14;
-const P_COLOURS = ['#FFD700', '#FFFFFF', '#FF6B6B', '#74D7F7', '#B8F5B1', '#FFA94D', '#E879F9'];
+// ─── Flying shape ─────────────────────────────────────────────────────────────
+// Per-tap confetti removed (§5.5 — celebration is saved for the completion
+// overlay). Correct taps end in a soft scale + fade; under Reduce Motion the
+// shape simply fades out. The traversal itself is functional motion (the
+// game mechanic), so it keeps its duration under Reduce Motion — only the
+// decorative rotation and bounce-in are dropped (§8).
 
 function FlyingShapeView({
-  item, tapped, wrongFlash, reduceMotion, onPress, onGone,
+  item, tapped, reduceMotion, onPress, onGone,
 }: {
   item: FlyingItem;
   tapped: boolean;
-  wrongFlash: boolean;
   reduceMotion: boolean;
   onPress: () => void;
   onGone: (id: string) => void;
 }) {
   const tx       = useRef(new Animated.Value(item.sx)).current;
   const ty       = useRef(new Animated.Value(item.sy)).current;
-  const scale    = useRef(new Animated.Value(0.5)).current;
+  const scale    = useRef(new Animated.Value(reduceMotion ? 1 : 0.5)).current;
   const opacity  = useRef(new Animated.Value(0)).current;
   const rotAnim  = useRef(new Animated.Value(0)).current;
-  const shake    = useRef(new Animated.Value(0)).current;
   const arcRef   = useRef<Animated.CompositeAnimation | null>(null);
   const goneRef  = useRef(false);
   const onGoneRef = useRef(onGone);
@@ -278,26 +279,13 @@ function FlyingShapeView({
     outputRange: [item.rotFrom, item.rotMid, item.rotTo],
   }), [rotAnim, item.rotFrom, item.rotMid, item.rotTo]);
 
-  const particles = useRef(
-    Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
-      tx:      new Animated.Value(0),
-      ty:      new Animated.Value(0),
-      opacity: new Animated.Value(0),
-      scale:   new Animated.Value(1),
-      angle:   (i / PARTICLE_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.55,
-      dist:    24 + Math.random() * 40,
-      pSize:   4 + Math.round(Math.random() * 8),
-      pColour: i % 3 === 0 ? item.colour.hex : P_COLOURS[i % P_COLOURS.length]!,
-    }))
-  ).current;
-
   // Arc on mount — decel up, accel down (cubic gravity)
   useEffect(() => {
-    const up    = reduceMotion ? 60 : item.upDuration;
-    const down  = reduceMotion ? 60 : item.downDuration;
+    const up    = item.upDuration;
+    const down  = item.downDuration;
     const total = up + down;
 
-    const arc = Animated.parallel([
+    const anims: Animated.CompositeAnimation[] = [
       Animated.sequence([
         Animated.timing(tx, { toValue: item.px, duration: up,   easing: Easing.out(Easing.quad),  useNativeDriver: true }),
         Animated.timing(tx, { toValue: item.ex, duration: down, easing: Easing.in(Easing.cubic),  useNativeDriver: true }),
@@ -307,17 +295,23 @@ function FlyingShapeView({
         Animated.timing(ty, { toValue: item.ey, duration: down, easing: Easing.in(Easing.cubic),  useNativeDriver: true }),
       ]),
       Animated.sequence([
-        Animated.timing(scale, { toValue: 1,   duration: up,   easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 0.5, duration: down, easing: Easing.in(Easing.quad),        useNativeDriver: true }),
-      ]),
-      Animated.sequence([
         Animated.timing(opacity, { toValue: 1, duration: Math.min(160, up * 0.35), useNativeDriver: true }),
         Animated.delay(up + down * 0.42),
         Animated.timing(opacity, { toValue: 0, duration: down * 0.58, useNativeDriver: true }),
       ]),
-      Animated.timing(rotAnim, { toValue: 1, duration: total, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-    ]);
+    ];
 
+    if (!reduceMotion) {
+      anims.push(
+        Animated.sequence([
+          Animated.timing(scale, { toValue: 1,   duration: up,   easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
+          Animated.timing(scale, { toValue: 0.5, duration: down, easing: Easing.in(Easing.quad),        useNativeDriver: true }),
+        ]),
+        Animated.timing(rotAnim, { toValue: 1, duration: total, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      );
+    }
+
+    const arc = Animated.parallel(anims);
     arcRef.current = arc;
     arc.start(({ finished }) => {
       if (finished && !goneRef.current) { goneRef.current = true; onGoneRef.current(item.id); }
@@ -326,54 +320,26 @@ function FlyingShapeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Bubble pop + confetti burst on correct tap
+  // Soft pop on correct tap — gentle scale + fade (fade only under Reduce Motion)
   useEffect(() => {
     if (!tapped) return;
-
-    // Confetti fires immediately
-    const burstAnims = particles.map(p => {
-      p.tx.setValue(0); p.ty.setValue(0); p.opacity.setValue(0); p.scale.setValue(1);
-      return Animated.parallel([
-        Animated.timing(p.tx, { toValue: Math.cos(p.angle) * p.dist, duration: 460, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.timing(p.ty, { toValue: Math.sin(p.angle) * p.dist, duration: 460, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.sequence([
-          Animated.timing(p.opacity, { toValue: 1, duration: 45,  useNativeDriver: true }),
-          Animated.timing(p.opacity, { toValue: 0, duration: 415, useNativeDriver: true }),
-        ]),
-        Animated.timing(p.scale, { toValue: 0.1, duration: 460, useNativeDriver: true }),
-      ]);
-    });
-    Animated.parallel(burstAnims).start();
-
-    // Bubble POP: quick squish → hard spring burst → fade out
     arcRef.current?.stop();
-    Animated.sequence([
-      // Compress inward (bubble squish)
-      Animated.timing(scale, { toValue: 0.72, duration: 55, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-      // Spring outward hard (the POP)
-      Animated.parallel([
-        Animated.spring(scale, { toValue: 1.55, friction: 2.6, tension: 500, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0, duration: 220, delay: 40, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      ]),
+
+    if (reduceMotion) {
+      Animated.timing(opacity, { toValue: 0, duration: 160, useNativeDriver: true })
+        .start(({ finished }) => {
+          if (finished && !goneRef.current) { goneRef.current = true; onGoneRef.current(item.id); }
+        });
+      return;
+    }
+
+    Animated.parallel([
+      Animated.timing(scale, { toValue: 1.18, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0, duration: 220, delay: 30, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start(({ finished }) => {
       if (finished && !goneRef.current) { goneRef.current = true; onGoneRef.current(item.id); }
     });
   }, [tapped]); // eslint-disable-line
-
-  // Wrong-colour shake
-  useEffect(() => {
-    if (!wrongFlash) return;
-    shake.setValue(0);
-    Animated.sequence([
-      Animated.timing(shake, { toValue: 14,  duration: 55, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: -14, duration: 65, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: 9,   duration: 50, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: -9,  duration: 50, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: 0,   duration: 40, useNativeDriver: true }),
-    ]).start();
-  }, [wrongFlash]); // eslint-disable-line
-
-  const half = item.size / 2;
 
   return (
     <Animated.View style={{
@@ -381,30 +347,19 @@ function FlyingShapeView({
       width: item.size, height: item.size,
       opacity,
       transform: [
-        { translateX: Animated.add(tx, shake) },
+        { translateX: tx },
         { translateY: ty },
         { scale },
         { rotate: rotInterp },
       ],
     }}>
-      {particles.map((p, i) => (
-        <Animated.View key={i} pointerEvents="none" style={{
-          position: 'absolute',
-          width: p.pSize, height: p.pSize, borderRadius: p.pSize / 2,
-          backgroundColor: p.pColour,
-          left: half - p.pSize / 2, top: half - p.pSize / 2,
-          opacity: p.opacity,
-          transform: [{ translateX: p.tx }, { translateY: p.ty }, { scale: p.scale }],
-        }} />
-      ))}
-
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`${item.colour.label} ${item.shape}`}
         style={({ pressed }) => [
           styles.shapeTapTarget,
-          pressed && { opacity: 0.72, transform: [{ scale: 0.93 }] },
+          pressed && { opacity: 0.72 },
         ]}
       >
         <ShapeArt kind={item.shape} colour={item.colour} size={item.size} />
@@ -415,8 +370,8 @@ function FlyingShapeView({
 
 // ─── Sparkle overlay (goal completion) ───────────────────────────────────────
 
-function SparkleOverlay({ visible, colour, onDone }: {
-  visible: boolean; colour: string; onDone: () => void;
+function SparkleOverlay({ visible, colour, reduceMotion, onDone }: {
+  visible: boolean; colour: string; reduceMotion: boolean; onDone: () => void;
 }) {
   const rings = useRef(
     Array.from({ length: 3 }, () => ({
@@ -426,6 +381,11 @@ function SparkleOverlay({ visible, colour, onDone }: {
 
   useEffect(() => {
     if (!visible) return;
+    // Reduce Motion: skip the ring animation, keep the flow (Rule 18 / §8).
+    if (reduceMotion) {
+      const timer = setTimeout(onDone, 350);
+      return () => clearTimeout(timer);
+    }
     rings.forEach(r => { r.scale.setValue(0); r.opacity.setValue(0); });
     const anims = rings.map((r, i) =>
       Animated.sequence([
@@ -442,7 +402,7 @@ function SparkleOverlay({ visible, colour, onDone }: {
     Animated.parallel(anims).start(({ finished }) => { if (finished) onDone(); });
   }, [visible]); // eslint-disable-line
 
-  if (!visible) return null;
+  if (!visible || reduceMotion) return null;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {rings.map((r, i) => (
@@ -467,83 +427,25 @@ function SparkleOverlay({ visible, colour, onDone }: {
   );
 }
 
-// ─── Settings modal ───────────────────────────────────────────────────────────
-
-function SettingsModal({
-  visible, difficulty, speed,
-  onChangeDifficulty, onChangeSpeed,
-  onRestart, onClose,
-}: {
-  visible: boolean;
-  difficulty: Difficulty;
-  speed: Speed;
-  onChangeDifficulty: (d: Difficulty) => void;
-  onChangeSpeed: (s: Speed) => void;
-  onRestart: () => void;
-  onClose: () => void;
-}) {
-  const t = useTheme();
-  const Row = ({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) => (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.diffRow, active && styles.diffRowActive, pressed && { opacity: 0.88 }]}
-    >
-      <View style={[styles.radio, active && styles.radioActive]}>
-        {active ? <View style={[styles.radioDot, { backgroundColor: t.colors.primary }]} /> : null}
-      </View>
-      <Text style={[styles.diffLabel, { color: t.colors.text }]}>{label}</Text>
-    </Pressable>
-  );
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlayBackdrop}>
-        <Card style={styles.overlayCard}>
-          <Text style={[styles.overlayTitle, { color: t.colors.text }]}>Settings</Text>
-
-          <View style={styles.section}>
-            <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>DIFFICULTY</Text>
-            <Row label="Easy"   active={difficulty === 'easy'}   onPress={() => { hapticSelection(); onChangeDifficulty('easy'); }} />
-            <Row label="Medium" active={difficulty === 'medium'} onPress={() => { hapticSelection(); onChangeDifficulty('medium'); }} />
-            <Row label="Hard"   active={difficulty === 'hard'}   onPress={() => { hapticSelection(); onChangeDifficulty('hard'); }} />
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>SPEED</Text>
-            <Row label="Slow"    active={speed === 'slow'}    onPress={() => { hapticSelection(); onChangeSpeed('slow'); }} />
-            <Row label="Fast"    active={speed === 'fast'}    onPress={() => { hapticSelection(); onChangeSpeed('fast'); }} />
-            <Row label="Fastest" active={speed === 'fastest'} onPress={() => { hapticSelection(); onChangeSpeed('fastest'); }} />
-          </View>
-
-          <View style={styles.overlayActions}>
-            <Pressable onPress={onRestart} style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}>
-              <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Restart</Text>
-            </Pressable>
-            <Pressable onPress={onClose} style={({ pressed }) => [styles.btnPrimary, pressed && { opacity: 0.85 }]}>
-              <Text style={styles.btnPrimaryText}>Done</Text>
-            </Pressable>
-          </View>
-        </Card>
-      </View>
-    </Modal>
-  );
-}
-
 // ─── Start overlay ────────────────────────────────────────────────────────────
+// Difficulty only — no Speed section, no settings panel (§1). The in-game
+// Settings modal was removed for the same reason; speed is fixed calm.
 
 function StartOverlay({
-  visible, difficulty, speed,
-  onSelectDifficulty, onSelectSpeed, onCancel, onStart,
+  visible, difficulty,
+  onSelectDifficulty, onCancel, onStart,
 }: {
-  visible: boolean; difficulty: Difficulty; speed: Speed;
+  visible: boolean; difficulty: Difficulty;
   onSelectDifficulty: (d: Difficulty) => void;
-  onSelectSpeed: (s: Speed) => void;
   onCancel: () => void; onStart: () => void;
 }) {
   const t = useTheme();
   const Row = ({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) => (
     <Pressable
       onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityLabel={`${label} difficulty`}
+      accessibilityState={{ selected: active }}
       style={({ pressed }) => [styles.diffRow, active && styles.diffRowActive, pressed && { opacity: 0.88 }]}
     >
       <View style={[styles.radio, active && styles.radioActive]}>
@@ -557,9 +459,9 @@ function StartOverlay({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.overlayBackdrop}>
         <Card style={styles.overlayCard}>
-          <Text style={[styles.overlayTitle, { color: t.colors.text }]}>Colour Pop</Text>
+          <Text style={[styles.overlayTitle, { color: t.colors.text }]} accessibilityRole="header">Colour Pop</Text>
           <Text style={[styles.overlaySub, { color: t.colors.textMuted }]}>
-            Shapes fly through the field — tap the matching colour before they escape!
+            Shapes fly through the field. Tap the ones that match the colour word.
           </Text>
 
           <View style={styles.section}>
@@ -569,19 +471,22 @@ function StartOverlay({
             <Row label="Hard"   active={difficulty === 'hard'}   onPress={() => { hapticSelection(); onSelectDifficulty('hard'); }} />
           </View>
 
-          <View style={styles.section}>
-            <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>SPEED</Text>
-            <Row label="Slow"    active={speed === 'slow'}    onPress={() => { hapticSelection(); onSelectSpeed('slow'); }} />
-            <Row label="Fast"    active={speed === 'fast'}    onPress={() => { hapticSelection(); onSelectSpeed('fast'); }} />
-            <Row label="Fastest" active={speed === 'fastest'} onPress={() => { hapticSelection(); onSelectSpeed('fastest'); }} />
-          </View>
-
           <View style={styles.overlayActions}>
-            <Pressable onPress={onCancel} style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}>
+            <Pressable
+              onPress={onCancel}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+              style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}
+            >
               <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={onStart} style={({ pressed }) => [styles.btnPrimary, pressed && { opacity: 0.85 }]}>
-              <Text style={styles.btnPrimaryText}>Start</Text>
+            <Pressable
+              onPress={onStart}
+              accessibilityRole="button"
+              accessibilityLabel="Start game"
+              style={({ pressed }) => [styles.btnPrimary, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.btnPrimaryText}>Start Game</Text>
             </Pressable>
           </View>
         </Card>
@@ -598,10 +503,9 @@ export default function ColourPopScreen() {
   const insets       = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
 
-  // Settings
+  // Settings — difficulty only; speed is fixed calm (§1, no settings panels)
   const [difficulty,      setDifficulty]      = useState<Difficulty>('easy');
-  const [speed,           setSpeed]           = useState<Speed>('slow');
-  const [settingsVisible, setSettingsVisible] = useState(false);
+  const speed: Speed = 'slow';
 
   // Game state
   const [phase,        setPhase]        = useState<Phase>('select');
@@ -610,10 +514,10 @@ export default function ColourPopScreen() {
   const [correctCount, setCorrectCount] = useState(0);
   const [activeItems,  setActiveItems]  = useState<FlyingItem[]>([]);
   const [tappedIds,    setTappedIds]    = useState<Set<string>>(new Set());
-  const [wrongShapeId, setWrongShapeId] = useState<string | null>(null);
   const [sparkleOn,    setSparkleOn]    = useState(false);
   const [fieldSize,    setFieldSize]    = useState<FieldSize>({ width: 0, height: 0 });
-  const [soundOn,      setSoundOn]      = useState(true);
+  // Sound defaults OFF — the user opts in (§3).
+  const [soundOn,      setSoundOn]      = useState(false);
   const [gameStartedAt, setGameStartedAt] = useState<number | null>(null);
   const [tryAgainVisible, setTryAgainVisible] = useState(false);
 
@@ -627,15 +531,11 @@ export default function ColourPopScreen() {
   const launcherFrozen = useRef(false);
   const timerTimeout   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerBarAnim   = useRef<Animated.CompositeAnimation | null>(null);
-  const tryAgainTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Animated values
   const timerWidthPct = useRef(new Animated.Value(100)).current; // JS thread — layout
   const timerPulse    = useRef(new Animated.Value(1)).current;
   const colourFade    = useRef(new Animated.Value(1)).current;
-  const cardShake     = useRef(new Animated.Value(0)).current;
-  const glitchOpacity = useRef(new Animated.Value(0)).current;
-  const wrongOpacity  = useRef(new Animated.Value(0)).current;
   const pillScale     = useRef(new Animated.Value(1)).current;
   const tryAgainFade  = useRef(new Animated.Value(0)).current;
 
@@ -646,34 +546,8 @@ export default function ColourPopScreen() {
   const speedCfg    = SPEED_CONFIG[speed];
   const distractors = useMemo(() => COLOURS.filter(c => c.key !== target.key), [target]);
 
-  // ── Glitch animation ─────────────────────────────────────────────────
-  const doGlitch = useCallback((onComplete?: () => void) => {
-    Animated.parallel([
-      Animated.sequence([
-        Animated.timing(cardShake, { toValue: 12,  duration: 58, useNativeDriver: true }),
-        Animated.timing(cardShake, { toValue: -12, duration: 58, useNativeDriver: true }),
-        Animated.timing(cardShake, { toValue: 8,   duration: 48, useNativeDriver: true }),
-        Animated.timing(cardShake, { toValue: -8,  duration: 48, useNativeDriver: true }),
-        Animated.timing(cardShake, { toValue: 4,   duration: 38, useNativeDriver: true }),
-        Animated.timing(cardShake, { toValue: 0,   duration: 38, useNativeDriver: true }),
-      ]),
-      Animated.sequence([
-        Animated.timing(glitchOpacity, { toValue: 0.45, duration: 75,  useNativeDriver: true }),
-        Animated.timing(glitchOpacity, { toValue: 0.1,  duration: 55,  useNativeDriver: true }),
-        Animated.timing(glitchOpacity, { toValue: 0.38, duration: 55,  useNativeDriver: true }),
-        Animated.timing(glitchOpacity, { toValue: 0,    duration: 210, useNativeDriver: true }),
-      ]),
-    ]).start(() => onComplete?.());
-  }, [cardShake, glitchOpacity]);
-
-  // ── Wrong-press field flash ───────────────────────────────────────────
-  const flashWrongGlitch = useCallback(() => {
-    wrongOpacity.setValue(0);
-    Animated.sequence([
-      Animated.timing(wrongOpacity, { toValue: 0.12, duration: 55,  useNativeDriver: true }),
-      Animated.timing(wrongOpacity, { toValue: 0,    duration: 220, useNativeDriver: true }),
-    ]).start();
-  }, [wrongOpacity]);
+  // Glitch shake + red flashes removed — wrong answers and timeouts get a
+  // calm fade instead (hard DON'Ts: no red flash, no shake-cam; §4).
 
   // ── Colour advance ────────────────────────────────────────────────────
   const applyNextColour = useCallback((nextIdx: number) => {
@@ -689,12 +563,14 @@ export default function ColourPopScreen() {
       advancingRef.current   = false;
       launcherFrozen.current = false;
 
-      // Pill bounce in
-      pillScale.setValue(0.88);
-      Animated.spring(pillScale, { toValue: 1, friction: 4, tension: 180, useNativeDriver: true }).start();
-      Animated.timing(colourFade, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+      // Pill bounce in — skipped under Reduce Motion (Rule 18)
+      if (!reduceMotion) {
+        pillScale.setValue(0.88);
+        Animated.spring(pillScale, { toValue: 1, friction: 4, tension: 180, useNativeDriver: true }).start();
+      }
+      Animated.timing(colourFade, { toValue: 1, duration: reduceMotion ? 120 : 200, useNativeDriver: true }).start();
     });
-  }, [colourFade, pillScale]);
+  }, [colourFade, pillScale, reduceMotion]);
 
   const advanceColour = useCallback((withSparkle: boolean) => {
     if (advancingRef.current) return;
@@ -709,10 +585,11 @@ export default function ColourPopScreen() {
       playSound('level_complete', soundOn);
       setSparkleOn(true);
     } else {
-      playSound('incorrect', soundOn);
-      doGlitch(() => applyNextColour(nextIdx));
+      // Timer ran out — advance with a calm fade. No sound, no shake:
+      // running out of time is not an error the user made (§4).
+      applyNextColour(nextIdx);
     }
-  }, [applyNextColour, colourIdx, doGlitch, soundOn]);
+  }, [applyNextColour, colourIdx, soundOn]);
 
   const onSparkleComplete = useCallback(() => {
     applyNextColour(colourIdx + 1);
@@ -741,11 +618,12 @@ export default function ColourPopScreen() {
 
   const resetColourTimer = useCallback(() => {
     startColourTimer();
+    if (reduceMotion) return; // pulse is decorative (Rule 18)
     Animated.sequence([
       Animated.timing(timerPulse, { toValue: 1.3,  duration: 100, useNativeDriver: true }),
       Animated.spring(timerPulse, { toValue: 1, friction: 4, tension: 200, useNativeDriver: true }),
     ]).start();
-  }, [startColourTimer, timerPulse]);
+  }, [reduceMotion, startColourTimer, timerPulse]);
 
   useEffect(() => {
     if (phase !== 'play') return;
@@ -797,6 +675,7 @@ export default function ColourPopScreen() {
     hapticSelection();
 
     if (item.isCorrect) {
+      hapticLight(); // light impact for the commit (Rule 19)
       playSound('correct', soundOn);
       setTappedIds(prev => { const n = new Set(prev); n.add(item.id); return n; });
       resetColourTimer();
@@ -807,24 +686,17 @@ export default function ColourPopScreen() {
       });
 
     } else {
+      // Gentle response — soft cue + amber toast, no flash, no shake (§4).
       playSound('incorrect', soundOn);
-      flashWrongGlitch();
-      setWrongShapeId(item.id);
-
-      if (tryAgainTimer.current) clearTimeout(tryAgainTimer.current);
       setTryAgainVisible(true);
       tryAgainFade.setValue(0);
       Animated.sequence([
-        Animated.timing(tryAgainFade, { toValue: 1, duration: 140, useNativeDriver: true }),
+        Animated.timing(tryAgainFade, { toValue: 1, duration: reduceMotion ? 80 : 140, useNativeDriver: true }),
         Animated.delay(700),
-        Animated.timing(tryAgainFade, { toValue: 0, duration: 180, useNativeDriver: true }),
+        Animated.timing(tryAgainFade, { toValue: 0, duration: reduceMotion ? 80 : 180, useNativeDriver: true }),
       ]).start(() => setTryAgainVisible(false));
-
-      tryAgainTimer.current = setTimeout(() => {
-        setWrongShapeId(c => c === item.id ? null : c);
-      }, 380);
     }
-  }, [advanceColour, flashWrongGlitch, goal, phase, resetColourTimer, soundOn, tappedIds, tryAgainFade]);
+  }, [advanceColour, goal, phase, reduceMotion, resetColourTimer, soundOn, tappedIds, tryAgainFade]);
 
   const onShapeGone = useCallback((id: string) => {
     setActiveItems(prev => prev.filter(i => i.id !== id));
@@ -840,7 +712,6 @@ export default function ColourPopScreen() {
     setCorrectCount(0);
     setActiveItems([]);
     setTappedIds(new Set());
-    setWrongShapeId(null);
     setSparkleOn(false);
     advancingRef.current   = false;
     launcherFrozen.current = false;
@@ -868,15 +739,42 @@ export default function ColourPopScreen() {
     setTappedIds(new Set());
     advancingRef.current   = false;
     launcherFrozen.current = false;
-    setSettingsVisible(false);
     startColourTimer();
   }, [startColourTimer]);
+
+  const onReset = useCallback(() => {
+    if (correctCount === 0) { restartCurrentColour(); return; }
+    // Platform confirm, only when progress has been made (§2.4).
+    Alert.alert(
+      'Reset this colour?',
+      'Your taps for this colour will start again.',
+      [
+        { text: 'Keep playing', style: 'cancel' },
+        { text: 'Reset', style: 'destructive', onPress: restartCurrentColour },
+      ],
+      { cancelable: true },
+    );
+  }, [correctCount, restartCurrentColour]);
+
+  // Footer nav — jump between colours, fresh start each time (§2.4).
+  const goColour = useCallback((delta: 1 | -1) => {
+    const next = colourIdx + delta;
+    if (next < 0 || next >= TOTAL_COLOURS) return;
+    hapticSelection();
+    if (timerTimeout.current) clearTimeout(timerTimeout.current);
+    if (timerBarAnim.current) timerBarAnim.current.stop();
+    applyNextColour(next);
+  }, [applyNextColour, colourIdx]);
+
+  const canGoBack    = colourIdx > 0;
+  const canGoForward = colourIdx < TOTAL_COLOURS - 1;
 
   const showHelp = useCallback(() => {
     Alert.alert(
       'How to play',
-      'Watch the colour word — shapes fly from all directions!\n\nTap every shape that matches the colour. Get enough right and the colour changes with a sparkle.\n\nCorrect taps reset your 30-second timer. If 30 seconds pass with no correct taps, the colour changes.\n\nTap quickly in a row for a streak bonus!',
+      'Watch the colour word — shapes fly across the field. Tap the shapes that match the colour. Enough right taps and the colour changes. Correct taps also reset the 30 second timer; when it runs out, the colour moves on by itself.',
       [{ text: 'Got it' }],
+      { cancelable: true },
     );
   }, []);
 
@@ -913,20 +811,12 @@ export default function ColourPopScreen() {
           <Pressable
             onPress={() => { hapticSelection(); setSoundOn(v => !v); }}
             hitSlop={10} accessibilityRole="button"
-            accessibilityLabel={soundOn ? 'Mute' : 'Unmute'}
+            accessibilityLabel={soundOn ? 'Turn sound off' : 'Turn sound on'}
+            accessibilityState={{ selected: soundOn }}
             style={styles.headerIconBtn}
           >
             <Ionicons name={soundOn ? 'volume-medium-outline' : 'volume-mute-outline'} size={22} color={t.colors.text} />
           </Pressable>
-          {showingGame && (
-            <Pressable
-              onPress={() => { hapticSelection(); setSettingsVisible(true); }}
-              hitSlop={10} accessibilityRole="button" accessibilityLabel="Settings"
-              style={styles.headerIconBtn}
-            >
-              <Ionicons name="options-outline" size={22} color={t.colors.text} />
-            </Pressable>
-          )}
           <Pressable onPress={showHelp} hitSlop={10} accessibilityRole="button" accessibilityLabel="Help" style={styles.headerIconBtn}>
             <Ionicons name="help-circle-outline" size={24} color={t.colors.text} />
           </Pressable>
@@ -936,8 +826,8 @@ export default function ColourPopScreen() {
       {showingGame ? (
         <View style={[styles.body, { paddingBottom: insets.bottom + spacing.md }]}>
 
-          {/* Level pill + target card — fade + shake together */}
-          <Animated.View style={{ opacity: colourFade, transform: [{ translateX: cardShake }] }}>
+          {/* Level pill + target card — calm cross-fade between colours */}
+          <Animated.View style={{ opacity: colourFade }}>
 
             {/* Themed colour pill */}
             <View style={styles.centred}>
@@ -947,7 +837,7 @@ export default function ColourPopScreen() {
                 transform: [{ scale: pillScale }],
               }]}>
                 <Text style={[styles.levelPillText, { color: target.hex }]}>
-                  {colourIdx + 1} / {TOTAL_COLOURS}
+                  Level {colourIdx + 1} of {TOTAL_COLOURS}
                 </Text>
               </Animated.View>
             </View>
@@ -973,12 +863,6 @@ export default function ColourPopScreen() {
               <View style={styles.timerTrack}>
                 <Animated.View style={[styles.timerFill, { backgroundColor: timerBarColour, width: timerBarWidth }]} />
               </View>
-
-              {/* Glitch overlay */}
-              <Animated.View
-                pointerEvents="none"
-                style={[StyleSheet.absoluteFill, styles.glitchCardOverlay, { opacity: glitchOpacity }]}
-              />
             </View>
           </Animated.View>
 
@@ -997,30 +881,69 @@ export default function ColourPopScreen() {
                 key={item.id}
                 item={item}
                 tapped={tappedIds.has(item.id)}
-                wrongFlash={wrongShapeId === item.id}
                 reduceMotion={reduceMotion}
                 onPress={() => onShapePress(item)}
                 onGone={onShapeGone}
               />
             ))}
 
-            {/* Wrong-press red vignette */}
-            <Animated.View
-              pointerEvents="none"
-              style={[StyleSheet.absoluteFill, styles.wrongOverlay, { opacity: wrongOpacity }]}
-            />
-
             {/* Goal sparkle */}
-            <SparkleOverlay visible={sparkleOn} colour={target.hex} onDone={onSparkleComplete} />
+            <SparkleOverlay visible={sparkleOn} colour={target.hex} reduceMotion={reduceMotion} onDone={onSparkleComplete} />
           </View>
 
-          {/* Try-again toast */}
+          {/* Footer — Back / Reset / Forward (§2.4) */}
+          <View style={styles.footer}>
+            <Pressable
+              onPress={() => goColour(-1)}
+              disabled={!canGoBack}
+              accessibilityRole="button"
+              accessibilityLabel={canGoBack ? `Back to level ${colourIdx}` : 'No previous level'}
+              accessibilityState={{ disabled: !canGoBack }}
+              style={({ pressed }) => [
+                styles.footerBtn, styles.footerGhost,
+                !canGoBack && styles.footerBtnDisabled,
+                pressed && canGoBack && { opacity: 0.85 },
+              ]}
+            >
+              <Ionicons name="chevron-back" size={20} color={canGoBack ? t.colors.primary : t.colors.textTertiary} />
+              <Text style={[styles.footerBtnText, { color: canGoBack ? t.colors.primary : t.colors.textTertiary }]}>Back</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onReset}
+              accessibilityRole="button"
+              accessibilityLabel="Reset level"
+              style={({ pressed }) => [styles.footerBtn, styles.footerReset, pressed && { opacity: 0.85 }]}
+            >
+              <Ionicons name="refresh" size={20} color={t.colors.textMuted} />
+              <Text style={[styles.footerBtnText, { color: t.colors.textMuted }]}>Reset</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => goColour(+1)}
+              disabled={!canGoForward}
+              accessibilityRole="button"
+              accessibilityLabel={canGoForward ? `Skip to level ${colourIdx + 2}` : 'No more levels'}
+              accessibilityState={{ disabled: !canGoForward }}
+              style={({ pressed }) => [
+                styles.footerBtn, styles.footerForward,
+                !canGoForward && styles.footerBtnDisabled,
+                pressed && canGoForward && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={[styles.footerBtnText, { color: canGoForward ? '#FFFFFF' : t.colors.textTertiary }]}>Forward</Text>
+              <Ionicons name="chevron-forward" size={20} color={canGoForward ? '#FFFFFF' : t.colors.textTertiary} />
+            </Pressable>
+          </View>
+
+          {/* Try Again toast — soft amber, auto-dismiss (§4.2) */}
           {tryAgainVisible && (
             <Animated.View
-              style={[styles.tryAgain, { bottom: insets.bottom + 14, opacity: tryAgainFade }]}
+              style={[styles.tryAgain, { bottom: insets.bottom + 80, opacity: tryAgainFade }]}
               pointerEvents="none"
             >
-              <Text style={styles.tryAgainText}>Wrong colour — keep going!</Text>
+              <Ionicons name="refresh-circle-outline" size={20} color="#A65900" />
+              <Text style={styles.tryAgainText}>Try Again</Text>
             </Animated.View>
           )}
         </View>
@@ -1031,21 +954,9 @@ export default function ColourPopScreen() {
       <StartOverlay
         visible={phase === 'select'}
         difficulty={difficulty}
-        speed={speed}
         onSelectDifficulty={setDifficulty}
-        onSelectSpeed={setSpeed}
         onCancel={() => router.back()}
         onStart={startGame}
-      />
-
-      <SettingsModal
-        visible={settingsVisible}
-        difficulty={difficulty}
-        speed={speed}
-        onChangeDifficulty={setDifficulty}
-        onChangeSpeed={setSpeed}
-        onRestart={() => { setSettingsVisible(false); restartCurrentColour(); }}
-        onClose={() => setSettingsVisible(false)}
       />
 
       <ActivityCompletionOverlay
@@ -1065,12 +976,13 @@ export default function ColourPopScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F3F7FF' },
+  // Bright page per §2.1 — pure white
+  safe: { flex: 1, backgroundColor: '#FFFFFF' },
 
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-    gap: spacing.md, backgroundColor: '#F3F7FF'},
+    gap: spacing.md, backgroundColor: '#FFFFFF'},
   headerActions: { flexDirection: 'row', gap: 2 },
   headerIconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
 
@@ -1099,9 +1011,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 2.5, overflow: 'hidden'},
   timerFill: { height: 5, borderRadius: 2.5 },
 
-  glitchCardOverlay: {
-    backgroundColor: '#FF2222', borderRadius: 22},
-
   playField: {
     flex: 1, position: 'relative', overflow: 'hidden',
     borderRadius: 26, minHeight: 260,
@@ -1112,22 +1021,39 @@ const styles = StyleSheet.create({
   bgBlob2: {
     position: 'absolute', width: 200, height: 200, borderRadius: 100,
     bottom: -40, right: -40},
-  wrongOverlay: {
-    backgroundColor: '#FF0000', borderRadius: 24},
-
   shapeTapTarget: {
     minWidth: 60, minHeight: 60,
     alignItems: 'center', justifyContent: 'center'},
 
-  // Try-again toast
+  // Footer — Back / Reset / Forward (§2.4)
+  footer: { flexDirection: 'row', gap: 8 },
+  footerBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: radii.pill,
+    minHeight: 50},
+  footerBtnDisabled: { opacity: 0.4 },
+  footerBtnText: {
+    fontSize: typography.callout,
+    fontWeight: '800'},
+  footerGhost:   { backgroundColor: '#E6F4FD' },
+  footerReset:   { backgroundColor: '#F1F5F9' },
+  footerForward: { backgroundColor: colors.primary },
+
+  // Try Again toast — soft amber (§4.2)
   tryAgain: {
     position: 'absolute', left: spacing.lg, right: spacing.lg,
+    flexDirection: 'row', gap: 8,
     alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 11, paddingHorizontal: spacing.lg,
-    backgroundColor: 'rgba(28,28,40,0.88)',
+    paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
+    backgroundColor: '#FFF4E0',
     borderRadius: radii.pill},
   tryAgainText: {
-    fontSize: typography.callout, fontWeight: '700', color: '#FFF', letterSpacing: 0.1},
+    fontSize: typography.body, fontWeight: '800', color: '#A65900'},
 
   // Modals
   overlayBackdrop: {
@@ -1165,6 +1091,7 @@ const styles = StyleSheet.create({
   btnGhostText:   { fontSize: typography.body, fontWeight: '700'},
   btnPrimary: {
     flex: 1, paddingVertical: 14, borderRadius: radii.pill,
-     alignItems: 'center', minHeight: 50},
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center', minHeight: 50},
   btnPrimaryText: { fontSize: typography.body, fontWeight: '800', color: '#FFF' },
 });
