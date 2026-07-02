@@ -16,7 +16,8 @@
     "build:symbols": "npm run import:mulberry && npm run normalise:mulberry && npm run build:exemplars",
     "build:symbol-db": "tsx scripts/buildSymbolBrainDb.ts",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "codex": "codex"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
