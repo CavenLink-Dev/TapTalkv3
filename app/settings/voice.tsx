@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
 import { DisclosureRow } from '../../src/components/native/DisclosureRow';
@@ -174,6 +174,36 @@ export default function VoiceSettingsScreen() {
           onPress={testVoice}
         />
 
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Pronunciations"
+          accessibilityHint="Fix how the voice says names and words"
+          onPress={() => {
+            hapticSelection();
+            router.push('/settings/pronunciation' as Href);
+          }}
+          style={({ pressed }) => [
+            styles.pronRow,
+            { backgroundColor: t.colors.surface },
+            pressed && { opacity: 0.75 },
+          ]}
+        >
+          <View style={[styles.pronIcon, { backgroundColor: t.colors.iconTintBlueBg }]}>
+            <Ionicons name="chatbubble-ellipses-outline" size={20} color={t.colors.primary} />
+          </View>
+          <View style={styles.pronCopy}>
+            <Text style={[styles.pronLabel, { color: t.colors.text }]}>Pronunciations</Text>
+            <Text style={[styles.pronDesc, { color: t.colors.textMuted }]}>Say names and words your way</Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={t.colors.textTertiary}
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          />
+        </Pressable>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -235,4 +265,29 @@ const styles = StyleSheet.create({
   wheelWrap: {
     alignItems: 'center',
     paddingVertical: spacing.sm},
+  pronRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.card,
+    minHeight: 60,
+  },
+  pronIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: radii.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pronCopy: { flex: 1 },
+  pronLabel: {
+    fontFamily: fonts.displayBold,
+    fontSize: typography.body,
+  },
+  pronDesc: {
+    fontFamily: fonts.body,
+    fontSize: typography.caption,
+    marginTop: 2,
+  },
 });

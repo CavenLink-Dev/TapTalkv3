@@ -13,6 +13,7 @@ import {
 } from './persistence';
 import { seedSymbolBrainDatabase } from '../data/sqlite/seedSymbolBrain';
 import { setHapticsEnabled } from '../utils/haptics';
+import { setPronunciations } from '../utils/speechRules';
 
 const MAX_SAVE_RETRIES = 2;
 /** Hot slice — board taps, message strip, accessibility tweaks. */
@@ -74,6 +75,7 @@ export const initialState: AppState = {
   tileLastTappedAt: {},
   showUsageHeatmap: false,
   ngramModel: {},
+  pronunciations: [],
 };
 
 function mergeStoredState(storedState: Partial<AppState>): AppState {
@@ -355,6 +357,13 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
     case 'SET_SHOW_USAGE_HEATMAP':
       return { ...state, showUsageHeatmap: action.payload };
+    case 'ADD_PRONUNCIATION':
+      return { ...state, pronunciations: [action.payload, ...state.pronunciations] };
+    case 'DELETE_PRONUNCIATION':
+      return {
+        ...state,
+        pronunciations: state.pronunciations.filter((p) => p.id !== action.payload),
+      };
     case 'UPDATE_NGRAM_MODEL': {
       const words = action.payload.words;
       if (words.length < 2) return state;
@@ -568,6 +577,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     setHapticsEnabled(state.accessibility.hapticsEnabled);
   }, [state.accessibility.hapticsEnabled]);
+
+  // Keep the speech engine's pronunciation overrides in sync so every
+  // spoken utterance (board + keyboard) applies the user's "say it like this"
+  // list without each caller reading context.
+  useEffect(() => {
+    setPronunciations(state.pronunciations);
+  }, [state.pronunciations]);
 
   return (
     <AppContext.Provider value={{ state, dispatch, hydrated, hydrationError, clearHydrationError }}>

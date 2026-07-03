@@ -32,6 +32,35 @@ export interface Utterance {
   gapAfter: number;
 }
 
+// ─── Pronunciation overrides ──────────────────────────────────────────────────
+// The user's "say it like this" list. Kept in a module singleton and synced
+// from AppContext so speech callers don't need to thread it through. Matched
+// whole-word and case-insensitively, longest phrases first.
+
+type PronunciationRule = { from: string; to: string };
+
+let activePronunciations: PronunciationRule[] = [];
+
+export function setPronunciations(list: PronunciationRule[]): void {
+  activePronunciations = [...list]
+    .filter((p) => p.from.trim() && p.to.trim())
+    .sort((a, b) => b.from.length - a.from.length);
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Replace each written word/phrase with its spoken form. */
+export function applyPronunciations(text: string): string {
+  let out = text;
+  for (const rule of activePronunciations) {
+    const re = new RegExp(`\\b${escapeRegExp(rule.from.trim())}\\b`, 'gi');
+    out = out.replace(re, rule.to.trim());
+  }
+  return out;
+}
+
 export function tokeniseClauses(text: string): Clause[] {
   const result: Clause[] = [];
   const re = /([^.,!?]+)([.,!?])?/g;
@@ -54,6 +83,8 @@ export function buildMessageUtterances(text: string, rate: number, pitch: number
   if (!trimmed) return [];
 
   // Single word (no spaces, no punctuation) → spell-and-speak.
+  // Spelling uses the ORIGINAL letters; the final spoken word uses the
+  // pronunciation override so a name is spelled out then said correctly.
   if (!/[\s.,!?]/.test(trimmed)) {
     const letters: Utterance[] = [...trimmed].map(letter => ({
       text: letter,
@@ -61,12 +92,12 @@ export function buildMessageUtterances(text: string, rate: number, pitch: number
       pitch,
       gapAfter: 80,
     }));
-    letters.push({ text: trimmed, rate, pitch, gapAfter: 0 });
+    letters.push({ text: applyPronunciations(trimmed), rate, pitch, gapAfter: 0 });
     return letters;
   }
 
   const out: Utterance[] = [];
-  for (const c of tokeniseClauses(trimmed)) {
+  for (const c of tokeniseClauses(applyPronunciations(trimmed))) {
     switch (c.terminator) {
       case '!':
       case '?': {

@@ -640,9 +640,101 @@ async function measureBboxesWithSvgson(
   return results;
 }
 
+// ── CSS → inline attrs (react-native-svg SvgUri ignores <style> blocks) ───
+
+function parseCssDeclarations(block: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of block.split(';')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const colon = trimmed.indexOf(':');
+    if (colon === -1) continue;
+    out[trimmed.slice(0, colon).trim()] = trimmed.slice(colon + 1).trim();
+  }
+  return out;
+}
+
+function parseSvgAttributes(attrChunk: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const re = /([\w:-]+)\s*=\s*["']([^"']*)["']/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(attrChunk)) !== null) {
+    out[m[1]] = m[2];
+  }
+  return out;
+}
+
+function attrsToString(attrs: Record<string, string>): string {
+  return Object.entries(attrs)
+    .map(([key, val]) => `${key}="${val}"`)
+    .join(' ');
+}
+
+/**
+ * Flatten embedded `<style>` class rules onto inline SVG attributes.
+ * Mulberry verb glyphs often ship as `.st0{fill:…}` — SvgUri won't paint those.
+ */
+export function inlineEmbeddedCssStyles(svg: string): string {
+  if (!/<style[\s>]/i.test(svg)) return svg;
+
+  const classRules = new Map<string, Record<string, string>>();
+  for (const block of svg.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
+    for (const m of block[1].matchAll(/\.([a-zA-Z0-9_-]+)\s*\{([^}]*)\}/g)) {
+      const merged = { ...(classRules.get(m[1]) ?? {}), ...parseCssDeclarations(m[2]) };
+      classRules.set(m[1], merged);
+    }
+  }
+
+  if (classRules.size === 0) return svg;
+
+  let out = svg.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+
+  out = out.replace(
+    /<(\w+)([^>]*?)\sclass\s*=\s*["']([^"']+)["']([^>]*?)(\/?)>/gi,
+    (_match, tag: string, before: string, classList: string, after: string, selfClose: string) => {
+      const merged: Record<string, string> = {};
+      for (const cls of classList.split(/\s+/)) {
+        const rule = classRules.get(cls.trim());
+        if (rule) Object.assign(merged, rule);
+      }
+      // Inline attributes on the element win over class rules.
+      Object.assign(merged, parseSvgAttributes(`${before}${after}`));
+      delete merged.class;
+      return `<${tag} ${attrsToString(merged)}${selfClose}>`;
+    },
+  );
+
+  return out;
+}
+
+async function flattenExistingNormalisedCss(): Promise<void> {
+  const files = (await fs.readdir(NORMALISED_DIR)).filter(f =>
+    f.toLowerCase().endsWith('.svg'),
+  );
+  let flattened = 0;
+  for (const file of files) {
+    const filePath = path.join(NORMALISED_DIR, file);
+    const raw = await fs.readFile(filePath, 'utf8');
+    if (!/<style[\s>]/i.test(raw)) continue;
+    const next = inlineEmbeddedCssStyles(raw);
+    if (next !== raw) {
+      await fs.writeFile(filePath, next, 'utf8');
+      flattened += 1;
+    }
+  }
+  process.stdout.write(
+    `flattenExistingNormalisedCss: updated ${flattened} of ${files.length} normalised SVGs.\n`,
+  );
+}
+
 // ── Orchestration ──────────────────────────────────────────────────────────
 
 async function main() {
+  if (process.argv.includes('--flatten-css-only')) {
+    await flattenExistingNormalisedCss();
+    return;
+  }
+
   const force = process.argv.includes('--force');
 
   await fs.mkdir(NORMALISED_DIR, { recursive: true });
@@ -719,7 +811,9 @@ async function main() {
   };
 
   for (const file of pending) {
-    const raw = await fs.readFile(path.join(SVG_DIR, file), 'utf8');
+    const raw = inlineEmbeddedCssStyles(
+      await fs.readFile(path.join(SVG_DIR, file), 'utf8'),
+    );
 
     if (DO_NOT_TRIM_LIST.has(file)) {
       // Preserve original geometry — but still square the viewBox so

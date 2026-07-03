@@ -1,5 +1,7 @@
 import React from 'react';
 import {
+  Alert,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -57,6 +59,7 @@ const APP_SETTINGS: SettingRow[] = [
     iconBg: '#FFF4E0',
     label: 'Haptics',
     subtitle: 'Vibration feedback on symbol tap',
+    route: '/settings/display' as Href,
   },
   {
     id: 'notifications',
@@ -184,7 +187,21 @@ export default function SettingsIndexScreen() {
             <View key={row.id}>
               <SettingItem
                 row={row}
-                onPress={row.route ? () => router.push(row.route!) : undefined}
+                onPress={
+                  row.route
+                    ? () => router.push(row.route!)
+                    : row.id === 'notifications'
+                      ? () =>
+                          Alert.alert(
+                            'Notifications',
+                            'Reminders and daily check-ins are controlled in iOS Settings → TapTalk → Notifications.',
+                            [
+                              { text: 'Open Settings', onPress: () => Linking.openSettings().catch(() => {}) },
+                              { text: 'Close', style: 'cancel' },
+                            ],
+                          )
+                      : undefined
+                }
               />
               {i < APP_SETTINGS.length - 1 && <View style={styles.divider} />}
             </View>

@@ -39,7 +39,7 @@ export default function DisplaySettingsScreen() {
   const reduceMotion = useReduceMotion();
   const { state, dispatch } = useAppContext();
   const t = useTheme();
-  const { textSize, buttonSize, highContrast, theme } = state.accessibility;
+  const { textSize, buttonSize, highContrast, theme, colorScheme } = state.accessibility;
 
   const setTextSize = useCallback((value: TextSize) => {
     hapticSelection();
@@ -54,6 +54,11 @@ export default function DisplaySettingsScreen() {
   const setTheme = useCallback((value: Theme) => {
     hapticSelection();
     dispatch({ type: 'SET_ACCESSIBILITY', payload: { theme: value } });
+  }, [dispatch]);
+
+  const setColorScheme = useCallback((value: AppState['accessibility']['colorScheme']) => {
+    hapticSelection();
+    dispatch({ type: 'SET_ACCESSIBILITY', payload: { colorScheme: value } });
   }, [dispatch]);
 
   const toggleHighContrast = useCallback(() => {
@@ -194,6 +199,54 @@ export default function DisplaySettingsScreen() {
                 </Pressable>
               );
             })}
+          </View>
+        </Card>
+
+        <Card style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: t.colors.textTertiary }]}>SYMBOL COLOURS</Text>
+          <Text style={[styles.sectionDesc, { color: t.colors.textMuted }]}>
+            The colours used for word types on symbol suggestions and search. Colour-blind
+            friendly keeps them distinct for common colour vision differences.
+          </Text>
+          <View style={styles.optionGroup}>
+            {([
+              { label: 'Standard', value: 'fitzgerald' as const, hint: 'The default TapTalk colours' },
+              { label: 'Colour-blind friendly', value: 'cvd_safe' as const, hint: 'Distinct for red–green colour blindness' },
+            ]).map((opt) => {
+              const selected = colorScheme === opt.value;
+              return (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => setColorScheme(opt.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                  accessibilityLabel={`${opt.label}. ${opt.hint}`}
+                  style={[styles.option, { borderColor: t.colors.border, backgroundColor: t.colors.surface }, selected && { borderColor: t.colors.primary, backgroundColor: t.colors.selectionBg }]}
+                >
+                  <View style={styles.buttonSizeCopy}>
+                    <Text style={[styles.previewText, { color: t.colors.text }, selected && { color: t.colors.primary }]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={[styles.optionHint, { color: t.colors.textMuted }]}>{opt.hint}</Text>
+                  </View>
+                  {selected && <Ionicons name="checkmark-circle" size={22} color={t.colors.primary} />}
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={styles.schemeLegend} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            {([
+              { label: 'Noun', color: t.symbolColors.noun },
+              { label: 'Verb', color: t.symbolColors.verb },
+              { label: 'Adjective', color: t.symbolColors.adjective },
+              { label: 'Question', color: t.symbolColors.question },
+              { label: 'Social', color: t.symbolColors.social },
+            ]).map((chip) => (
+              <View key={chip.label} style={[styles.legendChip, { backgroundColor: t.colors.input }]}>
+                <View style={[styles.legendDot, { backgroundColor: chip.color }]} />
+                <Text style={[styles.legendLabel, { color: t.colors.textMuted }]}>{chip.label}</Text>
+              </View>
+            ))}
           </View>
         </Card>
 
@@ -375,6 +428,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.sm,
+  },
+  schemeLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  legendChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+  },
+  legendDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  legendLabel: {
+    fontFamily: fonts.body,
+    fontSize: typography.caption,
   },
   themeOption: {
     flex: 1,

@@ -43,6 +43,7 @@ export type ColdPersistedState = Pick<
   | 'activityStats'
   | 'habits'
   | 'showUsageHeatmap'
+  | 'pronunciations'
 >;
 
 export function splitAppState(state: AppState): {
@@ -81,6 +82,7 @@ export function splitAppState(state: AppState): {
       activityStats: state.activityStats,
       habits: state.habits,
       showUsageHeatmap: state.showUsageHeatmap,
+      pronunciations: state.pronunciations,
     },
   };
 }

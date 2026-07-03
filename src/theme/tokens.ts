@@ -202,6 +202,27 @@ export const symbolColors = {
   folder:       '#EDE070',
 } as const;
 
+// ─── Colour-blind-safe symbol palette ─────────────────────────────────────────
+// Parallel to `symbolColors`, used when accessibility.colorScheme === 'cvd_safe'.
+// Hues are drawn from the Okabe–Ito colour-blind-safe set so adjacent word
+// types stay distinguishable for deuteranopia / protanopia / tritanopia. Same
+// keys as `symbolColors` so consumers can swap palettes without other changes.
+
+export const symbolColorsCVD: Record<keyof typeof symbolColors, string> = {
+  conjunction:  '#E69F00', // orange
+  noun:         '#0072B2', // blue
+  pronoun:      '#F0E442', // yellow
+  verb:         '#009E73', // bluish green
+  adjective:    '#56B4E9', // sky blue
+  preposition:  '#CC79A7', // reddish purple
+  negation:     '#D55E00', // vermillion
+  question:     '#E69F00', // orange
+  social:       '#CC79A7', // reddish purple
+  article:      '#999999', // neutral grey
+  interjection: '#D55E00', // vermillion
+  folder:       '#EDE070', // unchanged folder yellow
+} as const;
+
 // ─── Radii ────────────────────────────────────────────────────────────────────
 
 export const radii = {

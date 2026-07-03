@@ -201,6 +201,15 @@ Do **not** roll a custom date picker, time picker, or alert dialog. Use the plat
 
 ---
 
+## Board tile labeling (locked)
+
+- **Symbol tiles:** **One word** on the tile label. Two words is extremely rare — avoid unless there is no reasonable single-word alternative. Keep the board visually simple.
+- **Folder tiles:** **One word** label **plus** a Mulberry symbol icon. Never text-only folders on the board.
+- **Full phrases:** When the spoken phrase is longer than the label, put the full text in the tile's `speech` field (spoken and appended to the message strip on tap). Do **not** put multi-word sentences on the tile label.
+- **Quick Text:** Multi-word phrases and sentences belong in **Quick Text** (saved phrases), not as board symbol labels.
+
+---
+
 ## Workflow rules
 
 - **Local edits only.** Do not commit or push unless the user explicitly asks. The user pushes from their own editor.

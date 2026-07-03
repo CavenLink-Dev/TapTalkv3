@@ -21,6 +21,7 @@ import {
   colorsLight as lightColors,
   colorsDark,
   symbolColors,
+  symbolColorsCVD,
   typography,
   spacing,
   radii,
@@ -106,7 +107,7 @@ export interface ThemeValues {
   shadows: typeof shadows;
   animation: typeof animation;
   fonts: typeof fonts;
-  symbolColors: typeof symbolColors;
+  symbolColors: Record<keyof typeof symbolColors, string>;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -114,7 +115,7 @@ export interface ThemeValues {
 export function useTheme(): ThemeValues {
   const { state } = useAppContext();
   const systemScheme = useColorScheme();
-  const { textSize, buttonSize, theme, highContrast } = state.accessibility;
+  const { textSize, buttonSize, theme, highContrast, colorScheme } = state.accessibility;
 
   return useMemo(() => {
     // 1. Resolve effective colour scheme (explicit dark, or follow iOS when set to system)
@@ -165,8 +166,8 @@ export function useTheme(): ThemeValues {
       shadows,
       animation,
       fonts,
-      symbolColors,
+      symbolColors: colorScheme === 'cvd_safe' ? symbolColorsCVD : symbolColors,
     };
-  }, [textSize, buttonSize, theme, highContrast, systemScheme]);
+  }, [textSize, buttonSize, theme, highContrast, colorScheme, systemScheme]);
 
 }

@@ -101,6 +101,18 @@ export interface AppState {
 
   // Talk — N-gram next-word prediction model
   ngramModel: Record<string, Record<string, number>>;
+
+  // Speech — user pronunciation overrides ("say it like this")
+  pronunciations: PronunciationRule[];
+}
+
+/** A "say X as Y" override applied before text-to-speech. */
+export interface PronunciationRule {
+  id: string;
+  /** The written word or phrase (matched whole-word, case-insensitive). */
+  from: string;
+  /** How it should be spoken. */
+  to: string;
 }
 
 export interface AACWord {
@@ -218,4 +230,6 @@ export type Action =
   | { type: 'PUSH_SENTENCE_HISTORY'; payload: { words: AACWord[] } }
   | { type: 'INCREMENT_TILE_TAP'; payload: { tileId: string } }
   | { type: 'SET_SHOW_USAGE_HEATMAP'; payload: boolean }
-  | { type: 'UPDATE_NGRAM_MODEL'; payload: { words: string[] } };
+  | { type: 'UPDATE_NGRAM_MODEL'; payload: { words: string[] } }
+  | { type: 'ADD_PRONUNCIATION'; payload: PronunciationRule }
+  | { type: 'DELETE_PRONUNCIATION'; payload: string };
