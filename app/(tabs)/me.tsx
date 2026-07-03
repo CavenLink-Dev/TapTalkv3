@@ -224,10 +224,14 @@ function Group({
         accessibilityState={{ expanded }}
         accessibilityHint={expanded ? `Collapses the ${label} section` : `Expands the ${label} section`}
         onPress={() => toggle(label)}
-        style={({ pressed }) => [styles.groupHeader, pressed && { opacity: 0.6 }]}
-        hitSlop={{ top: 6, bottom: 6 }}
+        style={({ pressed }) => [
+          styles.groupHeader,
+          { backgroundColor: t.colors.surface },
+          expanded && styles.groupHeaderExpanded,
+          pressed && { opacity: 0.6 },
+        ]}
       >
-        <Text style={[styles.groupLabel, { color: t.colors.textTertiary }]}>{label.toUpperCase()}</Text>
+        <Text style={[styles.groupLabel, { color: t.colors.textMuted }]}>{label.toUpperCase()}</Text>
         <Animated.View style={{ transform: [{ rotate }] }}>
           <Ionicons name="chevron-forward" size={15} color={t.colors.textTertiary} />
         </Animated.View>
@@ -1270,10 +1274,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 34,
-    paddingTop: 5,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.xs,
+    minHeight: 48,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
+  },
+  // When the section is open, square off the bottom corners so the header
+  // reads as one piece with the card beneath it.
+  groupHeaderExpanded: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderRadius: radii.card,
+    borderTopLeftRadius: radii.card,
+    borderTopRightRadius: radii.card,
   },
   groupLabel: {
     fontFamily: fonts.bodyHeavy,
@@ -1283,6 +1296,8 @@ const styles = StyleSheet.create({
   groupCard: {
     padding: 0,
     overflow: 'hidden',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
   },
   expandAll: {
     flexDirection: 'row',

@@ -100,6 +100,13 @@ type TilePlacement = {
 
 type BoardLayout = TilePlacement[];
 
+/** Re-pack anchor slots in row-major order (e.g. after column count changes). */
+function reflowLayoutSlots(layout: BoardLayout): BoardLayout {
+  return [...layout]
+    .sort((a, b) => a.slot - b.slot)
+    .map((p, i) => ({ ...p, slot: i }));
+}
+
 type GhostTile = {
   id: string;
   tile: BoardTile;
@@ -111,21 +118,17 @@ type GhostTile = {
 const FIGMA_WIDTH = 393;
 const MESSAGE_HEIGHT = 104;
 const TOP_NAV_HEIGHT = 76;
-const BOARD_COLUMNS = 4;
-// 10pt uniform gap between columns and rows — outer spacing, not inner.
-const TILE_GAP = 10;
-const TILE_V_GAP = 10;
-// 5pt side gutter. With TILE_GAP=10 and TILE_SIZE=88, this produces
-// exactly 88pt tiles on a 393pt iPhone: (393-10-30)/4 = 88.
+const BOARD_COLUMNS = 3;
+// 5pt uniform gap between columns and rows — outer spacing, not inner.
+const TILE_CORNER_RADIUS = 5;
+const TILE_GAP = 5;
+const TILE_V_GAP = 5;
+// 5pt side gutter. 3 columns × ~124pt tiles on a 393pt iPhone.
 const TILE_LEFT_PADDING = 5;
 const BOARD_TOP_GAP = 32;
-// Hard cap at 88pt — the AAC standard square size.
-const TILE_SIZE = 88;
-// Fine grid unit: resize handles snap in 44px increments (half a tile).
-// Default tile is fw=fh=2 (88×88); each drag step grows by 44px so users
-// get finer control than whole-tile jumps.
-const FINE = 44;
-const MAX_FW = 8; // 8 * 44 = 352px, roughly the full board width
+// Max tile edge (pt). Actual size is the lesser of this and what fits the screen.
+const TILE_SIZE = 124;
+const MAX_FW = 8;
 // Bottom dock spacing: 16px gap between dock and bottom tab bar edge.
 const DOCK_BOTTOM_GAP = spacing.lg; // 16
 // Contextual dock control sizes (pt) — fixed, not tied to tileSize.
@@ -931,7 +934,7 @@ function GridOverlay({
               height: tileSize,
               borderWidth: 1.5,
               borderStyle: 'dashed',
-              borderRadius: 14,
+              borderRadius: TILE_CORNER_RADIUS,
               borderColor: alwaysVisible
                 ? 'rgba(120, 140, 200, 0.38)'
                 : 'rgba(100, 130, 255, 0.55)',
@@ -1055,7 +1058,7 @@ function MultiCell({
           top: r * rowStep,
           width: tileSize,
           height: tileSize,
-          borderRadius: 14,
+          borderRadius: TILE_CORNER_RADIUS,
           borderWidth: 2.5,
           borderStyle: 'dashed',
           borderColor: 'rgba(60, 120, 255, 0.65)',
@@ -1107,7 +1110,7 @@ function SourceGhost({
           top: 0,
           width: tileSize,
           height: tileSize,
-          borderRadius: 14,
+          borderRadius: TILE_CORNER_RADIUS,
           borderWidth: 1.5,
           borderStyle: 'dashed',
           borderColor: 'rgba(180, 180, 200, 0.45)',
@@ -1126,14 +1129,9 @@ type TileRectsRef = React.MutableRefObject<Record<string, SlotRect>>;
 
 // ── ResizeHandles ──────────────────────────────────────────────────────────
 // Renders 4 edge pills + 4 corner circles around a tile in edit mode.
-// ALL handles are functional: right/bottom grow in 44px (FINE) steps;
-// left/top move the tile's anchor slot, so they snap in whole coarse cells
-// (88px) to keep every placement on the grid. Corners combine both axes.
 const HANDLE_PILL_LEN = 28;
 const HANDLE_PILL_THICK = 8;
 const HANDLE_CORNER_SIZE = 14;
-// One coarse grid cell in px — the left/top resize step.
-const CELL = FINE * 2;
 
 function ResizeHandles({
   editMode,
@@ -1141,6 +1139,7 @@ function ResizeHandles({
   height,
   fw,
   fh,
+  fineUnit,
   onResize,
   isDragging: _isDragging,
   tileLabel,
@@ -1150,6 +1149,8 @@ function ResizeHandles({
   height: number;
   fw: number;
   fh: number;
+  /** Half-tile snap unit — tileSize / 2 from the live board grid. */
+  fineUnit: number;
   /**
    * dCols/dRows — coarse cells the tile's anchor moves LEFT/UP (positive
    * when growing from the left/top edge, negative when shrinking back).
@@ -1161,6 +1162,7 @@ function ResizeHandles({
 }) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
+  const cellSize = fineUnit * 2;
 
   // Preview offsets — shared values that grow/shrink the tile visually
   // during drag before the resize is committed to state.
@@ -1177,15 +1179,15 @@ function ResizeHandles({
   const rightPan = useMemo(() => Gesture.Pan()
     .onStart(() => { previewW.value = 0; lastHapticStepW.value = 0; })
     .onUpdate((e) => {
-      const steps = Math.round(e.translationX / FINE);
+      const steps = Math.round(e.translationX / fineUnit);
       if (steps !== lastHapticStepW.value) {
         lastHapticStepW.value = steps;
         runOnJS(hapticSelection)();
       }
-      previewW.value = steps * FINE;
+      previewW.value = steps * fineUnit;
     })
     .onEnd(() => {
-      const deltaSteps = Math.round(previewW.value / FINE);
+      const deltaSteps = Math.round(previewW.value / fineUnit);
       const newFw = Math.max(2, Math.min(MAX_FW, fw + deltaSteps));
       previewW.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
       if (newFw !== fw) runOnJS(onResize)(newFw, fh, 0, 0);
@@ -1195,15 +1197,15 @@ function ResizeHandles({
   const bottomPan = useMemo(() => Gesture.Pan()
     .onStart(() => { previewH.value = 0; lastHapticStepH.value = 0; })
     .onUpdate((e) => {
-      const steps = Math.round(e.translationY / FINE);
+      const steps = Math.round(e.translationY / fineUnit);
       if (steps !== lastHapticStepH.value) {
         lastHapticStepH.value = steps;
         runOnJS(hapticSelection)();
       }
-      previewH.value = steps * FINE;
+      previewH.value = steps * fineUnit;
     })
     .onEnd(() => {
-      const deltaSteps = Math.round(previewH.value / FINE);
+      const deltaSteps = Math.round(previewH.value / fineUnit);
       const newFh = Math.max(2, Math.min(MAX_FW, fh + deltaSteps));
       previewH.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
       if (newFh !== fh) runOnJS(onResize)(fw, newFh, 0, 0);
@@ -1216,19 +1218,19 @@ function ResizeHandles({
       lastHapticStepW.value = 0; lastHapticStepH.value = 0;
     })
     .onUpdate((e) => {
-      const sw = Math.round(e.translationX / FINE);
-      const sh = Math.round(e.translationY / FINE);
+      const sw = Math.round(e.translationX / fineUnit);
+      const sh = Math.round(e.translationY / fineUnit);
       if (sw !== lastHapticStepW.value || sh !== lastHapticStepH.value) {
         lastHapticStepW.value = sw;
         lastHapticStepH.value = sh;
         runOnJS(hapticSelection)();
       }
-      previewW.value = sw * FINE;
-      previewH.value = sh * FINE;
+      previewW.value = sw * fineUnit;
+      previewH.value = sh * fineUnit;
     })
     .onEnd(() => {
-      const dw = Math.round(previewW.value / FINE);
-      const dh = Math.round(previewH.value / FINE);
+      const dw = Math.round(previewW.value / fineUnit);
+      const dh = Math.round(previewH.value / fineUnit);
       const newFw = Math.max(2, Math.min(MAX_FW, fw + dw));
       const newFh = Math.max(2, Math.min(MAX_FW, fh + dh));
       previewW.value = withTiming(0, { duration: 120 });
@@ -1241,15 +1243,15 @@ function ResizeHandles({
   const leftPan = useMemo(() => Gesture.Pan()
     .onStart(() => { previewL.value = 0; lastHapticStepL.value = 0; })
     .onUpdate((e) => {
-      const steps = Math.round(-e.translationX / CELL); // + = grow leftwards
+      const steps = Math.round(-e.translationX / cellSize); // + = grow leftwards
       if (steps !== lastHapticStepL.value) {
         lastHapticStepL.value = steps;
         runOnJS(hapticSelection)();
       }
-      previewL.value = -steps * CELL;
+      previewL.value = -steps * cellSize;
     })
     .onEnd(() => {
-      const cells = Math.round(-previewL.value / CELL);
+      const cells = Math.round(-previewL.value / cellSize);
       previewL.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
       const newFw = Math.max(2, Math.min(MAX_FW, fw + cells * 2));
       const applied = (newFw - fw) / 2;
@@ -1260,15 +1262,15 @@ function ResizeHandles({
   const topPan = useMemo(() => Gesture.Pan()
     .onStart(() => { previewT.value = 0; lastHapticStepT.value = 0; })
     .onUpdate((e) => {
-      const steps = Math.round(-e.translationY / CELL); // + = grow upwards
+      const steps = Math.round(-e.translationY / cellSize); // + = grow upwards
       if (steps !== lastHapticStepT.value) {
         lastHapticStepT.value = steps;
         runOnJS(hapticSelection)();
       }
-      previewT.value = -steps * CELL;
+      previewT.value = -steps * cellSize;
     })
     .onEnd(() => {
-      const cells = Math.round(-previewT.value / CELL);
+      const cells = Math.round(-previewT.value / cellSize);
       previewT.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
       const newFh = Math.max(2, Math.min(MAX_FW, fh + cells * 2));
       const applied = (newFh - fh) / 2;
@@ -1283,19 +1285,19 @@ function ResizeHandles({
       lastHapticStepL.value = 0; lastHapticStepT.value = 0;
     })
     .onUpdate((e) => {
-      const sc = Math.round(-e.translationX / CELL);
-      const sr = Math.round(-e.translationY / CELL);
+      const sc = Math.round(-e.translationX / cellSize);
+      const sr = Math.round(-e.translationY / cellSize);
       if (sc !== lastHapticStepL.value || sr !== lastHapticStepT.value) {
         lastHapticStepL.value = sc;
         lastHapticStepT.value = sr;
         runOnJS(hapticSelection)();
       }
-      previewL.value = -sc * CELL;
-      previewT.value = -sr * CELL;
+      previewL.value = -sc * cellSize;
+      previewT.value = -sr * cellSize;
     })
     .onEnd(() => {
-      const cCells = Math.round(-previewL.value / CELL);
-      const rCells = Math.round(-previewT.value / CELL);
+      const cCells = Math.round(-previewL.value / cellSize);
+      const rCells = Math.round(-previewT.value / cellSize);
       previewL.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
       previewT.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
       const newFw = Math.max(2, Math.min(MAX_FW, fw + cCells * 2));
@@ -1312,19 +1314,19 @@ function ResizeHandles({
       lastHapticStepW.value = 0; lastHapticStepT.value = 0;
     })
     .onUpdate((e) => {
-      const sw = Math.round(e.translationX / FINE);
-      const sr = Math.round(-e.translationY / CELL);
+      const sw = Math.round(e.translationX / fineUnit);
+      const sr = Math.round(-e.translationY / cellSize);
       if (sw !== lastHapticStepW.value || sr !== lastHapticStepT.value) {
         lastHapticStepW.value = sw;
         lastHapticStepT.value = sr;
         runOnJS(hapticSelection)();
       }
-      previewW.value = sw * FINE;
-      previewT.value = -sr * CELL;
+      previewW.value = sw * fineUnit;
+      previewT.value = -sr * cellSize;
     })
     .onEnd(() => {
-      const dw = Math.round(previewW.value / FINE);
-      const rCells = Math.round(-previewT.value / CELL);
+      const dw = Math.round(previewW.value / fineUnit);
+      const rCells = Math.round(-previewT.value / cellSize);
       previewW.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
       previewT.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
       const newFw = Math.max(2, Math.min(MAX_FW, fw + dw));
@@ -1340,19 +1342,19 @@ function ResizeHandles({
       lastHapticStepL.value = 0; lastHapticStepH.value = 0;
     })
     .onUpdate((e) => {
-      const sc = Math.round(-e.translationX / CELL);
-      const sh = Math.round(e.translationY / FINE);
+      const sc = Math.round(-e.translationX / cellSize);
+      const sh = Math.round(e.translationY / fineUnit);
       if (sc !== lastHapticStepL.value || sh !== lastHapticStepH.value) {
         lastHapticStepL.value = sc;
         lastHapticStepH.value = sh;
         runOnJS(hapticSelection)();
       }
-      previewL.value = -sc * CELL;
-      previewH.value = sh * FINE;
+      previewL.value = -sc * cellSize;
+      previewH.value = sh * fineUnit;
     })
     .onEnd(() => {
-      const cCells = Math.round(-previewL.value / CELL);
-      const dh = Math.round(previewH.value / FINE);
+      const cCells = Math.round(-previewL.value / cellSize);
+      const dh = Math.round(previewH.value / fineUnit);
       previewL.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
       previewH.value = reduceMotion ? 0 : withTiming(0, { duration: 120 });
       const newFw = Math.max(2, Math.min(MAX_FW, fw + cCells * 2));
@@ -2035,6 +2037,7 @@ function BoardTileButton({
           height={tileHeight}
           fw={fw}
           fh={fh}
+          fineUnit={size / 2}
           isDragging={lifted}
           tileLabel={tile.label}
           onResize={(newFw, newFh, dCols, dRows) => onResize(tile.id, newFw, newFh, dCols, dRows)}
@@ -2358,7 +2361,9 @@ export default function TalkScreen() {
       const boardTiles = BOARD_TILES[key];
       if (!boardTiles) continue;
       // Start from stored placements
-      const layout: BoardLayout = stored.map(p => ({ id: p.id, slot: p.slot, fw: p.fw, fh: p.fh }));
+      const layout: BoardLayout = reflowLayoutSlots(
+        stored.map(p => ({ id: p.id, slot: p.slot, fw: p.fw, fh: p.fh })),
+      );
       // Append any new tiles from code that aren't in stored placements
       const storedIds = new Set(stored.map(p => p.id));
       const maxSlot = stored.reduce((max, p) => Math.max(max, p.slot + coarseCols(p.fw)), 0);
@@ -3504,6 +3509,7 @@ export default function TalkScreen() {
             {(() => {
               const colStep = tileSize + TILE_GAP;
               const rowStep = tileSize + TILE_V_GAP;
+              const fineUnit = tileSize / 2;
               // Rows must count each tile's full footprint (anchor row +
               // coarse height), not just anchor slots — otherwise growing a
               // bottom-row tile taller doesn't extend the grid and the
@@ -3540,8 +3546,8 @@ export default function TalkScreen() {
                     if (!tile) return null;
                     const col = placement.slot % BOARD_COLUMNS;
                     const row = Math.floor(placement.slot / BOARD_COLUMNS);
-                    const w = placement.fw * FINE;
-                    const h = placement.fh * FINE;
+                    const w = placement.fw * fineUnit;
+                    const h = placement.fh * fineUnit;
                     return (
                       <View
                         key={tile.id}
@@ -3985,7 +3991,7 @@ const styles = StyleSheet.create({
   tileEditOutline: {
     borderWidth: 2,
     borderStyle: 'dashed',
-    borderRadius: 14,
+    borderRadius: TILE_CORNER_RADIUS,
   },
   tileShell: {
     position: 'relative',
@@ -3994,8 +4000,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
+    borderTopLeftRadius: TILE_CORNER_RADIUS,
+    borderTopRightRadius: TILE_CORNER_RADIUS,
     // Folder outline intentionally 20% lighter than word tiles (1.5 → 1.2).
     borderWidth: 1.2,
     borderBottomWidth: 0,
@@ -4005,7 +4011,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: 10,
+    borderRadius: TILE_CORNER_RADIUS,
     borderWidth: 1.2,
   },
   folderLabel: {
@@ -4037,7 +4043,7 @@ const styles = StyleSheet.create({
   // optical weight of the folder PNGs so word and folder tiles share a
   // visual rhythm.
   wordTileFallbackBorder: {
-    borderRadius: 14,
+    borderRadius: TILE_CORNER_RADIUS,
     borderWidth: 1.5,
     borderStyle: 'dashed',
   },
@@ -4045,7 +4051,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
-    borderRadius: 14,
+    borderRadius: TILE_CORNER_RADIUS,
   },
   // Typography mirrors `folderLabel` so words and folders read as one family.
   wordLabel: {
