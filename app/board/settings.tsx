@@ -26,6 +26,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Icon } from '../../src/components/native/Icon';
+import { ColorPickerSheet } from '../../src/components/native/ColorPickerSheet';
 import { radii, spacing, symbolColors, typography } from '../../src/theme/tokens';
 import { hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
@@ -58,15 +59,6 @@ const DENSITY_OPTIONS: { key: DensityChoice; label: string }[] = [
   { key: 'cosy', label: 'Cosy' },
   { key: 'balanced', label: 'Balanced' },
   { key: 'open', label: 'Open' },
-];
-
-/** Calm palette drawn from the AAC word-type tokens — no new hex. */
-const COLOUR_OPTIONS: { key: string; label: string; hex: string }[] = [
-  { key: 'noun', label: 'Yellow', hex: symbolColors.noun },
-  { key: 'verb', label: 'Green', hex: symbolColors.verb },
-  { key: 'adjective', label: 'Blue', hex: symbolColors.adjective },
-  { key: 'pronoun', label: 'Purple', hex: symbolColors.pronoun },
-  { key: 'social', label: 'Pink', hex: symbolColors.social },
 ];
 
 // ─── Reusable rows ────────────────────────────────────────────────────────────
@@ -118,42 +110,29 @@ function ChoiceRow<T extends string>({
   );
 }
 
-/** Colour swatch choice — 44pt swatches, selection shown by ring + check. */
+/** Colour choice — opens the full colour wheel (any colour, no presets). */
 function ColourRow({
-  label, value, onChange,
+  label, value, onPress,
 }: {
   label: string;
   value: string;
-  onChange: (key: string) => void;
+  onPress: () => void;
 }) {
   const t = useTheme();
   return (
-    <View style={styles.settingRow}>
+    <View style={[styles.settingRow, styles.toggleRow]}>
       <Text style={[styles.settingLabel, { color: t.colors.text }]}>{label}</Text>
-      <View style={styles.swatchGroup} accessibilityRole="radiogroup">
-        {COLOUR_OPTIONS.map(opt => {
-          const active = opt.key === value;
-          return (
-            <Pressable
-              key={opt.key}
-              onPress={() => { hapticSelection(); onChange(opt.key); }}
-              accessibilityRole="radio"
-              accessibilityLabel={`${opt.label} ${label.toLowerCase()}`}
-              accessibilityState={{ selected: active }}
-              style={({ pressed }) => [
-                styles.swatch,
-                { backgroundColor: opt.hex },
-                active && { borderWidth: 3, borderColor: t.colors.text },
-                pressed && { opacity: 0.8 },
-              ]}
-            >
-              {active ? (
-                <Icon name="checkmark" size={20} color={t.colors.text} />
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </View>
+      <Pressable
+        onPress={() => { hapticSelection(); onPress(); }}
+        accessibilityRole="button"
+        accessibilityLabel={`Change ${label.toLowerCase()}`}
+        accessibilityHint="Opens a colour wheel to pick any colour"
+        hitSlop={8}
+        style={({ pressed }) => [styles.colourTrigger, pressed && { opacity: 0.8 }]}
+      >
+        <View style={[styles.colourSwatch, { backgroundColor: value, borderColor: t.colors.border }]} />
+        <Icon name="color-palette-outline" size={22} color={t.colors.primary} />
+      </Pressable>
     </View>
   );
 }
@@ -282,16 +261,23 @@ export default function BoardSettingsScreen() {
   // ── Simple settings (visible) — local state only in this pass ──
   const [symbolSize, setSymbolSize] = useState<SizeChoice>('medium');
   const [textSize, setTextSize] = useState<SizeChoice>('medium');
-  const [folderColour, setFolderColour] = useState('adjective');
+  const [folderColour, setFolderColour] = useState<string>(symbolColors.adjective);
   const [labelsVisible, setLabelsVisible] = useState(true);
   const [tileSpacing, setTileSpacing] = useState<SpacingChoice>('standard');
 
   // ── Advanced settings (expandable) ──
-  const [textColour, setTextColour] = useState('noun');
-  const [tileColour, setTileColour] = useState('verb');
+  const [textColour, setTextColour] = useState<string>(symbolColors.noun);
+  const [tileColour, setTileColour] = useState<string>(symbolColors.verb);
   const [exactTilePt, setExactTilePt] = useState(88);
   const [exactTextPt, setExactTextPt] = useState(17);
   const [density, setDensity] = useState<DensityChoice>('balanced');
+
+  // Which colour is being edited in the wheel sheet (null = closed).
+  const [colourEditor, setColourEditor] = useState<null | {
+    value: string;
+    title: string;
+    onDone: (hex: string) => void;
+  }>(null);
 
   const [openSection, setOpenSection] = useState<string | null>(null);
   const toggleSection = useCallback((key: string) => {
@@ -346,7 +332,11 @@ export default function BoardSettingsScreen() {
           <View style={[styles.divider, { backgroundColor: t.colors.background }]} />
           <ChoiceRow label="Text size" options={SIZE_OPTIONS} value={textSize} onChange={setTextSize} />
           <View style={[styles.divider, { backgroundColor: t.colors.background }]} />
-          <ColourRow label="Folder colour" value={folderColour} onChange={setFolderColour} />
+          <ColourRow
+            label="Folder colour"
+            value={folderColour}
+            onPress={() => setColourEditor({ value: folderColour, title: 'Folder Colour', onDone: setFolderColour })}
+          />
           <View style={[styles.divider, { backgroundColor: t.colors.background }]} />
           <ToggleRow label="Show labels" value={labelsVisible} onChange={setLabelsVisible} />
           <View style={[styles.divider, { backgroundColor: t.colors.background }]} />
@@ -361,7 +351,11 @@ export default function BoardSettingsScreen() {
           expanded={openSection === 'textColour'}
           onToggle={() => toggleSection('textColour')}
         >
-          <ColourRow label="Text colour" value={textColour} onChange={setTextColour} />
+          <ColourRow
+            label="Text colour"
+            value={textColour}
+            onPress={() => setColourEditor({ value: textColour, title: 'Text Colour', onDone: setTextColour })}
+          />
         </DisclosureSection>
 
         <DisclosureSection
@@ -369,7 +363,11 @@ export default function BoardSettingsScreen() {
           expanded={openSection === 'tileColour'}
           onToggle={() => toggleSection('tileColour')}
         >
-          <ColourRow label="Tile colour" value={tileColour} onChange={setTileColour} />
+          <ColourRow
+            label="Tile colour"
+            value={tileColour}
+            onPress={() => setColourEditor({ value: tileColour, title: 'Tile Colour', onDone: setTileColour })}
+          />
         </DisclosureSection>
 
         <DisclosureSection
@@ -421,6 +419,18 @@ export default function BoardSettingsScreen() {
           />
         </View>
       </ScrollView>
+
+      <ColorPickerSheet
+        visible={colourEditor !== null}
+        initialColor={colourEditor?.value ?? symbolColors.verb}
+        title={colourEditor?.title ?? 'Choose Colour'}
+        reduceMotion={reduceMotion}
+        onCancel={() => setColourEditor(null)}
+        onDone={(hex) => {
+          colourEditor?.onDone(hex);
+          setColourEditor(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -518,16 +528,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  swatchGroup: {
+  colourTrigger: {
     flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  swatch: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.button,
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+  },
+  colourSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
   },
 
   stepper: {

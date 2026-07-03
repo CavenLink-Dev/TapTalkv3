@@ -18,6 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { MulberrySymbol } from '../symbols/MulberrySymbol';
 import { ThemedText } from '../native/ThemedText';
+import { SymbolSuggestionRow } from '../aac/symbols/SymbolSuggestionRow';
 import { useTheme } from '../../theme/useTheme';
 import { radii, spacing, typography } from '../../theme/tokens';
 import { fonts } from '../../theme/fonts';
@@ -38,29 +39,9 @@ interface Props {
   onAdd: (result: AddFolderResult) => void;
 }
 
-// Curated icons — all IDs already bundled and used elsewhere on the board.
-const FOLDER_ICONS: { symbolId: string; name: string }[] = [
-  { symbolId: 'mulberry_family_excv0f', name: 'People' },
-  { symbolId: 'mulberry_food_atkyaz',   name: 'Food' },
-  { symbolId: 'mulberry_house_1ice1xp', name: 'Home' },
-  { symbolId: 'mulberry_run_1l6fpg7',   name: 'Actions' },
-  { symbolId: 'mulberry_cat_1lz3nun',   name: 'Animals' },
-  { symbolId: 'mulberry_drink_16zxzpv', name: 'Drinks' },
-  { symbolId: 'mulberry_want_16yheia',  name: 'Wants' },
-  { symbolId: 'mulberry_help_1g1ppr',   name: 'Help' },
-];
-
-// Folder tile colours. Literal hex is the repo convention for tile colour.
-const FOLDER_COLORS: { color: string; name: string }[] = [
-  { color: '#1DCDFF', name: 'sky blue' },
-  { color: '#0A84FF', name: 'blue' },
-  { color: '#34C759', name: 'green' },
-  { color: '#FF9F0A', name: 'orange' },
-  { color: '#BF5AF2', name: 'purple' },
-  { color: '#FF3B30', name: 'red' },
-];
-
-const DEFAULT_COLOR = FOLDER_COLORS[0]!.color;
+// Default folder tile colour. Any colour is reachable via the colour wheel —
+// there are intentionally no preset swatches (colour wheel only, app-wide).
+const DEFAULT_COLOR = '#1DCDFF';
 
 export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
   const t = useTheme();
@@ -69,6 +50,8 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
   const [iconId, setIconId] = useState<string | null>(null);
   const [color, setColor] = useState<string>(DEFAULT_COLOR);
   const [colorSheet, setColorSheet] = useState(false);
+  const [iconSearch, setIconSearch] = useState(false);
+  const [iconQuery, setIconQuery] = useState('');
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -78,13 +61,10 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
       setLabel('');
       setIconId(null);
       setColor(DEFAULT_COLOR);
+      setIconSearch(false);
+      setIconQuery('');
     }
   }, [visible]);
-
-  const handleSelectIcon = useCallback((symbolId: string) => {
-    hapticSelection();
-    setIconId(prev => (prev === symbolId ? null : symbolId));
-  }, []);
 
   const handleSelectColor = useCallback((c: string) => {
     hapticSelection();
@@ -99,9 +79,6 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
     const boardKey = `folder_${trimmed.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
     onAdd({ label: trimmed, boardKey, color, mulberrySymbolId: iconId ?? undefined });
   }, [color, iconId, label, onAdd]);
-
-  const selectedColorName = FOLDER_COLORS.find(c => c.color === color)?.name ?? 'custom';
-  const isCustomColor = !FOLDER_COLORS.some(c => c.color === color);
 
   return (
     <Modal
@@ -147,7 +124,7 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
           <View
             style={styles.previewWrap}
             accessible
-            accessibilityLabel={`Folder tile preview: ${label.trim() || 'unnamed folder'}, ${selectedColorName}`}
+            accessibilityLabel={`Folder tile preview: ${label.trim() || 'unnamed folder'}`}
           >
             <View style={[styles.previewTile, { backgroundColor: color }]}>
               {iconId ? (
@@ -180,91 +157,69 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
             />
           </View>
 
-          {/* Icon picker */}
+          {/* Icon — search the full symbol library (no bundled quick-set) */}
           <View style={styles.fieldSection}>
             <ThemedText variant="eyebrow" color={t.colors.textTertiary} style={styles.sectionEyebrow}>
               ICON
             </ThemedText>
-            <View style={styles.iconGrid}>
-              {FOLDER_ICONS.map(icon => {
-                const isOn = iconId === icon.symbolId;
-                return (
-                  <Pressable
-                    key={icon.symbolId}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Folder icon ${icon.name}`}
-                    accessibilityState={{ selected: isOn }}
-                    onPress={() => handleSelectIcon(icon.symbolId)}
-                    style={({ pressed }) => [
-                      styles.iconCell,
-                      { backgroundColor: pressed || isOn ? t.colors.selectionBg : t.colors.inputBg },
-                    ]}
-                  >
-                    <MulberrySymbol symbolId={icon.symbolId} size={36} />
-                    {isOn && (
-                      <View style={[styles.iconCheck, { backgroundColor: t.colors.primary }]}>
-                        <Ionicons name="checkmark" size={12} color="#FFFFFF" />
-                      </View>
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={iconId ? 'Change folder symbol' : 'Search for a folder symbol'}
+              accessibilityHint="Opens the symbol library to search and pick an icon"
+              onPress={() => { hapticSelection(); setIconQuery(''); setIconSearch(true); }}
+              style={({ pressed }) => [
+                styles.iconTrigger,
+                { backgroundColor: t.colors.inputBg },
+                pressed && { opacity: 0.75 },
+              ]}
+            >
+              <View style={styles.iconTriggerPreview}>
+                {iconId ? (
+                  <MulberrySymbol symbolId={iconId} size={32} />
+                ) : (
+                  <Ionicons name="search" size={22} color={t.colors.textMuted} />
+                )}
+              </View>
+              <ThemedText variant="body" color={t.colors.text} style={styles.iconTriggerLabel}>
+                {iconId ? 'Change symbol' : 'Search for a symbol'}
+              </ThemedText>
+              {iconId ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove folder symbol"
+                  onPress={() => { hapticSelection(); setIconId(null); }}
+                  hitSlop={10}
+                >
+                  <Ionicons name="close-circle" size={22} color={t.colors.textMuted} />
+                </Pressable>
+              ) : (
+                <Ionicons name="chevron-forward" size={20} color={t.colors.textTertiary} />
+              )}
+            </Pressable>
           </View>
 
-          {/* Colour picker */}
+          {/* Colour — full colour wheel (any colour, no presets) */}
           <View style={styles.fieldSection}>
             <ThemedText variant="eyebrow" color={t.colors.textTertiary} style={styles.sectionEyebrow}>
               TILE COLOUR
             </ThemedText>
-            <View style={styles.swatchRow}>
-              {FOLDER_COLORS.map(c => {
-                const isOn = color === c.color;
-                return (
-                  <Pressable
-                    key={c.color}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Tile colour ${c.name}`}
-                    accessibilityState={{ selected: isOn }}
-                    onPress={() => handleSelectColor(c.color)}
-                    hitSlop={6}
-                    style={styles.swatchHit}
-                  >
-                    <View style={[styles.swatch, { backgroundColor: c.color }]}>
-                      {isOn && <Ionicons name="checkmark" size={20} color="#FFFFFF" />}
-                    </View>
-                  </Pressable>
-                );
-              })}
-              {/* Custom — full colour wheel (any colour, no preset limit) */}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Custom colour"
-                accessibilityHint="Opens a colour wheel to pick any colour"
-                accessibilityState={{ selected: isCustomColor }}
-                onPress={() => {
-                  hapticSelection();
-                  setColorSheet(true);
-                }}
-                hitSlop={6}
-                style={styles.swatchHit}
-              >
-                <View
-                  style={[
-                    styles.swatch,
-                    isCustomColor
-                      ? { backgroundColor: color }
-                      : { backgroundColor: t.colors.inputBg, borderWidth: 1.5, borderColor: t.colors.border },
-                  ]}
-                >
-                  {isCustomColor ? (
-                    <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-                  ) : (
-                    <Ionicons name="color-palette-outline" size={20} color={t.colors.primary} />
-                  )}
-                </View>
-              </Pressable>
-            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Change tile colour"
+              accessibilityHint="Opens a colour wheel to pick any colour"
+              onPress={() => { hapticSelection(); setColorSheet(true); }}
+              style={({ pressed }) => [
+                styles.colorTrigger,
+                { backgroundColor: t.colors.inputBg },
+                pressed && { opacity: 0.75 },
+              ]}
+            >
+              <View style={[styles.colorPreview, { backgroundColor: color, borderColor: t.colors.border }]} />
+              <ThemedText variant="body" color={t.colors.text} style={styles.colorTriggerLabel}>
+                Change colour
+              </ThemedText>
+              <Ionicons name="color-palette-outline" size={22} color={t.colors.primary} />
+            </Pressable>
           </View>
 
           {/* Empty-state hint (Rule 24) */}
@@ -287,6 +242,54 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
           setColorSheet(false);
         }}
       />
+
+      {/* Search Symbol — full Mulberry library, no bundled quick-set */}
+      <Modal
+        visible={iconSearch}
+        animationType={reduceMotion ? 'fade' : 'slide'}
+        presentationStyle="formSheet"
+        onRequestClose={() => setIconSearch(false)}
+      >
+        <View style={[styles.searchSheet, { backgroundColor: t.colors.background }]}>
+          <View style={styles.searchHeader}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+              onPress={() => { hapticSelection(); setIconSearch(false); }}
+              hitSlop={12}
+              style={styles.searchCancel}
+            >
+              <ThemedText variant="body" color={t.colors.primary} style={styles.headerButtonText}>Cancel</ThemedText>
+            </Pressable>
+            <ThemedText variant="heading" color={t.colors.text}>Search Symbol</ThemedText>
+            <View style={styles.searchSpacer} />
+          </View>
+          <View style={styles.searchBody}>
+            <TextInput
+              accessibilityLabel="Search symbols"
+              value={iconQuery}
+              onChangeText={setIconQuery}
+              autoFocus
+              placeholder="Type a word, e.g. dog, home, food"
+              placeholderTextColor={t.colors.textTertiary}
+              style={[styles.searchInput, { color: t.colors.text, backgroundColor: t.colors.inputBg, borderColor: t.colors.border }]}
+            />
+            <SymbolSuggestionRow
+              query={iconQuery}
+              onSelect={(result) => {
+                hapticSelection();
+                setIconId(result.symbol.id);
+                setIconSearch(false);
+              }}
+            />
+            {!iconQuery.trim() ? (
+              <ThemedText variant="callout" color={t.colors.textMuted} style={styles.searchHint}>
+                Search the full symbol library and tap one to use it as the folder icon.
+              </ThemedText>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 }
@@ -345,44 +348,62 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontFamily: fonts.body,
   },
-  iconGrid: {
+  iconTrigger: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  iconCell: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.card,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconCheck: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  swatchRow: {
-    flexDirection: 'row',
     gap: spacing.md,
+    minHeight: 56,
+    borderRadius: radii.button,
+    paddingHorizontal: spacing.md,
   },
-  swatchHit: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  swatch: {
+  iconTriggerPreview: {
     width: 40,
     height: 40,
-    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconTriggerLabel: {
+    flex: 1,
+    fontFamily: fonts.displayBold,
+  },
+  searchSheet: { flex: 1 },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  searchCancel: { minWidth: 60, minHeight: 44, justifyContent: 'center' },
+  searchSpacer: { minWidth: 60 },
+  searchBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.md },
+  searchInput: {
+    fontFamily: fonts.body,
+    fontSize: typography.body,
+    minHeight: 48,
+    borderRadius: radii.button,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+  },
+  searchHint: { textAlign: 'center', marginTop: spacing.md },
+  colorTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 56,
+    borderRadius: radii.button,
+    paddingHorizontal: spacing.md,
+  },
+  colorPreview: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  colorTriggerLabel: {
+    flex: 1,
+    fontFamily: fonts.displayBold,
   },
   hint: {
     alignItems: 'center',

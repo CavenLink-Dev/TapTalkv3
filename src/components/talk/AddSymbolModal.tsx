@@ -28,6 +28,7 @@ import { MulberrySymbol } from '../symbols/MulberrySymbol';
 import { searchSymbols } from '../../features/symbol-brain/symbolSearchService';
 import { SearchResult } from '../../features/symbol-brain/types';
 import { ThemedText } from '../native/ThemedText';
+import { ColorPickerSheet } from '../native/ColorPickerSheet';
 import { useTheme } from '../../theme/useTheme';
 import { radii, spacing, typography } from '../../theme/tokens';
 import { fonts } from '../../theme/fonts';
@@ -65,21 +66,6 @@ const WORD_TYPES: WordTypeOption[] = [
   { key: 'social',    label: 'Social',    color: '#BF5AF2', colorName: 'purple' },
 ];
 
-const SWATCHES: { color: string; name: string }[] = [
-  { color: '#FF3B30', name: 'red' },
-  { color: '#FF9F0A', name: 'orange' },
-  { color: '#FFD60A', name: 'yellow' },
-  { color: '#34C759', name: 'green' },
-  { color: '#0A84FF', name: 'blue' },
-  { color: '#BF5AF2', name: 'purple' },
-  { color: '#FF2D55', name: 'pink' },
-  { color: '#64D2FF', name: 'sky' },
-  { color: '#00C7BE', name: 'teal' },
-  { color: '#5E5CE6', name: 'indigo' },
-  { color: '#A2845E', name: 'brown' },
-  { color: '#8E8E93', name: 'grey' },
-];
-
 // Browse chips shown before any query is typed (Rule 28 — suggestions).
 const BROWSE_CATEGORIES: { label: string; query: string }[] = [
   { label: 'Feelings', query: 'feelings' },
@@ -112,6 +98,7 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
   const [customLabel, setCustomLabel] = useState('');
   const [wordType, setWordType] = useState<WordTypeOption>(WORD_TYPES[2]!);
   const [color, setColor] = useState<string>(WORD_TYPES[2]!.color);
+  const [colorSheet, setColorSheet] = useState(false);
   const [recents, setRecents] = useState<RecentSymbol[]>([]);
   // Data-driven category filter over the current results (Rule 28). null = All.
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -139,6 +126,7 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
       setCustomLabel('');
       setWordType(WORD_TYPES[2]!);
       setColor(WORD_TYPES[2]!.color);
+      setColorSheet(false);
       setCategoryFilter(null);
     }
   }, [visible]);
@@ -416,7 +404,7 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
       <View
         style={styles.previewWrap}
         accessible
-        accessibilityLabel={`Tile preview: ${customLabel.trim() || selected.symbol.display_name}, ${wordType.label}, ${SWATCHES.find(s => s.color === color)?.name ?? 'custom'} tile`}
+        accessibilityLabel={`Tile preview: ${customLabel.trim() || selected.symbol.display_name}, ${wordType.label} tile`}
       >
         <View style={[styles.previewTile, { backgroundColor: color }]}>
           <MulberrySymbol symbolId={selected.symbol.id} size={52} />
@@ -472,31 +460,28 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
         </View>
       </View>
 
-      {/* Colour override swatches */}
+      {/* Colour override — full colour wheel (any colour, no presets) */}
       <View style={styles.fieldSection}>
         <ThemedText variant="eyebrow" color={t.colors.textTertiary} style={styles.sectionEyebrow}>
           TILE COLOUR
         </ThemedText>
-        <View style={styles.swatchRow}>
-          {SWATCHES.map(s => {
-            const isOn = color === s.color;
-            return (
-              <Pressable
-                key={s.color}
-                accessibilityRole="button"
-                accessibilityLabel={`Tile colour ${s.name}`}
-                accessibilityState={{ selected: isOn }}
-                onPress={() => handleSelectColor(s.color)}
-                hitSlop={6}
-                style={styles.swatchHit}
-              >
-                <View style={[styles.swatch, { backgroundColor: s.color }]}>
-                  {isOn && <Ionicons name="checkmark" size={20} color="#FFFFFF" />}
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Change tile colour"
+          accessibilityHint="Opens a colour wheel to pick any colour"
+          onPress={() => { hapticSelection(); setColorSheet(true); }}
+          style={({ pressed }) => [
+            styles.colorTrigger,
+            { backgroundColor: t.colors.inputBg },
+            pressed && { opacity: 0.75 },
+          ]}
+        >
+          <View style={[styles.colorPreview, { backgroundColor: color, borderColor: t.colors.border }]} />
+          <ThemedText variant="body" color={t.colors.text} style={styles.colorTriggerLabel}>
+            Change colour
+          </ThemedText>
+          <Ionicons name="color-palette-outline" size={22} color={t.colors.primary} />
+        </Pressable>
       </View>
     </ScrollView>
   );
@@ -557,6 +542,18 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
 
         {step === 'find' ? findBody : customiseBody}
       </KeyboardAvoidingView>
+
+      <ColorPickerSheet
+        visible={colorSheet}
+        initialColor={color}
+        title="Tile Colour"
+        reduceMotion={reduceMotion}
+        onCancel={() => setColorSheet(false)}
+        onDone={(hex) => {
+          handleSelectColor(hex);
+          setColorSheet(false);
+        }}
+      />
     </Modal>
   );
 }
@@ -722,22 +719,22 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontFamily: fonts.body,
   },
-  swatchRow: {
+  colorTrigger: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: spacing.md,
+    minHeight: 56,
+    borderRadius: radii.button,
+    paddingHorizontal: spacing.md,
   },
-  swatchHit: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+  colorPreview: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  swatch: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+  colorTriggerLabel: {
+    flex: 1,
+    fontFamily: fonts.displayBold,
   },
 });

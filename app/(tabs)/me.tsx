@@ -57,27 +57,13 @@ import { fonts } from '../../src/theme/fonts';
 const APP_VERSION = '0.1.0';
 const SUPPORT_EMAIL = 'hello@taptalk.app';
 
-// Section headers, in render order — used for persistence + Expand/Collapse all.
-const GROUP_KEYS = [
-  'Quick Setup',
-  'User Profile',
-  'User Settings',
-  'Accessibility Controls',
-  'Privacy',
-  'Device & Access',
-  'Your Data',
-  'Security',
-  'Guide',
-  'Help',
-  'Legal',
-  'About Us',
-] as const;
-
-// Default: the two most-used sections open, everything else collapsed so the
-// page is short to scroll. The user's choices persist and override this.
+// Default: the important, everyday sections open, everything else collapsed so
+// the page stays short to scroll. The user's own choices persist and override
+// this on the next visit.
 const DEFAULT_GROUP_OPEN: Record<string, boolean> = {
   'User Profile': true,
   'User Settings': true,
+  'Accessibility Controls': true,
 };
 
 const GROUPS_STORAGE_KEY = '@taptalk/profile/groups/v1';
@@ -426,19 +412,6 @@ export default function MeScreen() {
     [animateGroups, persistOpen],
   );
 
-  const allOpen = GROUP_KEYS.every((k) => openMap[k]);
-  const setAllGroups = useCallback(
-    (value: boolean) => {
-      hapticSelection();
-      animateGroups();
-      const next: Record<string, boolean> = {};
-      for (const k of GROUP_KEYS) next[k] = value;
-      setOpenMap(next);
-      persistOpen(next);
-    },
-    [animateGroups, persistOpen],
-  );
-
   const groupsValue = React.useMemo(
     () => ({ isOpen: isGroupOpen, toggle: toggleGroup, reduceMotion }),
     [isGroupOpen, toggleGroup, reduceMotion],
@@ -688,24 +661,6 @@ export default function MeScreen() {
           />
         </Pressable>
       </Card>
-
-      {/* Expand / Collapse all sections */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={allOpen ? 'Collapse all sections' : 'Expand all sections'}
-        onPress={() => setAllGroups(!allOpen)}
-        hitSlop={8}
-        style={({ pressed }) => [styles.expandAll, pressed && { opacity: 0.6 }]}
-      >
-        <Ionicons
-          name={allOpen ? 'contract-outline' : 'expand-outline'}
-          size={15}
-          color={t.colors.primary}
-        />
-        <Text style={[styles.expandAllText, { color: t.colors.primary }]}>
-          {allOpen ? 'Collapse all' : 'Expand all'}
-        </Text>
-      </Pressable>
 
       {/* ── User Profile ── */}
       <Group label="User Profile">
@@ -1299,23 +1254,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
   },
-  expandAll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-end',
-    gap: spacing.xs,
-    minHeight: 36,
-    paddingHorizontal: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  expandAllText: {
-    fontFamily: fonts.displayBold,
-    fontSize: typography.caption,
-  },
-
   // ── Quick Setup presets ──
   presetCard: {
     gap: spacing.md,
+    // Sit flush beneath the section header pill (which squares its bottom
+    // corners when expanded) so the open group reads as one connected piece.
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
   },
   presetIntro: {
     fontFamily: fonts.body,

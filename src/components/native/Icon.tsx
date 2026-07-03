@@ -53,10 +53,25 @@ export function Icon({ name, size = 24, color, strokeWidth = 2 }: IconProps) {
         </Svg>
       );
     case 'chevron-back-double':
+    case 'back-out':
+      // Double-back chevron — artwork from src/assets/icons/back_out.svg.
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <Polyline points="17,18 11,12 17,6" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
-          <Polyline points="12,18 6,12 12,6" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <Path
+            fill={strokeColor}
+            d="M17.707 5.293a1 1 0 0 1 0 1.414L12.414 12l5.293 5.293a1 1 0 0 1-1.414 1.414l-6-6a1 1 0 0 1 0-1.414l6-6a1 1 0 0 1 1.414 0zm-6 0a1 1 0 0 1 0 1.414L6.414 12l5.293 5.293a1 1 0 0 1-1.414 1.414l-6-6a1 1 0 0 1 0-1.414l6-6a1 1 0 0 1 1.414 0z"
+          />
+        </Svg>
+      );
+    case 'sort':
+      // Sort control — artwork from src/assets/icons/sort.svg.
+      return (
+        <Svg width={size} height={size} viewBox="0 0 512 512" fill="none">
+          <Path
+            fill={strokeColor}
+            fillRule="evenodd"
+            d="M85.333 149.333c0-23.564 19.103-42.666 42.667-42.666s42.667 19.102 42.667 42.666S151.564 192 128 192s-42.667-19.103-42.667-42.667M128 64c-47.128 0-85.333 38.205-85.333 85.333S80.872 234.667 128 234.667s85.333-38.205 85.333-85.334C213.333 102.205 175.128 64 128 64m341.333 106.667H234.667V128h234.666zM234.667 341.333h234.666V384H234.667zM128 448c47.128 0 85.333-38.206 85.333-85.333c0-47.128-38.205-85.334-85.333-85.334s-85.333 38.206-85.333 85.334S80.872 448 128 448"
+          />
         </Svg>
       );
     case 'add':

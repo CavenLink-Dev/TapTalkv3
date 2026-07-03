@@ -10,6 +10,7 @@ import {
   LayoutRectangle,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -118,16 +119,20 @@ type GhostTile = {
 const FIGMA_WIDTH = 393;
 const MESSAGE_HEIGHT = 104;
 const TOP_NAV_HEIGHT = 76;
-const BOARD_COLUMNS = 3;
-// 5pt uniform gap between columns and rows — outer spacing, not inner.
+const BOARD_COLUMNS = 4;
+// Target number of tile rows visible in the board viewport. Tiles are sized so
+// roughly this many rows fit vertically (big, readable symbols/folders).
+const VISIBLE_ROWS = 4;
+// 8pt uniform gap between columns and rows — outer spacing, not inner.
 const TILE_CORNER_RADIUS = 5;
-const TILE_GAP = 5;
-const TILE_V_GAP = 5;
-// 5pt side gutter. 3 columns × ~124pt tiles on a 393pt iPhone.
-const TILE_LEFT_PADDING = 5;
+const TILE_GAP = 8;
+const TILE_V_GAP = 8;
+// 4pt side gutter, added on top of the safe-area inset. 4 columns on a 393pt iPhone.
+const TILE_LEFT_PADDING = 4;
 const BOARD_TOP_GAP = 32;
-// Max tile edge (pt). Actual size is the lesser of this and what fits the screen.
-const TILE_SIZE = 124;
+// Absolute max tile edge (pt). Actual size is the lesser of this, what fits the
+// width in 3 columns, and what lets VISIBLE_ROWS rows fit the viewport height.
+const TILE_SIZE = 132;
 const MAX_FW = 8;
 // Bottom dock spacing: 16px gap between dock and bottom tab bar edge.
 const DOCK_BOTTOM_GAP = spacing.lg; // 16
@@ -2862,10 +2867,24 @@ export default function TalkScreen() {
   const insets = useSafeAreaInsets();
   const availableWidth = Math.max(0, width - insets.left - insets.right);
   const boardWidth = Math.min(availableWidth, FIGMA_WIDTH);
-  const tileSize = Math.min(
-    TILE_SIZE,
-    Math.floor((boardWidth - TILE_LEFT_PADDING * 2 - TILE_GAP * (BOARD_COLUMNS - 1)) / BOARD_COLUMNS),
+  // Width fit: the largest square that lets BOARD_COLUMNS columns sit inside the
+  // 16pt side padding with 8pt gaps between them (the binding constraint here).
+  const widthTile = Math.floor(
+    (boardWidth - TILE_LEFT_PADDING * 2 - TILE_GAP * (BOARD_COLUMNS - 1)) / BOARD_COLUMNS,
   );
+  // Height fit: the largest square that lets VISIBLE_ROWS rows fit the measured
+  // board viewport (board area minus top gap and the pinned dock) with 8pt row
+  // gaps. Falls back to a screen-based estimate before onLayout measures.
+  const dockContentH = DOCK_ACTION_SIZE + spacing.sm + DOCK_BOTTOM_GAP;
+  const boardViewportH = boardAreaHeight > 0
+    ? boardAreaHeight - BOARD_TOP_GAP - 10 - dockContentH
+    : screenHeight - MESSAGE_HEIGHT - BOARD_TOP_GAP - 100 - 50;
+  const heightTile = Math.floor(
+    (boardViewportH - TILE_V_GAP * (VISIBLE_ROWS - 1)) / VISIBLE_ROWS,
+  );
+  // Use the smaller so both constraints hold: the columns never overflow the
+  // width, and ~VISIBLE_ROWS rows fit the height. Clamped to a sane range.
+  const tileSize = Math.max(72, Math.min(TILE_SIZE, widthTile, heightTile));
   // Dock actions are fixed 60pt squares; toggles (< >) are 50pt.
   const dockPadLeft = insets.left + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2);
   const dockPadRight = insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2);
@@ -2944,6 +2963,71 @@ export default function TalkScreen() {
     activeLayout.forEach(p => m.set(p.slot, p));
     return m;
   }, [activeLayout]);
+
+  // ── Sort mode ────────────────────────────────────────────────────────────
+  // Reorders the current board's tiles by Type (word type), Name (label), or
+  // Category (folders first, then by word type). Reassigns slots row-major so
+  // the sorted order lands cleanly on the grid.
+  const applySort = useCallback(
+    (mode: 'type' | 'name' | 'category') => {
+      // Type sort groups tiles by their COLOUR (the word-type colour the user
+      // actually sees), so every same-coloured tile sits next to its matches.
+      // Known palette colours order first (red→orange→yellow→green→blue→purple→
+      // cyan); any other colour groups together after, by hex.
+      const colorOrder = ['#FF3B30', '#FF9500', '#FF9F0A', '#FFD60A', '#34C759', '#0A84FF', '#1DCDFF', '#BF5AF2'];
+      const colorRank = (c?: string) => {
+        const i = colorOrder.indexOf((c ?? '').toUpperCase());
+        return i < 0 ? colorOrder.length : i;
+      };
+      const sorted = [...activeLayout].sort((a, b) => {
+        const ta = tileMapForMode.get(a.id);
+        const tb = tileMapForMode.get(b.id);
+        if (!ta || !tb) return 0;
+        // Name: A–Z by label (A at top).
+        if (mode === 'name') return ta.label.localeCompare(tb.label);
+        // Type: cluster identical colours together, then A–Z within a colour.
+        if (mode === 'type') {
+          const ca = (ta.color ?? '').toUpperCase();
+          const cb = (tb.color ?? '').toUpperCase();
+          const ra = colorRank(ca);
+          const rb = colorRank(cb);
+          if (ra !== rb) return ra - rb;
+          if (ca !== cb) return ca.localeCompare(cb);
+          return ta.label.localeCompare(tb.label);
+        }
+        // Category: Folders first, then Symbols — each group A–Z by name.
+        const catA = ta.kind === 'folder' ? 0 : 1;
+        const catB = tb.kind === 'folder' ? 0 : 1;
+        return catA - catB || ta.label.localeCompare(tb.label);
+      }).map((p, i) => ({ ...p, slot: i }));
+      setLayouts(prev => ({ ...prev, [activeMode]: sorted }));
+      hapticSelection();
+      AccessibilityInfo.announceForAccessibility?.(`Sorted by ${mode}`);
+    },
+    [activeLayout, tileMapForMode, activeMode],
+  );
+
+  const openSortMenu = useCallback(() => {
+    hapticSelection();
+    const run = (i: number) => {
+      if (i === 0) applySort('type');
+      else if (i === 1) applySort('name');
+      else if (i === 2) applySort('category');
+    };
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Type', 'Name', 'Category', 'Cancel'], cancelButtonIndex: 3, title: 'Sort by' },
+        run,
+      );
+    } else {
+      Alert.alert('Sort by', undefined, [
+        { text: 'Type', onPress: () => run(0) },
+        { text: 'Name', onPress: () => run(1) },
+        { text: 'Category', onPress: () => run(2) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
+  }, [applySort]);
 
   // Keep `tiles` for the Mulberry prewarm effect (all tiles in active mode).
   const tiles = useMemo(() => BOARD_TILES[activeMode], [activeMode]);
@@ -3498,6 +3582,8 @@ export default function TalkScreen() {
               {
                 paddingLeft:  insets.left  + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
                 paddingRight: insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2),
+                // Clear the floating (absolute) dock so the last tiles aren't hidden behind it.
+                paddingBottom: DOCK_ACTION_SIZE + spacing.sm + DOCK_BOTTOM_GAP * 2,
               },
             ]}
           showsVerticalScrollIndicator={false}
@@ -3676,6 +3762,13 @@ export default function TalkScreen() {
                     kind="neutral"
                   />
                   <BoardDockAction
+                    icon="sort" label="Sort"
+                    a11yLabel="Sort tiles"
+                    a11yHint="Sort this board by type, name, or category"
+                    onPress={openSortMenu}
+                    kind="neutral"
+                  />
+                  <BoardDockAction
                     icon="setting" label="Board"
                     a11yLabel="Board settings"
                     a11yHint="Opens board display and layout settings"
@@ -3728,6 +3821,13 @@ export default function TalkScreen() {
                     a11yHint="Opens add options"
                     onPress={handleDockAddToggle}
                     isToggle
+                  />
+                  <BoardDockAction
+                    icon="sort" label="Sort"
+                    a11yLabel="Sort tiles"
+                    a11yHint="Sort this board by type, name, or category"
+                    onPress={openSortMenu}
+                    kind="neutral"
                   />
                   <BoardDockAction
                     icon="chevron-left" label="Hide"
@@ -4076,6 +4176,13 @@ const styles = StyleSheet.create({
   },
   boardDock: {
     paddingTop: spacing.sm,
+    // Float over the board with no fill — the grey board shows through so the
+    // control bar reads as floating rather than sitting on a solid strip.
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
   },
   dockRow: {
     flexDirection: 'row',

@@ -92,12 +92,20 @@ export default function AccountScreen() {
     setTimeout(() => setSaveNotice(''), 2200);
   }, []);
 
+  // Dispatch only — used for live typing (no toast on every keystroke).
+  const applyUser = useCallback(
+    (payload: Partial<typeof state.user>) => {
+      dispatch({ type: 'SET_USER', payload });
+    },
+    [dispatch],
+  );
+
   const setUser = useCallback(
     (payload: Partial<typeof state.user>, message: string) => {
-      dispatch({ type: 'SET_USER', payload });
+      applyUser(payload);
       notify(message);
     },
-    [dispatch, notify, state.user],
+    [applyUser, notify],
   );
 
   // Picture — takes effect immediately.
@@ -114,6 +122,43 @@ export default function AccountScreen() {
     setDraft(cfg.value);
     setEditor(cfg);
   }, []);
+
+  // Live update — applies each valid keystroke to the profile so the identity
+  // header and field rows reflect changes immediately, before the editor closes.
+  const applyLive = useCallback(
+    (field: NonNullable<typeof editor>['field'], value: string) => {
+      switch (field) {
+        case 'username':
+          applyUser({ username: value });
+          break;
+        case 'displayName':
+          applyUser({ displayName: value, name: value });
+          break;
+        case 'nickname':
+          applyUser({ nickname: value });
+          break;
+        case 'legalName':
+          applyUser({ legalName: value });
+          break;
+        case 'phone':
+          applyUser({ phone: value });
+          break;
+      }
+    },
+    [applyUser],
+  );
+
+  const handleDraftChange = useCallback(
+    (next: string) => {
+      setDraft(next);
+      if (!editor) return;
+      const value = next.trim();
+      if (editor.validate && editor.validate(value)) return; // wait for a valid value
+      if (editor.requireValue && !value) return; // never wipe a required field live
+      applyLive(editor.field, value);
+    },
+    [editor, applyLive],
+  );
 
   const commitEditor = useCallback(() => {
     if (!editor) return;
@@ -139,6 +184,13 @@ export default function AccountScreen() {
     }
     setEditor(null);
   }, [editor, draft, setUser]);
+
+  // Cancel restores the value captured when the editor opened, undoing any live
+  // edits so Cancel still means "leave it as it was".
+  const cancelEditor = useCallback(() => {
+    if (editor) applyLive(editor.field, editor.value.trim());
+    setEditor(null);
+  }, [editor, applyLive]);
 
   const onEditUserType = useCallback(() => {
     hapticSelection();
@@ -305,12 +357,12 @@ export default function AccountScreen() {
       </ScrollView>
 
       {/* Edit modal (shared) */}
-      <Modal visible={!!editor} transparent animationType="fade" onRequestClose={() => setEditor(null)}>
+      <Modal visible={!!editor} transparent animationType="fade" onRequestClose={cancelEditor}>
         <Pressable
           style={styles.modalBackdrop}
           accessibilityRole="button"
           accessibilityLabel="Dismiss editor"
-          onPress={() => setEditor(null)}
+          onPress={cancelEditor}
         >
           <Pressable style={[styles.modalCard, { backgroundColor: t.colors.surface }]} onPress={(e) => e.stopPropagation()}>
             <Text style={[styles.modalTitle, { color: t.colors.text }]}>{editor?.title}</Text>
@@ -319,7 +371,7 @@ export default function AccountScreen() {
               accessibilityLabel={editor?.title ?? 'Value'}
               placeholder={editor?.placeholder}
               value={draft}
-              onChangeText={setDraft}
+              onChangeText={handleDraftChange}
               autoFocus
               autoCapitalize={editor?.autoCapitalize ?? 'sentences'}
               autoCorrect={false}
@@ -335,12 +387,12 @@ export default function AccountScreen() {
                 accessibilityLabel="Cancel"
                 label="Cancel"
                 variant="secondary"
-                onPress={() => setEditor(null)}
+                onPress={cancelEditor}
                 style={styles.modalButton}
               />
               <PrimaryButton
                 accessibilityLabel={`Save ${editor?.title ?? ''}`}
-                label="Save"
+                label="Done"
                 disabled={(editor?.requireValue ? !draft.trim() : false) || !!draftError}
                 onPress={commitEditor}
                 style={styles.modalButton}

@@ -4,8 +4,7 @@
  *
  * Tapping the circle opens a native action sheet — never a preset-only list:
  *   • Upload from Library / Take Photo  (gated until the image picker ships)
- *   • Search Symbol   — full Mulberry search
- *   • Choose Symbol   — quick bundled set
+ *   • Search Symbol   — full Mulberry search (no bundled quick-sets)
  *   • Choose Colour   — full colour wheel (any colour)
  *   • Use TapTalk Avatar
  *   • Remove Current Picture
@@ -34,13 +33,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { AvatarView } from '../../features/profile/AvatarView';
 import {
   AVATAR_MASCOT_VALUE,
-  AVATAR_SYMBOLS,
   encodeColor,
   encodeSymbol,
   hasCustomAvatar,
   parseAvatar,
 } from '../../features/profile/avatar';
-import { MulberrySymbol } from '../symbols/MulberrySymbol';
 import { SymbolSuggestionRow } from '../aac/symbols/SymbolSuggestionRow';
 import { ColorPickerSheet } from './ColorPickerSheet';
 import { pickFromLibrary, takePhoto, type PickOutcome } from '../../features/profile/pickImage';
@@ -63,7 +60,6 @@ interface PicturePickerProps {
 export function PicturePicker({ value, initial, onChange, size = 112, label }: PicturePickerProps) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
-  const [symbolGrid, setSymbolGrid] = useState(false);
   const [symbolSearch, setSymbolSearch] = useState(false);
   const [colorSheet, setColorSheet] = useState(false);
   const [query, setQuery] = useState('');
@@ -110,7 +106,6 @@ export function PicturePicker({ value, initial, onChange, size = 112, label }: P
       'Upload from Library',
       'Take Photo',
       'Search Symbol',
-      'Choose Symbol',
       'Choose Colour',
       'Use TapTalk Avatar',
       ...(hasPicture ? ['Remove Current Picture'] : []),
@@ -130,9 +125,6 @@ export function PicturePicker({ value, initial, onChange, size = 112, label }: P
         case 'Search Symbol':
           setQuery('');
           setSymbolSearch(true);
-          break;
-        case 'Choose Symbol':
-          setSymbolGrid(true);
           break;
         case 'Choose Colour':
           setColorSheet(true);
@@ -190,45 +182,6 @@ export function PicturePicker({ value, initial, onChange, size = 112, label }: P
       <Pressable accessibilityRole="button" accessibilityLabel={label ?? 'Pick A Picture'} onPress={openSheet} hitSlop={8}>
         <Text style={[styles.label, { color: t.colors.primary }]}>{label ?? 'Pick A Picture'}</Text>
       </Pressable>
-
-      {/* Choose Symbol grid */}
-      <Modal
-        visible={symbolGrid}
-        animationType={reduceMotion ? 'fade' : 'slide'}
-        presentationStyle="formSheet"
-        onRequestClose={() => setSymbolGrid(false)}
-      >
-        <View style={[styles.sheet, { backgroundColor: t.colors.background }]}>
-          <SheetHeader title="Choose Symbol" onClose={() => setSymbolGrid(false)} />
-          <View style={styles.grid}>
-            {AVATAR_SYMBOLS.map((s) => {
-              const on = avatar.kind === 'symbol' && avatar.symbolId === s.symbolId;
-              return (
-                <Pressable
-                  key={s.symbolId}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Use ${s.name} symbol`}
-                  accessibilityState={{ selected: on }}
-                  onPress={() => {
-                    hapticSuccess();
-                    onChange(encodeSymbol(s.symbolId));
-                    setSymbolGrid(false);
-                  }}
-                  style={({ pressed }) => [
-                    styles.cell,
-                    { backgroundColor: pressed || on ? t.colors.selectionBg : t.colors.input },
-                  ]}
-                >
-                  <MulberrySymbol symbolId={s.symbolId} size={44} />
-                  <Text style={[styles.cellLabel, { color: t.colors.text }]} numberOfLines={1}>
-                    {s.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      </Modal>
 
       {/* Search Symbol */}
       <Modal
@@ -334,24 +287,6 @@ const styles = StyleSheet.create({
   sheetCancelText: { fontFamily: fonts.displayBold, fontSize: typography.body },
   sheetTitle: { fontFamily: fonts.displayHeavy, fontSize: typography.heading },
   sheetSpacer: { minWidth: 60 },
-
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-  },
-  cell: {
-    width: 80,
-    minHeight: 84,
-    borderRadius: radii.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.sm,
-    gap: spacing.xs,
-  },
-  cellLabel: { fontFamily: fonts.body, fontSize: typography.caption, maxWidth: 70, textAlign: 'center' },
 
   searchBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.md },
   searchInput: {
