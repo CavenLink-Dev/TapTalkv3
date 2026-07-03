@@ -23,6 +23,7 @@ import { radii, spacing, typography } from '../../theme/tokens';
 import { fonts } from '../../theme/fonts';
 import { hapticSelection } from '../../utils/haptics';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
+import { ColorPickerSheet } from '../native/ColorPickerSheet';
 
 export interface AddFolderResult {
   label: string;
@@ -67,6 +68,7 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
   const [label, setLabel] = useState('');
   const [iconId, setIconId] = useState<string | null>(null);
   const [color, setColor] = useState<string>(DEFAULT_COLOR);
+  const [colorSheet, setColorSheet] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -99,6 +101,7 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
   }, [color, iconId, label, onAdd]);
 
   const selectedColorName = FOLDER_COLORS.find(c => c.color === color)?.name ?? 'custom';
+  const isCustomColor = !FOLDER_COLORS.some(c => c.color === color);
 
   return (
     <Modal
@@ -233,6 +236,34 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
                   </Pressable>
                 );
               })}
+              {/* Custom — full colour wheel (any colour, no preset limit) */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Custom colour"
+                accessibilityHint="Opens a colour wheel to pick any colour"
+                accessibilityState={{ selected: isCustomColor }}
+                onPress={() => {
+                  hapticSelection();
+                  setColorSheet(true);
+                }}
+                hitSlop={6}
+                style={styles.swatchHit}
+              >
+                <View
+                  style={[
+                    styles.swatch,
+                    isCustomColor
+                      ? { backgroundColor: color }
+                      : { backgroundColor: t.colors.inputBg, borderWidth: 1.5, borderColor: t.colors.border },
+                  ]}
+                >
+                  {isCustomColor ? (
+                    <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                  ) : (
+                    <Ionicons name="color-palette-outline" size={20} color={t.colors.primary} />
+                  )}
+                </View>
+              </Pressable>
             </View>
           </View>
 
@@ -244,6 +275,18 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ColorPickerSheet
+        visible={colorSheet}
+        initialColor={color}
+        title="Folder Colour"
+        reduceMotion={reduceMotion}
+        onCancel={() => setColorSheet(false)}
+        onDone={(hex) => {
+          handleSelectColor(hex);
+          setColorSheet(false);
+        }}
+      />
     </Modal>
   );
 }

@@ -52,6 +52,13 @@ export function Icon({ name, size = 24, color, strokeWidth = 2 }: IconProps) {
           <Polyline points="15,18 9,12 15,6" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       );
+    case 'chevron-back-double':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Polyline points="17,18 11,12 17,6" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <Polyline points="12,18 6,12 12,6" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      );
     case 'add':
     case 'plus':
       return (

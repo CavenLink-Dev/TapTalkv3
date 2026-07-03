@@ -21,7 +21,14 @@
       ],
       "expo-audio",
       "expo-asset",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TapTalk uses your photos only when you choose one for your profile picture.",
+          "cameraPermission": "TapTalk uses the camera only when you choose to take a profile picture."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false

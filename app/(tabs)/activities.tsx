@@ -77,7 +77,7 @@ const ACTIVITIES: Activity[] = [
   },
 ];
 
-const CARD_HEIGHT = 214;
+const CARD_HEIGHT = 176;
 const HERO_HEIGHT = 112;
 const CARD_GAP    = spacing.xxl;
 
@@ -405,7 +405,7 @@ function ActivityCard({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={onPress}
-        style={[styles.card, { backgroundColor: t.colors.surface }]}
+        style={[styles.card, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}
       >
         {/* Hero image band */}
         <View style={[styles.cardHero, { backgroundColor: heroBackground }]}>
@@ -433,6 +433,36 @@ function ActivityCard({
           ) : null}
         </View>
 
+        {/* Favourite star — top-left overlay over the hero (Rule 10) */}
+        <Pressable
+          onPress={event => {
+            event.stopPropagation();
+            hapticLight();
+            onToggleStar();
+          }}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={
+            favourite
+              ? `Remove ${activity.title} from favourites`
+              : `Add ${activity.title} to favourites`
+          }
+          accessibilityState={{ selected: favourite }}
+          style={[styles.starOverlay, { backgroundColor: t.colors.surface }]}
+        >
+          <Animated.View
+            style={[styles.starGlow, { opacity: starGlowOpacity, transform: [{ scale: starGlowScale }] }]}
+          />
+          <Animated.View style={{ transform: [{ scale: starScale }] }}>
+            <Ionicons
+              name={favourite ? 'star' : 'star-outline'}
+              size={22}
+              color={favourite ? '#F5B400' : t.colors.textTertiary}
+            />
+          </Animated.View>
+          <StarParticles trigger={particleTrigger} />
+        </Pressable>
+
         <View
           style={[
             styles.cardBody,
@@ -448,40 +478,7 @@ function ActivityCard({
             </View>
 
             <View style={styles.actions}>
-              {/* Star — favourites */}
-              <Pressable
-                onPress={event => {
-                  event.stopPropagation();
-                  hapticLight();
-                  onToggleStar();
-                }}
-                hitSlop={12}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  favourite
-                    ? `Remove ${activity.title} from favourites`
-                    : `Add ${activity.title} to favourites`
-                }
-                accessibilityState={{ selected: favourite }}
-                style={[styles.iconButton, styles.starButton]}
-              >
-                <Animated.View
-                  style={[
-                    styles.starGlow,
-                    { opacity: starGlowOpacity, transform: [{ scale: starGlowScale }] },
-                  ]}
-                />
-                <Animated.View style={{ transform: [{ scale: starScale }] }}>
-                  <Ionicons
-                    name={favourite ? 'star' : 'star-outline'}
-                    size={22}
-                    color={favourite ? '#F5B400' : t.colors.textTertiary}
-                  />
-                </Animated.View>
-                <StarParticles trigger={particleTrigger} />
-              </Pressable>
-
-              {/* Play button */}
+              {/* Play button — 2× glyph, optically centred */}
               <Pressable
                 onPress={event => {
                   event.stopPropagation();
@@ -499,7 +496,7 @@ function ActivityCard({
               >
                 <Ionicons
                   name="play"
-                  size={15}
+                  size={30}
                   color={t.colors.textOnDark}
                   style={styles.playIcon}
                 />
@@ -672,9 +669,21 @@ const styles = StyleSheet.create({
 
   card: {
     height:          CARD_HEIGHT,
-
     borderRadius:    radii.card,
+    borderWidth:     1,
+    borderColor:     'transparent', // set to token border inline for separation
     overflow:        'hidden'},
+
+  starOverlay: {
+    position:       'absolute',
+    top:            spacing.sm,
+    left:           spacing.sm,
+    width:          40,
+    height:         40,
+    borderRadius:   20,
+    alignItems:     'center',
+    justifyContent: 'center',
+    zIndex:         5},
 
   cardHero: {
     height:               HERO_HEIGHT,
@@ -746,12 +755,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF0B3'},
 
   playButton: {
-    width:          38,
-    height:         38,
-    borderRadius:   10,
+    width:          44,
+    height:         44,
+    borderRadius:   12,
     alignItems:     'center',
     justifyContent: 'center'},
 
+  // Play triangles read left-heavy; a small optical nudge centres them.
   playIcon: {
-    marginLeft: 2},
+    marginLeft: 3},
 });

@@ -657,9 +657,9 @@ const BoardDockAction = React.memo(function BoardDockAction({
                 : styles.dockActionLabel,
               { color: contentColor },
             ]}
-            numberOfLines={2}
+            numberOfLines={1}
             adjustsFontSizeToFit
-            minimumFontScale={0.65}
+            minimumFontScale={0.6}
           >
             {label}
           </Text>
@@ -3687,7 +3687,7 @@ export default function TalkScreen() {
               ) : dockMode === 'addExpanded' ? (
                 <>
                   <BoardDockAction
-                    icon="chevron-back" label="Back"
+                    icon="chevron-back-double" label="Back"
                     a11yLabel="Back" a11yHint="Close add options"
                     onPress={handleAddFlowClose} kind="neutral"
                   />
@@ -3711,7 +3711,7 @@ export default function TalkScreen() {
               ) : dockMode === 'folderExpanded' ? (
                 <>
                   <BoardDockAction
-                    icon="chevron-back" label="Back"
+                    icon="chevron-back-double" label="Back"
                     a11yLabel="Back"
                     a11yHint="Go back one board"
                     onPress={handleDockBack} kind="neutral"
@@ -3996,7 +3996,8 @@ const styles = StyleSheet.create({
     top: 0,
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
-    borderWidth: 1.5,
+    // Folder outline intentionally 20% lighter than word tiles (1.5 → 1.2).
+    borderWidth: 1.2,
     borderBottomWidth: 0,
   },
   folderFace: {
@@ -4005,7 +4006,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderRadius: 10,
-    borderWidth: 1.5,
+    borderWidth: 1.2,
   },
   folderLabel: {
     position: 'absolute',

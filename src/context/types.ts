@@ -38,6 +38,10 @@ export interface AppState {
   user: {
     legalName: string;
     displayName: string;
+    /** Handle-style username: 8+ chars, letters/numbers only. Optional. */
+    username: string;
+    /** Optional contact phone. Stored on-device only. */
+    phone: string;
     email: string;
     name: string;
     nickname: string;

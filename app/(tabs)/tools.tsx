@@ -90,7 +90,7 @@ const TOOLS: Tool[] = [
 
 const TOOL_BY_ID = new Map<ToolId, Tool>(TOOLS.map(t => [t.id, t]));
 const CARD_GAP = spacing.xxl;
-const CARD_HEIGHT = 214;
+const CARD_HEIGHT = 176;
 
 // Six evenly-spaced angles for the star burst particles.
 const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300] as const;
@@ -514,7 +514,7 @@ function ToolCard({
           hapticSelection();
           onOpen();
         }}
-        style={[styles.card, { backgroundColor: t.colors.surface }]}
+        style={[styles.card, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}
       >
         {/* Hero image + shimmer */}
         <View style={[styles.cardHero, { backgroundColor: tool.accentBg }]}>
@@ -541,6 +541,34 @@ function ToolCard({
             </Animated.View>
           ) : null}
         </View>
+
+        {/* Favourite star — top-left overlay over the hero (Rule 10) */}
+        <Pressable
+          onPress={event => {
+            event.stopPropagation();
+            hapticLight();
+            onToggleStar();
+          }}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={
+            favourite ? `Remove ${tool.title} from favourites` : `Add ${tool.title} to favourites`
+          }
+          accessibilityState={{ selected: favourite }}
+          style={[styles.starOverlay, { backgroundColor: t.colors.surface }]}
+        >
+          <Animated.View
+            style={[styles.starGlow, { opacity: starGlowOpacity, transform: [{ scale: starGlowScale }] }]}
+          />
+          <Animated.View style={{ transform: [{ scale: starScale }] }}>
+            <Ionicons
+              name={favourite ? 'star' : 'star-outline'}
+              size={22}
+              color={favourite ? '#F5B400' : t.colors.textTertiary}
+            />
+          </Animated.View>
+          <StarParticles trigger={particleTrigger} />
+        </Pressable>
 
         {/* Card body */}
         <View style={styles.cardBody}>
@@ -579,42 +607,7 @@ function ToolCard({
             </View>
 
             <View style={styles.actions}>
-              <Pressable
-                onPress={event => {
-                  event.stopPropagation();
-                  hapticLight();
-                  onToggleStar();
-                }}
-                hitSlop={12}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  favourite
-                    ? `Remove ${tool.title} from favourites`
-                    : `Add ${tool.title} to favourites`
-                }
-                accessibilityState={{ selected: favourite }}
-                style={[styles.iconButton, styles.starButton]}
-              >
-                <Animated.View
-                  style={[
-                    styles.starGlow,
-                    {
-                      opacity: starGlowOpacity,
-                      transform: [{ scale: starGlowScale }],
-                    },
-                  ]}
-                />
-                <Animated.View style={{ transform: [{ scale: starScale }] }}>
-                  <Ionicons
-                    name={favourite ? 'star' : 'star-outline'}
-                    size={24}
-                    color={favourite ? '#F5B400' : t.colors.textTertiary}
-                  />
-                </Animated.View>
-                <StarParticles trigger={particleTrigger} />
-              </Pressable>
-
-              {/* Play button */}
+              {/* Play button — 2× glyph, optically centred */}
               <Pressable
                 onPress={event => {
                   event.stopPropagation();
@@ -632,7 +625,7 @@ function ToolCard({
               >
                 <Ionicons
                   name="play"
-                  size={15}
+                  size={30}
                   color="#fff"
                   style={styles.playIcon}
                 />
@@ -862,9 +855,20 @@ const styles = StyleSheet.create({
     gap: CARD_GAP},
   card: {
     height: CARD_HEIGHT,
-
     borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: 'transparent', // set to token border inline for separation
     overflow: 'hidden'},
+  starOverlay: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5},
   // overflow:hidden clips both the counter-zoomed hero and the shimmer stripe
   cardHero: {
     height: 112,
@@ -885,10 +889,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.30)',
     transform: [{ rotate: '18deg' }]},
   cardBody: {
-    padding: spacing.md,
-    gap: 4},
+    // Bottom content area trimmed: padding md (12) → sm (8), i.e. ÷1.5.
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    justifyContent: 'center'},
   cardContentRow: {
-    minHeight: 62,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm},
@@ -920,13 +926,14 @@ const styles = StyleSheet.create({
   starButton: {
     borderRadius: 22},
   playButton: {
-    width:          38,
-    height:         38,
-    borderRadius:   10,
+    width:          44,
+    height:         44,
+    borderRadius:   12,
     alignItems:     'center',
     justifyContent: 'center'},
+  // Play triangles read left-heavy; a small optical nudge centres them.
   playIcon: {
-    marginLeft: 2},
+    marginLeft: 3},
   // Golden halo — only visible (opacity > 0) when card is favourited
   starGlow: {
     position: 'absolute',

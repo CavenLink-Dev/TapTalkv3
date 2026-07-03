@@ -13,22 +13,32 @@
  *   About Us · Sign Out
  */
 
-import React, { useCallback, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   Alert,
-  Image,
+  Animated,
+  LayoutAnimation,
   Linking,
+  Platform,
   Pressable,
   Share,
   StyleSheet,
   Switch,
   Text,
+  UIManager,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
-import { HelperCaption } from '../../src/components/native/HelperCaption';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { Screen } from '../../src/components/native/Screen';
 import { TextField } from '../../src/components/native/TextField';
@@ -47,6 +57,31 @@ import { fonts } from '../../src/theme/fonts';
 const APP_VERSION = '0.1.0';
 const SUPPORT_EMAIL = 'hello@taptalk.app';
 
+// Section headers, in render order — used for persistence + Expand/Collapse all.
+const GROUP_KEYS = [
+  'Quick Setup',
+  'User Profile',
+  'User Settings',
+  'Accessibility Controls',
+  'Privacy',
+  'Device & Access',
+  'Your Data',
+  'Security',
+  'Guide',
+  'Help',
+  'Legal',
+  'About Us',
+] as const;
+
+// Default: the two most-used sections open, everything else collapsed so the
+// page is short to scroll. The user's choices persist and override this.
+const DEFAULT_GROUP_OPEN: Record<string, boolean> = {
+  'User Profile': true,
+  'User Settings': true,
+};
+
+const GROUPS_STORAGE_KEY = '@taptalk/profile/groups/v1';
+
 const accountRoute = '/settings/account' as Href;
 const voiceRoute = '/settings/voice' as Href;
 const displayRoute = '/settings/display' as Href;
@@ -57,10 +92,9 @@ const privacyPolicyRoute = '/legal/privacy-policy' as Href;
 const dataChoicesRoute = '/legal/data-choices' as Href;
 const termsRoute = '/legal/terms-of-use' as Href;
 const medicalDisclaimerRoute = '/legal/medical-disclaimer' as Href;
+const beliefsRoute = '/legal/beliefs' as Href;
 const tourRoute = '/onboarding/tour' as Href;
 const splashRoute = '/onboarding/splash' as Href;
-
-const MASCOT_HAPPY = require('../../assets/mascot_library/png_mascot/mascot_happy_looking_up.png');
 
 const USER_TYPE_LABELS: Record<string, string> = {
   myself: 'AAC user',
@@ -134,27 +168,73 @@ const ACCESS_PRESETS: { id: string; label: string; icon: IoniconName; patch: Acc
   },
 ];
 
-// ── Group (eyebrow label + flat card) ────────────────────────────────────────
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// ── Collapsible group (iOS-style disclosure header + flat card) ───────────────
+// Each section header toggles its card open/closed. The chevron points right
+// when collapsed and rotates down when expanded. Open/closed state is shared
+// via context so the screen can persist it and offer Expand / Collapse all.
+
+interface GroupsContextValue {
+  isOpen: (key: string) => boolean;
+  toggle: (key: string) => void;
+  reduceMotion: boolean;
+}
+
+const GroupsContext = createContext<GroupsContextValue>({
+  isOpen: () => true,
+  toggle: () => undefined,
+  reduceMotion: false,
+});
 
 function Group({
   label,
   children,
   last,
+  bare,
 }: {
   label: string;
   children: React.ReactNode;
   last?: boolean;
+  /** Render children without the inner Card (caller supplies its own). */
+  bare?: boolean;
 }) {
   const t = useTheme();
+  const { isOpen, toggle, reduceMotion } = useContext(GroupsContext);
+  const expanded = isOpen(label);
+  const chevron = useRef(new Animated.Value(expanded ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(chevron, {
+      toValue: expanded ? 1 : 0,
+      duration: reduceMotion ? 0 : 180,
+      useNativeDriver: true,
+    }).start();
+  }, [expanded, reduceMotion, chevron]);
+
+  const rotate = chevron.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] });
+
   return (
-    <View style={[styles.group, last && styles.groupLast]}>
-      <Text
-        style={[styles.groupLabel, { color: t.colors.textTertiary }]}
-        accessibilityRole="header"
+    <View style={[styles.group, last && expanded && styles.groupLast]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ expanded }}
+        accessibilityHint={expanded ? `Collapses the ${label} section` : `Expands the ${label} section`}
+        onPress={() => toggle(label)}
+        style={({ pressed }) => [styles.groupHeader, pressed && { opacity: 0.6 }]}
+        hitSlop={{ top: 6, bottom: 6 }}
       >
-        {label.toUpperCase()}
-      </Text>
-      <Card style={styles.groupCard}>{children}</Card>
+        <Text style={[styles.groupLabel, { color: t.colors.textTertiary }]}>{label.toUpperCase()}</Text>
+        <Animated.View style={{ transform: [{ rotate }] }}>
+          <Ionicons name="chevron-forward" size={15} color={t.colors.textTertiary} />
+        </Animated.View>
+      </Pressable>
+      {expanded ? (
+        bare ? <View>{children}</View> : <Card style={styles.groupCard}>{children}</Card>
+      ) : null}
     </View>
   );
 }
@@ -303,6 +383,63 @@ export default function MeScreen() {
   const [pinError, setPinError] = useState('');
   const [showPin, setShowPin] = useState(false);
 
+  // ── Collapsible section state (persisted so the user's layout sticks) ──
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>(DEFAULT_GROUP_OPEN);
+  useEffect(() => {
+    AsyncStorage.getItem(GROUPS_STORAGE_KEY)
+      .then((raw) => {
+        if (raw) setOpenMap((prev) => ({ ...prev, ...JSON.parse(raw) }));
+      })
+      .catch(() => {});
+  }, []);
+
+  const persistOpen = useCallback((next: Record<string, boolean>) => {
+    AsyncStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+  }, []);
+
+  const animateGroups = useCallback(() => {
+    if (reduceMotion) return;
+    LayoutAnimation.configureNext({
+      duration: 200,
+      create: { type: 'easeInEaseOut', property: 'opacity' },
+      update: { type: 'easeInEaseOut' },
+      delete: { type: 'easeInEaseOut', property: 'opacity' },
+    });
+  }, [reduceMotion]);
+
+  const isGroupOpen = useCallback((key: string) => openMap[key] ?? false, [openMap]);
+
+  const toggleGroup = useCallback(
+    (key: string) => {
+      hapticSelection();
+      animateGroups();
+      setOpenMap((prev) => {
+        const next = { ...prev, [key]: !(prev[key] ?? false) };
+        persistOpen(next);
+        return next;
+      });
+    },
+    [animateGroups, persistOpen],
+  );
+
+  const allOpen = GROUP_KEYS.every((k) => openMap[k]);
+  const setAllGroups = useCallback(
+    (value: boolean) => {
+      hapticSelection();
+      animateGroups();
+      const next: Record<string, boolean> = {};
+      for (const k of GROUP_KEYS) next[k] = value;
+      setOpenMap(next);
+      persistOpen(next);
+    },
+    [animateGroups, persistOpen],
+  );
+
+  const groupsValue = React.useMemo(
+    () => ({ isOpen: isGroupOpen, toggle: toggleGroup, reduceMotion }),
+    [isGroupOpen, toggleGroup, reduceMotion],
+  );
+
   const name = state.user.displayName || state.user.nickname || state.user.name || 'Guest';
   const initial = name.charAt(0).toUpperCase() || '?';
   const userType = state.user.role ? USER_TYPE_LABELS[state.user.role] ?? 'Other' : 'Not set';
@@ -438,6 +575,15 @@ export default function MeScreen() {
     });
   }, []);
 
+  const sendFeedback = useCallback(() => {
+    hapticSelection();
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('TapTalk Feedback')}`).catch(() => {
+      Alert.alert('Send Feedback', `Email your feedback to ${SUPPORT_EMAIL}.`, [
+        { text: 'OK', style: 'cancel' },
+      ]);
+    });
+  }, []);
+
   const deleteProfileData = useCallback(() => {
     Alert.alert(
       'Delete profile data?',
@@ -477,6 +623,7 @@ export default function MeScreen() {
   }, [dispatch, router]);
 
   return (
+    <GroupsContext.Provider value={groupsValue}>
     <Screen
       title="Profile"
       subtitle="Your voice, access, and app controls."
@@ -538,6 +685,24 @@ export default function MeScreen() {
         </Pressable>
       </Card>
 
+      {/* Expand / Collapse all sections */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={allOpen ? 'Collapse all sections' : 'Expand all sections'}
+        onPress={() => setAllGroups(!allOpen)}
+        hitSlop={8}
+        style={({ pressed }) => [styles.expandAll, pressed && { opacity: 0.6 }]}
+      >
+        <Ionicons
+          name={allOpen ? 'contract-outline' : 'expand-outline'}
+          size={15}
+          color={t.colors.primary}
+        />
+        <Text style={[styles.expandAllText, { color: t.colors.primary }]}>
+          {allOpen ? 'Collapse all' : 'Expand all'}
+        </Text>
+      </Pressable>
+
       {/* ── User Profile ── */}
       <Group label="User Profile">
         <Row
@@ -570,8 +735,8 @@ export default function MeScreen() {
         />
         <Row
           icon="grid-outline"
-          iconColor={t.colors.iconTintGreen}
-          iconBg={t.colors.iconTintGreenBg}
+          iconColor={t.colors.iconTintBlue}
+          iconBg={t.colors.iconTintBlueBg}
           label="Board Appearance"
           hint="Change how the AAC board looks"
           onPress={() => router.push(displayRoute)}
@@ -633,10 +798,7 @@ export default function MeScreen() {
       </Group>
 
       {/* ── Quick Setup presets ── */}
-      <View style={styles.group}>
-        <Text style={[styles.groupLabel, { color: t.colors.textTertiary }]} accessibilityRole="header">
-          QUICK SETUP
-        </Text>
+      <Group label="Quick Setup" bare>
         <Card style={styles.presetCard}>
           <Text style={[styles.presetIntro, { color: t.colors.textMuted }]}>
             A one-tap starting point. You can still adjust anything below.
@@ -666,7 +828,7 @@ export default function MeScreen() {
             ))}
           </View>
         </Card>
-      </View>
+      </Group>
 
       {/* ── Accessibility Controls ── */}
       <Group label="Accessibility Controls">
@@ -929,7 +1091,12 @@ export default function MeScreen() {
           label="Replay the Tour"
           hint="Walk through Talk, Activity, Tools, and Profile again"
           onPress={() => router.push(tourRoute)}
+          showDivider={false}
         />
+      </Group>
+
+      {/* ── Help ── */}
+      <Group label="Help">
         <Row
           icon="mail-outline"
           iconColor={t.colors.iconTintBlue}
@@ -937,6 +1104,14 @@ export default function MeScreen() {
           label="Contact Support"
           hint="Email the developer for help or privacy questions"
           onPress={contactSupport}
+        />
+        <Row
+          icon="chatbox-ellipses-outline"
+          iconColor={t.colors.iconTintPurple}
+          iconBg={t.colors.iconTintPurpleBg}
+          label="Send Feedback"
+          hint="Tell us what would make TapTalk better"
+          onPress={sendFeedback}
           showDivider={false}
         />
       </Group>
@@ -972,31 +1147,15 @@ export default function MeScreen() {
 
       {/* ── About Us ── */}
       <Group label="About Us" last>
-        <View style={styles.aboutHeader}>
-          <Image
-            source={MASCOT_HAPPY}
-            style={styles.aboutMascot}
-            resizeMode="contain"
-            accessibilityIgnoresInvertColors
-            accessibilityElementsHidden
-            importantForAccessibility="no"
-          />
-          <Text style={[styles.aboutCopy, { color: t.colors.textMuted }]}>
-            TapTalk is an AAC app that helps everyone build and speak messages with symbols,
-            routines, and calm tools — built with care in Adelaide, South Australia.
-          </Text>
-        </View>
-        <Row icon="information-circle-outline" label="App Version" value={APP_VERSION} info />
         <Row
           icon="heart-outline"
-          iconColor={t.colors.danger}
-          iconBg={t.colors.iconTintDangerBg}
-          label="Contact Support"
-          hint="Email the developer for help or feedback"
-          onPress={contactSupport}
-          showDivider={false}
+          iconColor={t.colors.iconTintBlue}
+          iconBg={t.colors.iconTintBlueBg}
+          label="Our Beliefs"
+          hint="What TapTalk stands for and who built it"
+          onPress={() => router.push(beliefsRoute)}
         />
-        <HelperCaption style={styles.aboutCaption}>© 2026 TapTalk. All rights reserved.</HelperCaption>
+        <Row icon="information-circle-outline" label="App Version" value={APP_VERSION} info showDivider={false} />
       </Group>
 
       {/* ── Sign Out ── */}
@@ -1009,9 +1168,54 @@ export default function MeScreen() {
           variant="danger"
           style={styles.signOutButton}
         />
-        <HelperCaption>Only sign out if you are finished using TapTalk on this device.</HelperCaption>
+        <View style={styles.legalBar}>
+          <Text style={[styles.legalCaption, { color: t.colors.textTertiary }]}>
+            Only sign out when you are finished on this device.
+          </Text>
+          <View style={styles.legalLinks}>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="Privacy Policy"
+              onPress={() => {
+                hapticSelection();
+                router.push(privacyPolicyRoute);
+              }}
+              hitSlop={10}
+            >
+              <Text style={[styles.legalLink, { color: t.colors.primary }]}>Privacy Policy</Text>
+            </Pressable>
+            <Text style={[styles.legalCaption, { color: t.colors.textTertiary }]}>·</Text>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="Terms of Use"
+              onPress={() => {
+                hapticSelection();
+                router.push(termsRoute);
+              }}
+              hitSlop={10}
+            >
+              <Text style={[styles.legalLink, { color: t.colors.primary }]}>Terms of Use</Text>
+            </Pressable>
+            <Text style={[styles.legalCaption, { color: t.colors.textTertiary }]}>·</Text>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="Data choices"
+              onPress={() => {
+                hapticSelection();
+                router.push(dataChoicesRoute);
+              }}
+              hitSlop={10}
+            >
+              <Text style={[styles.legalLink, { color: t.colors.primary }]}>Data Choices</Text>
+            </Pressable>
+          </View>
+          <Text style={[styles.legalCaption, { color: t.colors.textTertiary }]}>
+            © 2026 TapTalk · Adelaide, South Australia
+          </Text>
+        </View>
       </View>
     </Screen>
+    </GroupsContext.Provider>
   );
 }
 
@@ -1057,21 +1261,41 @@ const styles = StyleSheet.create({
 
   // ── Group ──
   group: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   groupLast: {
     marginBottom: spacing.lg,
+  },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 34,
+    paddingTop: 5,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   groupLabel: {
     fontFamily: fonts.bodyHeavy,
     fontSize: typography.eyebrow,
     letterSpacing: 0.8,
-    marginBottom: spacing.sm,
-    marginLeft: spacing.xs,
   },
   groupCard: {
     padding: 0,
     overflow: 'hidden',
+  },
+  expandAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: spacing.xs,
+    minHeight: 36,
+    paddingHorizontal: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  expandAllText: {
+    fontFamily: fonts.displayBold,
+    fontSize: typography.caption,
   },
 
   // ── Quick Setup presets ──
@@ -1135,28 +1359,31 @@ const styles = StyleSheet.create({
     marginLeft: 32 + spacing.md + spacing.md,
   },
 
-  // ── About ──
-  aboutHeader: {
+  // ── Legal bar (tiny caption text, width matches the Sign Out button) ──
+  legalBar: {
+    width: 240,
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  legalCaption: {
+    fontFamily: fonts.body,
+    fontSize: 10,
+    lineHeight: 14,
+    textAlign: 'center',
+  },
+  legalLinks: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
-  aboutMascot: {
-    width: 56,
-    height: 56,
-  },
-  aboutCopy: {
-    flex: 1,
+  legalLink: {
     fontFamily: fonts.body,
-    fontSize: typography.caption,
-    lineHeight: 19,
-  },
-  aboutCaption: {
-    marginTop: spacing.sm,
-    paddingBottom: spacing.md,
+    fontSize: 10,
+    lineHeight: 14,
+    textDecorationLine: 'underline',
   },
 
   // ── PIN prompt ──

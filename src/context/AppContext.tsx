@@ -44,6 +44,8 @@ export const initialState: AppState = {
   user: {
     legalName: '',
     displayName: '',
+    username: '',
+    phone: '',
     email: '',
     name: '',
     nickname: '',
