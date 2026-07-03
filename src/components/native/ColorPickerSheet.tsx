@@ -54,7 +54,7 @@ export function ColorPickerSheet({
               onCancel();
             }}
             hitSlop={12}
-            style={styles.headerBtn}
+            style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
           >
             <Text style={[styles.cancel, { color: t.colors.textMuted }]}>Cancel</Text>
           </Pressable>
@@ -67,7 +67,7 @@ export function ColorPickerSheet({
               onDone(draft);
             }}
             hitSlop={12}
-            style={styles.headerBtn}
+            style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
           >
             <Text style={[styles.done, { color: t.colors.primary }]}>Done</Text>
           </Pressable>

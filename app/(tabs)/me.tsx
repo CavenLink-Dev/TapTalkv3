@@ -16,14 +16,11 @@
 import React, {
   createContext,
   useCallback,
-  useContext,
   useEffect,
-  useRef,
   useState,
 } from 'react';
 import {
   Alert,
-  Animated,
   LayoutAnimation,
   Linking,
   Platform,
@@ -175,6 +172,9 @@ const GroupsContext = createContext<GroupsContextValue>({
   reduceMotion: false,
 });
 
+// Flat iOS-Settings section: a small grouped-list title sitting ~5pt above an
+// always-visible card of rows. No collapsing — every section is open so the
+// page reads like the iOS Settings app (scan, don't expand).
 function Group({
   label,
   children,
@@ -188,43 +188,15 @@ function Group({
   bare?: boolean;
 }) {
   const t = useTheme();
-  const { isOpen, toggle, reduceMotion } = useContext(GroupsContext);
-  const expanded = isOpen(label);
-  const chevron = useRef(new Animated.Value(expanded ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.timing(chevron, {
-      toValue: expanded ? 1 : 0,
-      duration: reduceMotion ? 0 : 180,
-      useNativeDriver: true,
-    }).start();
-  }, [expanded, reduceMotion, chevron]);
-
-  const rotate = chevron.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] });
-
   return (
-    <View style={[styles.group, last && expanded && styles.groupLast]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        accessibilityState={{ expanded }}
-        accessibilityHint={expanded ? `Collapses the ${label} section` : `Expands the ${label} section`}
-        onPress={() => toggle(label)}
-        style={({ pressed }) => [
-          styles.groupHeader,
-          { backgroundColor: t.colors.surface },
-          expanded && styles.groupHeaderExpanded,
-          pressed && { opacity: 0.6 },
-        ]}
+    <View style={[styles.group, last && styles.groupLast]}>
+      <Text
+        accessibilityRole="header"
+        style={[styles.groupTitle, { color: t.colors.textTertiary }]}
       >
-        <Text style={[styles.groupLabel, { color: t.colors.textMuted }]}>{label.toUpperCase()}</Text>
-        <Animated.View style={{ transform: [{ rotate }] }}>
-          <Ionicons name="chevron-forward" size={15} color={t.colors.textTertiary} />
-        </Animated.View>
-      </Pressable>
-      {expanded ? (
-        bare ? <View>{children}</View> : <Card style={styles.groupCard}>{children}</Card>
-      ) : null}
+        {label.toUpperCase()}
+      </Text>
+      {bare ? <View>{children}</View> : <Card style={styles.groupCard}>{children}</Card>}
     </View>
   );
 }
@@ -1225,34 +1197,17 @@ const styles = StyleSheet.create({
   groupLast: {
     marginBottom: spacing.lg,
   },
-  groupHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 48,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
-  },
-  // When the section is open, square off the bottom corners so the header
-  // reads as one piece with the card beneath it.
-  groupHeaderExpanded: {
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    borderRadius: radii.card,
-    borderTopLeftRadius: radii.card,
-    borderTopRightRadius: radii.card,
-  },
-  groupLabel: {
+  // iOS grouped-list section title: quiet uppercase caption ~5pt above the card.
+  groupTitle: {
     fontFamily: fonts.bodyHeavy,
     fontSize: typography.eyebrow,
     letterSpacing: 0.8,
+    marginBottom: 5,
+    marginLeft: spacing.md,
   },
   groupCard: {
     padding: 0,
     overflow: 'hidden',
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
   },
   // ── Quick Setup presets ──
   presetCard: {

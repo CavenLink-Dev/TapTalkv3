@@ -397,6 +397,14 @@ function ActivityCard({
       style={{
         opacity:   mountProgress,
         transform: [{ translateY: mountTranslateY }, { scale: pressScale }],
+        // Subtle, tight shadow so each card lifts off the page without
+        // spreading far (Rule: soft separation, not a heavy drop shadow).
+        borderRadius:  radii.card,
+        shadowColor:   '#000',
+        shadowOffset:  { width: 0, height: 3 },
+        shadowOpacity: 0.10,
+        shadowRadius:  7,
+        elevation:     3,
       }}
     >
       <Pressable
@@ -496,7 +504,7 @@ function ActivityCard({
               >
                 <Ionicons
                   name="play"
-                  size={30}
+                  size={44}
                   color={t.colors.textOnDark}
                   style={styles.playIcon}
                 />
@@ -708,7 +716,9 @@ const styles = StyleSheet.create({
   cardBody: {
     flex:              1,
     paddingHorizontal: spacing.md,
-    paddingVertical:   spacing.sm,
+    // Bottom strip padding reduced ~1.5× (8 → 5) so the strip is shorter and
+    // the title/description/play read as one tight inline row.
+    paddingVertical:   5,
     justifyContent:    'center',
     borderTopWidth:    StyleSheet.hairlineWidth},
 
@@ -755,13 +765,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF0B3'},
 
   playButton: {
-    width:          44,
-    height:         44,
-    borderRadius:   12,
+    width:          64,
+    height:         64,
+    borderRadius:   18,
     alignItems:     'center',
     justifyContent: 'center'},
 
-  // Play triangles read left-heavy; a small optical nudge centres them.
+  // Play triangles read left-heavy; a small optical nudge centres them
+  // (scaled up with the larger 2× glyph).
   playIcon: {
-    marginLeft: 3},
+    marginLeft: 4},
 });

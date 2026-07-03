@@ -228,7 +228,7 @@ export default function AccountScreen() {
         >
           <Ionicons name="chevron-back" size={26} color={t.colors.primary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: t.colors.text }]}>Account</Text>
+        <Text accessibilityRole="header" style={[styles.headerTitle, { color: t.colors.text }]}>Account</Text>
         <View style={styles.headerSpacer} />
       </View>
 

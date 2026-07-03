@@ -72,7 +72,7 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
   }, []);
 
   const handleConfirm = useCallback(() => {
-    const trimmed = label.trim();
+    const trimmed = label.trim().replace(/\s+/g, ' ');
     if (!trimmed) return;
     hapticSelection();
     // Generate a unique board key from the label
@@ -95,7 +95,7 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
             accessibilityLabel="Cancel"
             onPress={onDismiss}
             hitSlop={12}
-            style={styles.headerButton}
+            style={({ pressed }) => [styles.headerButton, pressed && { opacity: 0.6 }]}
           >
             <ThemedText variant="body" color={t.colors.primary} style={styles.headerButtonText}>Cancel</ThemedText>
           </Pressable>
@@ -107,7 +107,7 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
             onPress={handleConfirm}
             disabled={!label.trim()}
             hitSlop={12}
-            style={styles.headerButton}
+            style={({ pressed }) => [styles.headerButton, pressed && { opacity: 0.6 }]}
           >
             <ThemedText
               variant="body"
@@ -155,6 +155,11 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
               accessibilityLabel="Folder name"
               maxLength={30}
             />
+            {label.trim().split(/\s+/).filter(Boolean).length > 2 ? (
+              <ThemedText variant="caption" color={t.colors.textMuted} style={styles.labelHint}>
+                Tip: short folder names read best on the board — one or two words.
+              </ThemedText>
+            ) : null}
           </View>
 
           {/* Icon — search the full symbol library (no bundled quick-set) */}
@@ -217,6 +222,9 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
               <View style={[styles.colorPreview, { backgroundColor: color, borderColor: t.colors.border }]} />
               <ThemedText variant="body" color={t.colors.text} style={styles.colorTriggerLabel}>
                 Change colour
+              </ThemedText>
+              <ThemedText variant="caption" color={t.colors.textMuted} style={styles.colorTriggerHex}>
+                {color.toUpperCase()}
               </ThemedText>
               <Ionicons name="color-palette-outline" size={22} color={t.colors.primary} />
             </Pressable>
@@ -404,6 +412,13 @@ const styles = StyleSheet.create({
   colorTriggerLabel: {
     flex: 1,
     fontFamily: fonts.displayBold,
+  },
+  colorTriggerHex: {
+    fontFamily: fonts.body,
+    marginRight: spacing.xs,
+  },
+  labelHint: {
+    marginTop: spacing.xs,
   },
   hint: {
     alignItems: 'center',

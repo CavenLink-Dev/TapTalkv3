@@ -13,6 +13,28 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { useTheme } from '../../theme/useTheme';
 
 const SETTING_BOARD_SOURCE = require('../../assets/icons/setting-board.png');
+const BOARD_SOURCE = require('../../assets/icons/board.png');
+
+/** Tinted raster dock glyph — same footprint as stroke icons at `size`. */
+function DockRasterIcon({
+  source,
+  size,
+  color,
+}: {
+  source: number;
+  size: number;
+  color: string;
+}) {
+  return (
+    <Image
+      source={source}
+      style={{ width: size, height: size, tintColor: color }}
+      resizeMode="contain"
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    />
+  );
+}
 
 // ─── Backspace (used inside the "Tap to speak" card) ─────────────────────────
 // Figma node 86:293 — viewBox 45×30, fill error_colour_red (#F3312A).
@@ -66,41 +88,17 @@ export function SaveButtonIcon({ size = 40 }: { size?: number }) {
   );
 }
 
-// ─── Board Back button (user-provided "Controls Previous" icon, greyed) ───────
+// ─── Back-out (double chevron) — src/assets/icons/back_out.svg ────────────────
 
-export function BoardBackIcon({ size = 36 }: { size?: number }) {
+const BACK_OUT_PATH =
+  'M17.707 5.293a1 1 0 0 1 0 1.414L12.414 12l5.293 5.293a1 1 0 0 1-1.414 1.414l-6-6a1 1 0 0 1 0-1.414l6-6a1 1 0 0 1 1.414 0zm-6 0a1 1 0 0 1 0 1.414L6.414 12l5.293 5.293a1 1 0 0 1-1.414 1.414l-6-6a1 1 0 0 1 0-1.414l6-6a1 1 0 0 1 1.414 0z';
+
+export function BackOutIcon({ size = 22, color }: { size?: number; color?: string }) {
+  const t = useTheme();
+  const fill = color ?? t.colors.text;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        fill="#9AA3AB"
-        d="M22.9998 20.8765c0.0001 0.1843 -0.0531 0.3647 -0.1532 0.5195 -0.0999 0.1548 -0.2425 0.2774 -0.4105 0.353 -0.1681 0.0757 -0.3544 0.1013 -0.5365 0.0736 -0.1822 -0.0277 -0.3526 -0.1074 -0.4905 -0.2297l-10.034 -8.8765c-0.1017 -0.0897 -0.1832 -0.2001 -0.2391 -0.3238 -0.0558 -0.1237 -0.0847 -0.2578 -0.0847 -0.3936 0 -0.1356 0.0289 -0.2698 0.0847 -0.3935 0.0559 -0.1237 0.1374 -0.2341 0.2391 -0.3239l10.034 -8.87647c0.1381 -0.12229 0.3086 -0.20204 0.4909 -0.22967 0.1824 -0.02762 0.3688 -0.00193 0.537 0.07398 0.168 0.07592 0.3106 0.19881 0.4105 0.35388 0.0999 0.15508 0.1528 0.33572 0.1523 0.52016V20.8765Z"
-      />
-      <Path
-        fill="#9AA3AB"
-        d="M5.78262 1h-3.8261C1.42825 1 1 1.42825 1 1.95652V22.0435c0 0.5283 0.42825 0.9565 0.95652 0.9565h3.8261c0.52826 0 0.95652 -0.4282 0.95652 -0.9565V1.95652C6.73914 1.42825 6.31088 1 5.78262 1Z"
-      />
-      <Path
-        fill="#BDC4CA"
-        d="M22.9997 3.12347V12H11.0528c-0.0011 -0.136 0.0275 -0.2706 0.0837 -0.3945 0.0561 -0.1239 0.1386 -0.2341 0.2415 -0.3229l10.0339 -8.87653c0.1381 -0.12132 0.3082 -0.20028 0.49 -0.22743 0.1819 -0.02714 0.3676 -0.00134 0.5351 0.07435 0.1676 0.07569 0.3097 0.19804 0.4095 0.35241 0.0998 0.15439 0.153 0.33424 0.1532 0.51807Z"
-      />
-      <Path
-        fill="#BDC4CA"
-        d="M6.73914 1.95652V12H1V1.95652c0 -0.25369 0.10078 -0.49698 0.28016 -0.67636C1.45954 1.10078 1.70283 1 1.95652 1h3.8261c0.25368 0 0.49698 0.10078 0.67636 0.28016 0.17938 0.17938 0.28016 0.42267 0.28016 0.67636Z"
-      />
-      <Path
-        stroke="#5A6370"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M22.9998 20.8765c0.0001 0.1843 -0.0531 0.3647 -0.1532 0.5195 -0.0999 0.1548 -0.2425 0.2774 -0.4105 0.353 -0.1681 0.0757 -0.3544 0.1013 -0.5365 0.0736 -0.1822 -0.0277 -0.3526 -0.1074 -0.4905 -0.2297l-10.034 -8.8765c-0.1017 -0.0897 -0.1832 -0.2001 -0.2391 -0.3238 -0.0558 -0.1237 -0.0847 -0.2578 -0.0847 -0.3936 0 -0.1356 0.0289 -0.2698 0.0847 -0.3935 0.0559 -0.1237 0.1374 -0.2341 0.2391 -0.3239l10.034 -8.87647c0.1381 -0.12229 0.3086 -0.20204 0.4909 -0.22967 0.1824 -0.02762 0.3688 -0.00193 0.537 0.07398 0.168 0.07592 0.3106 0.19881 0.4105 0.35388 0.0999 0.15508 0.1528 0.33572 0.1523 0.52016V20.8765Z"
-        strokeWidth={1}
-      />
-      <Path
-        stroke="#5A6370"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M5.78262 1h-3.8261C1.42825 1 1 1.42825 1 1.95652V22.0435c0 0.5283 0.42825 0.9565 0.95652 0.9565h3.8261c0.52826 0 0.95652 -0.4282 0.95652 -0.9565V1.95652C6.73914 1.42825 6.31088 1 5.78262 1Z"
-        strokeWidth={1}
-      />
+      <Path fill={fill} d={BACK_OUT_PATH} />
     </Svg>
   );
 }
@@ -110,24 +108,22 @@ export function BoardBackIcon({ size = 36 }: { size?: number }) {
 export function BoardSettingIcon({ size = 22, color }: { size?: number; color?: string }) {
   const t = useTheme();
   const tint = color ?? t.colors.text;
-  // Slight optical bump so the filled gear matches stroke icon footprint at the same `size`.
-  const renderSize = Math.round(size * 1.12);
-  return (
-    <Image
-      source={SETTING_BOARD_SOURCE}
-      style={{ width: renderSize, height: renderSize, tintColor: tint }}
-      resizeMode="contain"
-      accessibilityElementsHidden
-      importantForAccessibility="no"
-    />
-  );
+  return <DockRasterIcon source={SETTING_BOARD_SOURCE} size={size} color={tint} />;
+}
+
+// ─── Board dock button (user-provided gear, tinted to match dock stroke colour) ─
+
+export function BoardIcon({ size = 22, color }: { size?: number; color?: string }) {
+  const t = useTheme();
+  const tint = color ?? t.colors.text;
+  return <DockRasterIcon source={BOARD_SOURCE} size={size} color={tint} />;
 }
 
 // ─── Board Home button (simple house outline, greyed) ─────────────────────────
 
 export function BoardHomeIcon({ size = 36 }: { size?: number }) {
   // Viewbox tightened to the actual artwork bounds (3,3 → 21,21) so the
-  // glyph fills the rendered box edge-to-edge — matches BoardBackIcon's
+  // glyph fills the rendered box edge-to-edge — matches BackOutIcon's
   // optical weight at the same `size` prop.
   return (
     <Svg width={size} height={size} viewBox="2 2 20 20" fill="none">

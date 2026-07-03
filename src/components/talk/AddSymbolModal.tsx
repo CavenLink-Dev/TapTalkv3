@@ -4,7 +4,7 @@
  * Uses the existing `searchSymbols` service (no new data sources).
  *
  * Two-step flow (Rule 1 / Rule 5 — simple first, deeper detail on selection):
- *   Step 1 "find"      — search, category browse chips, recently added row,
+ *   Step 1 "find"      — search, Symbol Pack folder browse, recently added row,
  *                        data-driven category filters over results.
  *   Step 2 "customise" — live tile preview, label, word type → Fitzgerald
  *                        colour (Rule 9 picker, Rule 23 never colour alone).
@@ -25,8 +25,10 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { MulberrySymbol } from '../symbols/MulberrySymbol';
-import { searchSymbols } from '../../features/symbol-brain/symbolSearchService';
+import { searchSymbols, resolveSymbolById } from '../../features/symbol-brain/symbolSearchService';
 import { SearchResult } from '../../features/symbol-brain/types';
+import { SymbolPackBrowser } from './SymbolPackBrowser';
+import { SymbolPackSymbol } from '../../data/symbolPacks';
 import { ThemedText } from '../native/ThemedText';
 import { ColorPickerSheet } from '../native/ColorPickerSheet';
 import { useTheme } from '../../theme/useTheme';
@@ -66,16 +68,6 @@ const WORD_TYPES: WordTypeOption[] = [
   { key: 'social',    label: 'Social',    color: '#BF5AF2', colorName: 'purple' },
 ];
 
-// Browse chips shown before any query is typed (Rule 28 — suggestions).
-const BROWSE_CATEGORIES: { label: string; query: string }[] = [
-  { label: 'Feelings', query: 'feelings' },
-  { label: 'Food',     query: 'food' },
-  { label: 'Places',   query: 'places' },
-  { label: 'People',   query: 'people' },
-  { label: 'Actions',  query: 'actions' },
-  { label: 'Animals',  query: 'animals' },
-];
-
 // Recently added symbols persisted so repeat adds are one tap (Rule 28).
 const RECENTS_KEY = 'taptalk.addSymbol.recents';
 const RECENTS_MAX = 8;
@@ -102,6 +94,7 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
   const [recents, setRecents] = useState<RecentSymbol[]>([]);
   // Data-driven category filter over the current results (Rule 28). null = All.
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [packFolderPath, setPackFolderPath] = useState<string[]>([]);
   const inputRef = useRef<TextInput>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -128,6 +121,7 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
       setColor(WORD_TYPES[2]!.color);
       setColorSheet(false);
       setCategoryFilter(null);
+      setPackFolderPath([]);
     }
   }, [visible]);
 
@@ -151,14 +145,19 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
   }, [query]);
 
   // ── Step transitions ─────────────────────────────────────────────────
-  const goToCustomise = useCallback((item: SearchResult) => {
+  const goToCustomise = useCallback((
+    item: SearchResult,
+    packEntry?: SymbolPackSymbol,
+  ) => {
     hapticSelection();
-    const wt = wordTypeFor(item.concept.part_of_speech);
+    const wt = wordTypeFor(packEntry?.wordType ?? item.concept.part_of_speech);
     if (!reduceMotion) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     }
     setSelected(item);
-    setCustomLabel(item.concept.canonical_label || item.symbol.display_name);
+    setCustomLabel(
+      packEntry?.label ?? (item.concept.canonical_label || item.symbol.display_name),
+    );
     setWordType(wt);
     setColor(wt.color);
     setStep('customise');
@@ -185,7 +184,8 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
   const handleConfirm = useCallback(() => {
     if (!selected) return;
     hapticSelection();
-    const label = customLabel.trim() || selected.symbol.display_name;
+    // Normalise whitespace: trim + collapse internal runs to single spaces.
+    const label = customLabel.trim().replace(/\s+/g, ' ') || selected.symbol.display_name;
     // Remember for the "Recently added" quick row next time.
     const next: RecentSymbol[] = [
       { symbolId: selected.symbol.id, label },
@@ -196,6 +196,16 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
   }, [color, customLabel, onAdd, recents, selected, wordType]);
 
   // A recent symbol is re-added via search so we get fresh concept data.
+  const handlePackSymbolSelect = useCallback(async (entry: SymbolPackSymbol) => {
+    setLoading(true);
+    try {
+      const match = await resolveSymbolById(entry.symbolId);
+      if (match) goToCustomise(match, entry);
+    } finally {
+      setLoading(false);
+    }
+  }, [goToCustomise]);
+
   const handleRecentTap = useCallback(async (recent: RecentSymbol) => {
     hapticSelection();
     setLoading(true);
@@ -210,11 +220,6 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
       setLoading(false);
     }
   }, [goToCustomise]);
-
-  const handleCategoryTap = useCallback((q: string) => {
-    hapticSelection();
-    setQuery(q);
-  }, []);
 
   // ── Rows ─────────────────────────────────────────────────────────────
   const renderItem = useCallback(({ item }: { item: SearchResult }) => (
@@ -369,25 +374,12 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
             </>
           )}
 
-          <ThemedText variant="eyebrow" color={t.colors.textTertiary} style={styles.sectionEyebrow}>
-            BROWSE
-          </ThemedText>
-          <View style={styles.chipsWrap}>
-            {BROWSE_CATEGORIES.map(cat => (
-              <Pressable
-                key={cat.label}
-                accessibilityRole="button"
-                accessibilityLabel={`Browse ${cat.label} symbols`}
-                onPress={() => handleCategoryTap(cat.query)}
-                style={({ pressed }) => [
-                  styles.chip,
-                  { backgroundColor: pressed ? t.colors.selectionBg : t.colors.inputBg },
-                ]}
-              >
-                <ThemedText variant="callout" color={t.colors.text}>{cat.label}</ThemedText>
-              </Pressable>
-            ))}
-          </View>
+          <SymbolPackBrowser
+            folderPath={packFolderPath}
+            onFolderPathChange={setPackFolderPath}
+            onSelectSymbol={handlePackSymbolSelect}
+            reduceMotion={reduceMotion}
+          />
         </ScrollView>
       )}
     </>
@@ -429,6 +421,11 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
           onSubmitEditing={handleConfirm}
           accessibilityLabel="Tile label"
         />
+        {customLabel.trim().split(/\s+/).filter(Boolean).length > 2 ? (
+          <ThemedText variant="caption" color={t.colors.textMuted} style={styles.labelHint}>
+            Tip: keep tile labels to one word. Put the full phrase in the voice.
+          </ThemedText>
+        ) : null}
       </View>
 
       {/* Word type → sets Fitzgerald colour (Rule 9, Rule 23) */}
@@ -480,6 +477,9 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
           <ThemedText variant="body" color={t.colors.text} style={styles.colorTriggerLabel}>
             Change colour
           </ThemedText>
+          <ThemedText variant="caption" color={t.colors.textMuted} style={styles.colorTriggerHex}>
+            {color.toUpperCase()}
+          </ThemedText>
           <Ionicons name="color-palette-outline" size={22} color={t.colors.primary} />
         </Pressable>
       </View>
@@ -502,7 +502,7 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
               accessibilityLabel="Cancel"
               onPress={onDismiss}
               hitSlop={12}
-              style={styles.headerButton}
+              style={({ pressed }) => [styles.headerButton, pressed && { opacity: 0.6 }]}
             >
               <ThemedText variant="body" color={t.colors.primary} style={styles.headerButtonText}>Cancel</ThemedText>
             </Pressable>
@@ -512,14 +512,14 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
               accessibilityLabel="Back to search"
               onPress={goBackToFind}
               hitSlop={12}
-              style={[styles.headerButton, styles.headerBack]}
+              style={({ pressed }) => [styles.headerButton, styles.headerBack, pressed && { opacity: 0.6 }]}
             >
               <Ionicons name="chevron-back" size={20} color={t.colors.primary} />
               <ThemedText variant="body" color={t.colors.primary} style={styles.headerButtonText}>Search</ThemedText>
             </Pressable>
           )}
           <ThemedText variant="heading" color={t.colors.text}>
-            {step === 'find' ? 'Add Symbol' : 'Customise Tile'}
+            {step === 'find' ? 'Symbol Pack' : 'Customise Tile'}
           </ThemedText>
           <Pressable
             accessibilityRole="button"
@@ -736,5 +736,12 @@ const styles = StyleSheet.create({
   colorTriggerLabel: {
     flex: 1,
     fontFamily: fonts.displayBold,
+  },
+  colorTriggerHex: {
+    fontFamily: fonts.body,
+    marginRight: spacing.xs,
+  },
+  labelHint: {
+    marginTop: spacing.xs,
   },
 });

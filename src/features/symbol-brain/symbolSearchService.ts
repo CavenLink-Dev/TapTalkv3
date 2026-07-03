@@ -200,3 +200,19 @@ export async function getBestSymbolForInput(
   const results = await searchSymbols(input, userId, context);
   return results[0] ?? null;
 }
+
+/** Resolve a bundled Mulberry symbol id for Symbol Pack browse picks. */
+export async function resolveSymbolById(symbolId: string): Promise<SearchResult | null> {
+  await seedSymbolBrainDatabase();
+  const symbol = await getSymbolById(symbolId);
+  if (!symbol) return null;
+  const concept = await getConceptById(symbol.concept_id);
+  if (!concept) return null;
+  return {
+    symbol,
+    concept,
+    score: 1,
+    match_reasons: ['symbol pack'],
+    confidence: 'high',
+  };
+}

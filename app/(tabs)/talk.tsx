@@ -37,7 +37,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../src/components/native/Icon';
 import { Href, useRouter } from 'expo-router';
-import { BoardBackIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
+import { BackOutIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
 import { TalkMessageStrip, type MessageStripTile } from '../../src/components/talk/TalkMessageStrip';
 import { AddSymbolModal } from '../../src/components/talk/AddSymbolModal';
 import { AddFolderModal } from '../../src/components/talk/AddFolderModal';
@@ -48,7 +48,7 @@ import { buildMessageUtterances } from '../../src/utils/speechRules';
 import { animation, CHROME_SEPARATOR_WIDTH, colors, radii, spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
-import { predictNextWords } from '../../src/utils/ngram';
+import { predictSuggestions } from '../../src/utils/ngram';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import {
   resolveSymbolForKeyword,
@@ -447,7 +447,7 @@ export const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
     { id: 'back-feelings', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
   ],
   settings: [
-    { id: 'hide-nav',        label: 'Hide nav', kind: 'action', color: SYMBOL_PURPLE },
+    { id: 'hide-nav',        label: 'Hide',     kind: 'action', color: SYMBOL_PURPLE },
     { id: 'clear-settings',  label: 'Clear',    kind: 'action', color: SYMBOL_RED    },
     { id: 'home-settings',   label: 'Home',     kind: 'folder', target: 'home', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
     { id: 'repeat-settings', label: 'Repeat',   kind: 'action', color: SYMBOL_GREEN  },
@@ -473,7 +473,11 @@ const BoardNavTile = React.memo(function BoardNavTile({ tile, size }: { tile: Bo
       ]}
     >
       <View style={styles.navTileIconMount}>
-        {tile.id === 'back' ? <BoardBackIcon size={40} /> : <BoardHomeIcon size={40} />}
+        {tile.id === 'back' ? (
+          <BackOutIcon size={40} color={t.colors.text} />
+        ) : (
+          <BoardHomeIcon size={40} />
+        )}
       </View>
       <Text
         style={[styles.navTileLabel, { color: t.colors.primary }]}
@@ -627,6 +631,7 @@ const BoardDockAction = React.memo(function BoardDockAction({
               <Text
                 style={[styles.dockRowLabel, { color: contentColor }]}
                 numberOfLines={1}
+                maxFontSizeMultiplier={1.3}
               >
                 {label}
               </Text>
@@ -650,6 +655,7 @@ const BoardDockAction = React.memo(function BoardDockAction({
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.65}
+                maxFontSizeMultiplier={1.3}
               >
                 {label}
               </Text>
@@ -668,6 +674,7 @@ const BoardDockAction = React.memo(function BoardDockAction({
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.6}
+            maxFontSizeMultiplier={1.3}
           >
             {label}
           </Text>
@@ -2979,10 +2986,16 @@ export default function TalkScreen() {
         const i = colorOrder.indexOf((c ?? '').toUpperCase());
         return i < 0 ? colorOrder.length : i;
       };
+      // Navigation folders that go Home ("back" tiles) always stay last, in
+      // every sort mode, so Home never jumps to the top of the board.
+      const isBackHome = (tile: BoardTile) => tile.kind === 'folder' && tile.target === 'home';
       const sorted = [...activeLayout].sort((a, b) => {
         const ta = tileMapForMode.get(a.id);
         const tb = tileMapForMode.get(b.id);
         if (!ta || !tb) return 0;
+        const backA = isBackHome(ta) ? 1 : 0;
+        const backB = isBackHome(tb) ? 1 : 0;
+        if (backA !== backB) return backA - backB;
         // Name: A–Z by label (A at top).
         if (mode === 'name') return ta.label.localeCompare(tb.label);
         // Type: cluster identical colours together, then A–Z within a colour.
@@ -3451,14 +3464,29 @@ export default function TalkScreen() {
           }}
         />
 
-        {/* N-gram Predictions */}
+        {/* Prediction v1 — 5+ ranked suggestions (bigram + frequency + core vocab) */}
         {(() => {
           const lastWord = state.messageWords[state.messageWords.length - 1]?.label;
-          const preds = lastWord ? predictNextWords(lastWord, state.ngramModel, 3) : [];
+          // Title-case so chips read like board tiles (Want, Stop, …).
+          const titleCase = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+          // Show whenever there's any message context; core vocab fills the row.
+          // Exclude words already in the strip so we never re-suggest them.
+          const preds = state.messageWords.length > 0
+            ? predictSuggestions({
+                lastWord,
+                model: state.ngramModel,
+                exclude: state.messageWords.map(w => w.label),
+                limit: 7, // 5+ ranked suggestions (highest→lowest)
+              }).map(s => ({ ...s, word: titleCase(s.word) }))
+            : [];
           if (preds.length === 0) return null;
           return (
             <View style={{ marginTop: spacing.sm, paddingHorizontal: spacing.lg }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: t.colors.textMuted, marginBottom: spacing.xs }}>
+              <Text
+                accessibilityRole="header"
+                maxFontSizeMultiplier={1.6}
+                style={{ fontSize: 13, fontWeight: '700', color: t.colors.textMuted, marginBottom: spacing.xs }}
+              >
                 Suggestions
               </Text>
               <ScrollView
@@ -3466,11 +3494,12 @@ export default function TalkScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: spacing.sm }}
               >
-                {preds.map((word) => (
+                {preds.map(({ word }) => (
                   <Pressable
                     key={word}
                     accessibilityRole="button"
                     accessibilityLabel={`Add ${word}`}
+                    accessibilityHint="Adds this word to your message"
                     onPress={() => {
                       hapticIfEnabled();
                       dispatch({
@@ -3488,11 +3517,15 @@ export default function TalkScreen() {
                       borderRadius: radii.pill,
                       paddingHorizontal: spacing.md,
                       paddingVertical: spacing.sm,
-                      minHeight: 36,
+                      minHeight: 44, // HIG minimum touch target
                       justifyContent: 'center',
+                      opacity: pressed ? 0.7 : 1,
                     })}
                   >
-                    <Text style={{ fontSize: 14, fontWeight: '600', color: t.colors.text }}>
+                    <Text
+                      maxFontSizeMultiplier={1.6}
+                      style={{ fontSize: 14, fontWeight: '600', color: t.colors.text }}
+                    >
                       {word}
                     </Text>
                   </Pressable>
@@ -3769,7 +3802,7 @@ export default function TalkScreen() {
                     kind="neutral"
                   />
                   <BoardDockAction
-                    icon="setting" label="Board"
+                    icon="board" label="Board"
                     a11yLabel="Board settings"
                     a11yHint="Opens board display and layout settings"
                     onPress={handleOpenBoardSettings}
@@ -3786,7 +3819,7 @@ export default function TalkScreen() {
               ) : dockMode === 'addExpanded' ? (
                 <>
                   <BoardDockAction
-                    icon="chevron-back-double" label="Back"
+                    icon="back-out" label="Back"
                     a11yLabel="Back" a11yHint="Close add options"
                     onPress={handleAddFlowClose} kind="neutral"
                   />
@@ -3810,7 +3843,7 @@ export default function TalkScreen() {
               ) : dockMode === 'folderExpanded' ? (
                 <>
                   <BoardDockAction
-                    icon="chevron-back-double" label="Back"
+                    icon="back-out" label="Back"
                     a11yLabel="Back"
                     a11yHint="Go back one board"
                     onPress={handleDockBack} kind="neutral"

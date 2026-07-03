@@ -8,7 +8,7 @@
 
 import React from 'react';
 import Svg, { Polyline, Line, Path } from 'react-native-svg';
-import { BoardSettingIcon } from '../icons/FigmaIcons';
+import { BackOutIcon, BoardIcon, BoardSettingIcon } from '../icons/FigmaIcons';
 
 interface IconProps {
   name: string;
@@ -54,15 +54,7 @@ export function Icon({ name, size = 24, color, strokeWidth = 2 }: IconProps) {
       );
     case 'chevron-back-double':
     case 'back-out':
-      // Double-back chevron — artwork from src/assets/icons/back_out.svg.
-      return (
-        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <Path
-            fill={strokeColor}
-            d="M17.707 5.293a1 1 0 0 1 0 1.414L12.414 12l5.293 5.293a1 1 0 0 1-1.414 1.414l-6-6a1 1 0 0 1 0-1.414l6-6a1 1 0 0 1 1.414 0zm-6 0a1 1 0 0 1 0 1.414L6.414 12l5.293 5.293a1 1 0 0 1-1.414 1.414l-6-6a1 1 0 0 1 0-1.414l6-6a1 1 0 0 1 1.414 0z"
-          />
-        </Svg>
-      );
+      return <BackOutIcon size={size} color={strokeColor} />;
     case 'sort':
       // Sort control — artwork from src/assets/icons/sort.svg.
       return (
@@ -102,7 +94,10 @@ export function Icon({ name, size = 24, color, strokeWidth = 2 }: IconProps) {
           <Line x1="6" y1="6" x2="18" y2="18" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
         </Svg>
       );
-    /** Figma AAC BOARD gear — tinted raster, matches dock symbol colour. */
+    /** Board dock gear — tinted raster, matches dock symbol colour. */
+    case 'board':
+      return <BoardIcon size={size} color={strokeColor} />;
+    /** Settings gear — tinted raster (board settings screen, etc.). */
     case 'setting':
     case 'settings':
       return <BoardSettingIcon size={size} color={strokeColor} />;

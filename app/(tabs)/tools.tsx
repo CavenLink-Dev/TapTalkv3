@@ -492,6 +492,13 @@ function ToolCard({
           { scale: pressScale },
           { scale: dragScale },
         ],
+        // Subtle, tight shadow so each tool card lifts off the page.
+        borderRadius:  radii.card,
+        shadowColor:   '#000',
+        shadowOffset:  { width: 0, height: 3 },
+        shadowOpacity: 0.10,
+        shadowRadius:  7,
+        elevation:     3,
       }}
     >
       <Pressable
@@ -625,7 +632,7 @@ function ToolCard({
               >
                 <Ionicons
                   name="play"
-                  size={30}
+                  size={44}
                   color="#fff"
                   style={styles.playIcon}
                 />
@@ -889,8 +896,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.30)',
     transform: [{ rotate: '18deg' }]},
   cardBody: {
-    // Bottom content area trimmed: padding md (12) → sm (8), i.e. ÷1.5.
-    paddingVertical: spacing.sm,
+    // Bottom content area trimmed further: 8 → 5 (~÷1.5) for a tighter strip.
+    paddingVertical: 5,
     paddingHorizontal: spacing.md,
     justifyContent: 'center'},
   cardContentRow: {
@@ -926,14 +933,14 @@ const styles = StyleSheet.create({
   starButton: {
     borderRadius: 22},
   playButton: {
-    width:          44,
-    height:         44,
-    borderRadius:   12,
+    width:          64,
+    height:         64,
+    borderRadius:   18,
     alignItems:     'center',
     justifyContent: 'center'},
   // Play triangles read left-heavy; a small optical nudge centres them.
   playIcon: {
-    marginLeft: 3},
+    marginLeft: 4},
   // Golden halo — only visible (opacity > 0) when card is favourited
   starGlow: {
     position: 'absolute',

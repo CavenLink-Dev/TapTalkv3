@@ -109,7 +109,7 @@ function StartOverlay({
         accessibilityRole="radio"
         accessibilityState={{ selected: active }}
         accessibilityLabel={`${label} difficulty`}
-        style={({ pressed }) => [styles.diffRow, active && styles.diffRowActive, pressed && { opacity: 0.92 }]}
+        style={({ pressed }) => [styles.diffRow, active && { backgroundColor: t.colors.selectionBg, borderColor: t.colors.primary }, pressed && { opacity: 0.92 }]}
       >
         <View style={[styles.radio, active && styles.radioActive]}>
           {active ? <View style={[styles.radioDot, { backgroundColor: t.colors.primary }]} /> : null}
@@ -140,7 +140,7 @@ function StartOverlay({
               onPress={onCancel}
               accessibilityRole="button"
               accessibilityLabel="Cancel"
-              style={({ pressed }) => [styles.btnGhost, { backgroundColor: '#F1F5F9' }, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.btnGhost, { backgroundColor: t.colors.input }, pressed && { opacity: 0.85 }]}
             >
               <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Cancel</Text>
             </Pressable>
@@ -536,7 +536,7 @@ export default function MemoryMatchScreen() {
             accessibilityLabel={canGoBack ? `Back to level ${level - 1}` : 'No previous level'}
             accessibilityState={{ disabled: !canGoBack }}
             style={({ pressed }) => [
-              styles.footerBtn, styles.footerGhost,
+              styles.footerBtn, { backgroundColor: t.colors.input },
               !canGoBack && styles.footerBtnDisabled,
               pressed && canGoBack && { opacity: 0.85 },
             ]}
@@ -549,7 +549,7 @@ export default function MemoryMatchScreen() {
             onPress={onReset}
             accessibilityRole="button"
             accessibilityLabel="Reset level"
-            style={({ pressed }) => [styles.footerBtn, styles.footerReset, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [styles.footerBtn, { backgroundColor: t.colors.input }, pressed && { opacity: 0.85 }]}
           >
             <Ionicons name="refresh" size={20} color={t.colors.textMuted} />
             <Text style={[styles.footerBtnText, { color: t.colors.textMuted }]}>Reset</Text>
@@ -749,6 +749,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
 
     borderRadius: radii.card,
+    borderWidth: 2,
+    borderColor: 'transparent',
     minHeight: 52},
   diffRowActive: { backgroundColor: '#E6F4FD' },
   radio: {
