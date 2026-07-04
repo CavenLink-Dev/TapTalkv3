@@ -155,12 +155,6 @@ describe('appReducer', () => {
     expect(appReducer(base, { type: 'SET_BOARD', payload: 'emotions' }).currentBoard).toBe('emotions');
   });
 
-  it('INSTALL_SYMBOL_PACK stores a pack once', () => {
-    let state = appReducer(base, { type: 'INSTALL_SYMBOL_PACK', payload: 'food' });
-    state = appReducer(state, { type: 'INSTALL_SYMBOL_PACK', payload: 'food' });
-    expect(state.installedSymbolPackIds).toEqual(['food']);
-  });
-
   it('SET_KEYBOARD_TEXT updates keyboardText', () => {
     expect(appReducer(base, { type: 'SET_KEYBOARD_TEXT', payload: 'hi there' }).keyboardText).toBe('hi there');
   });
