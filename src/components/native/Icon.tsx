@@ -94,6 +94,72 @@ export function Icon({ name, size = 24, color, strokeWidth = 2 }: IconProps) {
           <Line x1="6" y1="6" x2="18" y2="18" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
         </Svg>
       );
+    /** Edit — calm pencil icon. Inherits stroke colour + width like the
+     *  other stroked glyphs so the dock's tint applies uniformly. */
+    case 'edit':
+    case 'pencil':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Path
+            d="M12 20h9"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Path
+            d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    /** Select — tick inside a circle. Used by the Select mode dock action
+     *  and by the per-tile selection indicator (rendered at larger size). */
+    case 'select':
+    case 'check-circle':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Path
+            d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Polyline
+            points="8,12.5 11,15.5 16.5,9.5"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    /** Move — four-way arrow used by the Move dock action. */
+    case 'move':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Polyline points="5,9 2,12 5,15" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <Polyline points="9,5 12,2 15,5" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <Polyline points="15,19 12,22 9,19" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <Polyline points="19,9 22,12 19,15" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <Line x1="2" y1="12" x2="22" y2="12" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+          <Line x1="12" y1="2" x2="12" y2="22" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+        </Svg>
+      );
+    /** Resize — bidirectional arrow between two corner brackets. */
+    case 'resize':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Polyline points="15,3 21,3 21,9" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <Polyline points="9,21 3,21 3,15" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <Line x1="21" y1="3" x2="14" y2="10" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+          <Line x1="3" y1="21" x2="10" y2="14" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+        </Svg>
+      );
     /** Board dock gear — tinted raster, matches dock symbol colour. */
     case 'board':
       return <BoardIcon size={size} color={strokeColor} />;
