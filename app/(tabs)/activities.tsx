@@ -2,8 +2,8 @@
  * Activities — game selection screen.
  *
  * Mirrors the Tools screen precisely:
- *   • Spring-entrance animations, shimmer, press-depth illusion
- *   • Star favourites with glow halo + particle burst
+ *   • Spring-entrance animations and pressed opacity/scale
+ *   • Star favourites with a filled icon state
  *   • Accent play button (filled circle, ▶ icon)
  *   • Favourites section with golden tint strip when any activity is starred
  *   • No tags — clean, professional, disability-first
@@ -32,7 +32,6 @@ import {
 } from '../../src/features/activities/favourites-store';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
-import { useReduceSensoryLoad } from '../../src/hooks/useReduceSensoryLoad';
 import { useTheme } from '../../src/theme/useTheme';
 
 // --- Data ---
@@ -77,110 +76,12 @@ const ACTIVITIES: Activity[] = [
   },
 ];
 
-const CARD_HEIGHT = 176;
+const CARD_HEIGHT = 188;
 const HERO_HEIGHT = 112;
-const CARD_GAP    = spacing.xxl;
-
-const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300] as const;
-
-// --- StarParticles ---
-
-function StarParticles({ trigger }: { trigger: number }) {
-  const particles = useRef(
-    PARTICLE_ANGLES.map(() => ({
-      opacity:  new Animated.Value(0),
-      progress: new Animated.Value(0),
-    }))
-  ).current;
-
-  const lastTrigger = useRef(0);
-
-  useEffect(() => {
-    if (trigger === 0 || trigger === lastTrigger.current) return;
-    lastTrigger.current = trigger;
-
-    particles.forEach(p => {
-      p.opacity.setValue(0);
-      p.progress.setValue(0);
-    });
-
-    const anims = particles.map(p =>
-      Animated.parallel([
-        Animated.timing(p.progress, {
-          toValue: 1,
-          duration: 320,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.sequence([
-          Animated.timing(p.opacity, {
-            toValue: 1,
-            duration: 55,
-            useNativeDriver: true,
-          }),
-          Animated.timing(p.opacity, {
-            toValue: 0,
-            duration: 240,
-            delay: 50,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
-    );
-
-    Animated.stagger(18, anims).start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trigger]);
-
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {PARTICLE_ANGLES.map((angle, i) => {
-        const rad    = (angle * Math.PI) / 180;
-        const radius = 20;
-        const p      = particles[i];
-        if (!p) return null;
-        return (
-          <Animated.View
-            key={angle}
-            style={{
-              position:    'absolute',
-              top:         '50%',
-              left:        '50%',
-              width:       5,
-              height:      5,
-              marginTop:   -2.5,
-              marginLeft:  -2.5,
-              borderRadius: 2.5,
-              backgroundColor: '#F5B400',
-              opacity: p.opacity,
-              transform: [
-                {
-                  translateX: p.progress.interpolate({
-                    inputRange:  [0, 1],
-                    outputRange: [0, Math.cos(rad) * radius],
-                  }),
-                },
-                {
-                  translateY: p.progress.interpolate({
-                    inputRange:  [0, 1],
-                    outputRange: [0, Math.sin(rad) * radius],
-                  }),
-                },
-                {
-                  scale: p.progress.interpolate({
-                    inputRange:  [0, 0.3, 1],
-                    outputRange: [0.4, 1, 0.5],
-                  }),
-                },
-              ],
-            }}
-          />
-        );
-      })}
-    </View>
-  );
-}
+const CARD_GAP    = spacing.xl;
+const STAR_SIZE   = 44;
+const PLAY_SIZE   = 52;
+const PLAY_ICON_SIZE = 32;
 
 // --- SectionHeader ---
 
@@ -255,15 +156,11 @@ function ActivityCard({
 }) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
-  const reduceSensory = useReduceSensoryLoad();
 
   const mountProgress   = useRef(new Animated.Value(0)).current;
   const pressScale      = useRef(new Animated.Value(1)).current;
   const heroScale       = useRef(new Animated.Value(1)).current;
-  const shimmerProgress = useRef(new Animated.Value(0)).current;
   const starScale       = useRef(new Animated.Value(1)).current;
-  const starGlow        = useRef(new Animated.Value(favourite ? 1 : 0)).current;
-  const [particleTrigger, setParticleTrigger] = useState(0);
 
   // Mount entrance
   useEffect(() => {
@@ -281,69 +178,37 @@ function ActivityCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Shimmer loop — favourites only, with a slightly stronger pass
-  useEffect(() => {
-    if (reduceMotion || reduceSensory || !favourite) return;
-    let timeout: ReturnType<typeof setTimeout>;
-    const runShimmer = () => {
-      shimmerProgress.setValue(0);
-      Animated.timing(shimmerProgress, {
-        toValue:  1,
-        duration: 760,
-        easing:   Easing.inOut(Easing.sin),
-        useNativeDriver: true,
-      }).start(() => {
-        timeout = setTimeout(runShimmer, 5_500 + Math.random() * 2_500);
-      });
-    };
-    timeout = setTimeout(runShimmer, 1_500 + index * 500 + Math.random() * 1_200);
-    return () => clearTimeout(timeout);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [favourite, reduceMotion]);
-
-  // Star bounce + glow + particles
+  // Star bounce
   const isMounted    = useRef(false);
   const wasFavourite = useRef(favourite);
 
   useEffect(() => {
     if (!isMounted.current) {
       isMounted.current = true;
-      starGlow.setValue(favourite ? 1 : 0);
       return;
     }
     const wasFav = wasFavourite.current;
     wasFavourite.current = favourite;
 
     if (reduceMotion) {
-      starGlow.setValue(favourite ? 1 : 0);
       return;
     }
 
-    Animated.parallel([
+    if (favourite !== wasFav) {
       Animated.sequence([
         Animated.spring(starScale, {
-          toValue: favourite ? 1.3 : 0.8,
+          toValue: favourite ? 1.18 : 0.9,
           useNativeDriver: true,
-          damping: 8, stiffness: 380, mass: 0.7,
+          damping: 10, stiffness: 340, mass: 0.8,
         }),
         Animated.spring(starScale, {
           toValue: 1,
           useNativeDriver: true,
-          damping: 14, stiffness: 300, mass: 1,
+          damping: 16, stiffness: 300, mass: 1,
         }),
-      ]),
-      Animated.timing(starGlow, {
-        toValue:  favourite ? 1 : 0,
-        duration: 240,
-        easing:   Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    if (favourite && !wasFav && !reduceMotion && !reduceSensory) {
-      setParticleTrigger(t => t + 1);
+      ]).start();
     }
-  }, [favourite, reduceMotion, reduceSensory]);
+  }, [favourite, reduceMotion]);
 
   const handlePressIn = () => {
     if (reduceMotion) return;
@@ -377,19 +242,6 @@ function ActivityCard({
     inputRange:  [0, 1],
     outputRange: [18, 0],
   });
-  const shimmerTranslateX = shimmerProgress.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [-160, 380],
-  });
-  const starGlowOpacity = starGlow.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [0, 0.7],
-  });
-  const starGlowScale = starGlow.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [0.5, 1],
-  });
-
   const heroBackground = t.isDark ? `${activity.accent}33` : activity.heroBg;
 
   return (
@@ -397,14 +249,7 @@ function ActivityCard({
       style={{
         opacity:   mountProgress,
         transform: [{ translateY: mountTranslateY }, { scale: pressScale }],
-        // Subtle, tight shadow so each card lifts off the page without
-        // spreading far (Rule: soft separation, not a heavy drop shadow).
         borderRadius:  radii.card,
-        shadowColor:   '#000',
-        shadowOffset:  { width: 0, height: 3 },
-        shadowOpacity: 0.10,
-        shadowRadius:  7,
-        elevation:     3,
       }}
     >
       <Pressable
@@ -413,7 +258,7 @@ function ActivityCard({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={onPress}
-        style={[styles.card, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}
+        style={[styles.card, { backgroundColor: t.colors.surface }]}
       >
         {/* Hero image band */}
         <View style={[styles.cardHero, { backgroundColor: heroBackground }]}>
@@ -428,17 +273,6 @@ function ActivityCard({
             />
           </Animated.View>
 
-          {favourite ? (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                { transform: [{ translateX: shimmerTranslateX }] },
-              ]}
-            >
-              <View style={styles.shimmerStripe} />
-            </Animated.View>
-          ) : null}
         </View>
 
         {/* Favourite star — top-left overlay over the hero (Rule 10) */}
@@ -458,9 +292,6 @@ function ActivityCard({
           accessibilityState={{ selected: favourite }}
           style={[styles.starOverlay, { backgroundColor: t.colors.surface }]}
         >
-          <Animated.View
-            style={[styles.starGlow, { opacity: starGlowOpacity, transform: [{ scale: starGlowScale }] }]}
-          />
           <Animated.View style={{ transform: [{ scale: starScale }] }}>
             <Ionicons
               name={favourite ? 'star' : 'star-outline'}
@@ -468,19 +299,18 @@ function ActivityCard({
               color={favourite ? '#F5B400' : t.colors.textTertiary}
             />
           </Animated.View>
-          <StarParticles trigger={particleTrigger} />
         </Pressable>
 
         <View
           style={[
             styles.cardBody,
-            { backgroundColor: t.colors.surface, borderTopColor: t.colors.border },
+            { backgroundColor: t.colors.surface },
           ]}
         >
           <View style={styles.cardContentRow}>
             <View style={styles.copy}>
-              <Text style={[styles.cardName, { color: t.colors.text }]}>{activity.title}</Text>
-              <Text style={[styles.cardSubtitle, { color: t.colors.textMuted }]} numberOfLines={2}>
+              <Text style={[styles.name, { color: t.colors.text }]}>{activity.title}</Text>
+              <Text style={[styles.description, { color: t.colors.textMuted }]} numberOfLines={2}>
                 {activity.subtitle}
               </Text>
             </View>
@@ -504,7 +334,7 @@ function ActivityCard({
               >
                 <Ionicons
                   name="play"
-                  size={44}
+                  size={PLAY_ICON_SIZE}
                   color={t.colors.textOnDark}
                   style={styles.playIcon}
                 />
@@ -678,17 +508,15 @@ const styles = StyleSheet.create({
   card: {
     height:          CARD_HEIGHT,
     borderRadius:    radii.card,
-    borderWidth:     1,
-    borderColor:     'transparent', // set to token border inline for separation
     overflow:        'hidden'},
 
   starOverlay: {
     position:       'absolute',
     top:            spacing.sm,
     left:           spacing.sm,
-    width:          40,
-    height:         40,
-    borderRadius:   20,
+    width:          STAR_SIZE,
+    height:         STAR_SIZE,
+    borderRadius:   STAR_SIZE / 2,
     alignItems:     'center',
     justifyContent: 'center',
     zIndex:         5},
@@ -704,23 +532,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius:  radii.card,
     borderTopRightRadius: radii.card},
 
-  shimmerStripe: {
-    position:        'absolute',
-    top:             -20,
-    left:            0,
-    width:           54,
-    height:          200,
-    backgroundColor: 'rgba(255,255,255,0.30)',
-    transform:       [{ rotate: '18deg' }]},
-
   cardBody: {
     flex:              1,
     paddingHorizontal: spacing.md,
-    // Bottom strip padding reduced ~1.5× (8 → 5) so the strip is shorter and
-    // the title/description/play read as one tight inline row.
-    paddingVertical:   5,
-    justifyContent:    'center',
-    borderTopWidth:    StyleSheet.hairlineWidth},
+    paddingVertical:   spacing.sm,
+    justifyContent:    'center'},
 
   cardContentRow: {
     flexDirection: 'row',
@@ -731,13 +547,13 @@ const styles = StyleSheet.create({
     flex: 1,
     gap:  4},
 
-  cardName: {
+  name: {
     fontFamily:    fonts.displayHeavy,
     fontSize:      typography.body,
     letterSpacing: -0.2,
   },
 
-  cardSubtitle: {
+  description: {
     fontFamily: fonts.body,
     fontSize:   typography.caption,
     lineHeight: 17,
@@ -754,25 +570,15 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     justifyContent: 'center'},
 
-  starButton: {
-    borderRadius: 22},
-
-  starGlow: {
-    position:        'absolute',
-    width:           34,
-    height:          34,
-    borderRadius:    17,
-    backgroundColor: '#FFF0B3'},
-
   playButton: {
-    width:          64,
-    height:         64,
-    borderRadius:   18,
+    width:          PLAY_SIZE,
+    height:         PLAY_SIZE,
+    borderRadius:   16,
     alignItems:     'center',
     justifyContent: 'center'},
 
   // Play triangles read left-heavy; a small optical nudge centres them
   // (scaled up with the larger 2× glyph).
   playIcon: {
-    marginLeft: 4},
+    marginLeft: 3},
 });

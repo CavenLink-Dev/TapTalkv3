@@ -75,6 +75,8 @@ export interface AppState {
    * relaunches. `boardLayouts` is kept for backward-compat/migration.
    */
   boardPlacements: Record<string, { id: string; slot: number; fw: number; fh: number }[]>;
+  /** Preset vocabulary packs installed as collapsed Home Board folders. */
+  installedSymbolPackIds: string[];
   /** IDs of tiles the user has hidden via the edit-mode delete badge. */
   hiddenTileIds: string[];
 
@@ -211,6 +213,7 @@ export type Action =
   | { type: 'SET_BOARD'; payload: string }
   | { type: 'SET_BOARD_ORDER'; payload: { board: string; order: string[] } }
   | { type: 'SET_BOARD_PLACEMENTS'; payload: { board: string; placements: { id: string; slot: number; fw: number; fh: number }[] } }
+  | { type: 'INSTALL_SYMBOL_PACK'; payload: string }
   | { type: 'HIDE_TILE'; payload: string }
   | { type: 'RESTORE_TILE'; payload: string }
   | { type: 'SET_KEYBOARD_TEXT'; payload: string }

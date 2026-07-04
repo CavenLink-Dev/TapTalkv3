@@ -64,6 +64,7 @@ export const initialState: AppState = {
   keyboardText: '',
   boardLayouts: {},
   boardPlacements: {},
+  installedSymbolPackIds: [],
   hiddenTileIds: [],
   tasks: [],
   lists: [],
@@ -107,6 +108,7 @@ function mergeStoredState(storedState: Partial<AppState>): AppState {
       ...initialState.boardPlacements,
       ...(storedState.boardPlacements ?? {}),
     },
+    installedSymbolPackIds: storedState.installedSymbolPackIds ?? initialState.installedSymbolPackIds,
     hiddenTileIds: storedState.hiddenTileIds ?? initialState.hiddenTileIds,
     firstThen: {
       ...initialState.firstThen,
@@ -214,6 +216,10 @@ export function appReducer(state: AppState, action: Action): AppState {
           [action.payload.board]: action.payload.placements,
         },
       };
+    case 'INSTALL_SYMBOL_PACK':
+      return state.installedSymbolPackIds.includes(action.payload)
+        ? state
+        : { ...state, installedSymbolPackIds: [...state.installedSymbolPackIds, action.payload] };
     case 'HIDE_TILE':
       return state.hiddenTileIds.includes(action.payload)
         ? state

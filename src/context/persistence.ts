@@ -19,6 +19,7 @@ export type HotPersistedState = Pick<
   | 'talkStats'
   | 'boardLayouts'
   | 'boardPlacements'
+  | 'installedSymbolPackIds'
   | 'hiddenTileIds'
   | 'sentenceHistory'
   | 'tileTapCounts'
@@ -60,6 +61,7 @@ export function splitAppState(state: AppState): {
       talkStats: state.talkStats,
       boardLayouts: state.boardLayouts,
       boardPlacements: state.boardPlacements,
+      installedSymbolPackIds: state.installedSymbolPackIds,
       hiddenTileIds: state.hiddenTileIds,
       sentenceHistory: state.sentenceHistory,
       tileTapCounts: state.tileTapCounts,
@@ -103,6 +105,7 @@ export function isHotAction(type: string): boolean {
     case 'SET_BOARD':
     case 'SET_BOARD_ORDER':
     case 'SET_BOARD_PLACEMENTS':
+    case 'INSTALL_SYMBOL_PACK':
     case 'HIDE_TILE':
     case 'RESTORE_TILE':
     case 'SET_KEYBOARD_TEXT':

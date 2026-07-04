@@ -39,7 +39,7 @@ import { Icon } from '../../src/components/native/Icon';
 import { Href, useRouter } from 'expo-router';
 import { BackOutIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
 import { TalkMessageStrip, type MessageStripTile } from '../../src/components/talk/TalkMessageStrip';
-import { AddSymbolModal } from '../../src/components/talk/AddSymbolModal';
+import { SymbolPackPickerModal } from '../../src/components/talk/SymbolPackPickerModal';
 import { AddFolderModal } from '../../src/components/talk/AddFolderModal';
 import { MulberrySymbol, prewarmMulberryAssets } from '../../src/components/symbols/MulberrySymbol';
 import { useAppContext } from '../../src/hooks/useAppContext';
@@ -54,10 +54,15 @@ import {
   resolveSymbolForKeyword,
   ResolvedSymbol,
 } from '../../src/features/symbol-brain/resolveSymbolForKeyword';
+import {
+  PresetSymbolPack,
+  buildPresetPackBoards,
+  presetPackHomeTileId,
+} from '../../src/features/board/presetSymbolPacks';
 import type { AACWord } from '../../src/context/types';
 
 type TileKind = 'folder' | 'word' | 'action';
-type BoardMode = 'home' | 'foods' | 'animals' | 'tools' | 'quick' | 'settings' | 'emergency' | 'feelings';
+type BoardMode = string;
 // New top-nav vocabulary: TAPTALK opens the keyboard page, QUICK opens
 // Quick Talk, EDIT is a stub for now (no behaviour), CLEAR clears the
 // message strip in place. See to_do/NEXT.md "Board top nav" for the lock.
@@ -133,7 +138,14 @@ const BOARD_TOP_GAP = 32;
 // Absolute max tile edge (pt). Actual size is the lesser of this, what fits the
 // width in 3 columns, and what lets VISIBLE_ROWS rows fit the viewport height.
 const TILE_SIZE = 132;
-const MAX_FW = 8;
+// Max fine-unit tile edge. Fine unit = tileSize / 2, so a default 1x1 user
+// tile is fw=fh=2 and the user-facing maximum 4x4 is fw=fh=8.
+const USER_MAX_TILE_UNITS = 4;
+const MAX_FW = USER_MAX_TILE_UNITS * 2; // 8 fine units = 4 user tiles wide
+// How long the user must hold on a tile in Resize Mode before Pan takes over
+// (drag-lifts the tile). Any faster drag falls through to the ScrollView so
+// the user can still scroll normally.
+const DRAG_LIFT_LONG_PRESS_MS = 300;
 // Bottom dock spacing: 16px gap between dock and bottom tab bar edge.
 const DOCK_BOTTOM_GAP = spacing.lg; // 16
 // Contextual dock control sizes (pt) — fixed, not tied to tileSize.
@@ -501,13 +513,20 @@ type DockActionKind = 'primary' | 'neutral' | 'muted';
 
 // Contextual dock states, highest render priority first.
 type DockMode =
-  | 'homeCollapsed'   // > (default main-board state)
-  | 'homeExpanded'    // Add / Board / Hide
+  | 'homeCollapsed'   // > (default main-board state) + Edit
+  | 'homeExpanded'    // Add / Sort / Board / Edit / Hide
   | 'addExpanded'     // Back / Symbol / Folder / Add
-  | 'folderExpanded'  // Back / Add / Hide
-  | 'folderCollapsed' // > / Add
-  | 'editClean'       // Delete? / Add + / Done
-  | 'editDirty';      // Cancel / Save
+  | 'folderExpanded'  // Back / Add / Sort / Edit / Hide
+  | 'folderCollapsed' // > / Add + Edit
+  | 'editControls'    // Back / Select / Move / Delete / Resize / Done (bottom Edit)
+  | 'editClean'       // Delete? / Add + / Done (Resize Mode from long-press)
+  | 'editDirty';      // Cancel / Save (Resize Mode with unsaved changes)
+
+// Bottom Edit Control Bar tools. The Edit Control Bar is a distinct thing
+// from the long-press "Resize Mode". This tool state drives what tapping a
+// tile does while the Edit Control Bar is open (select-toggle, pick move
+// destination, delete-selected, or launch resize mode).
+type BoardEditTool = 'none' | 'select' | 'move' | 'delete' | 'resize';
 
 const BoardDockAction = React.memo(function BoardDockAction({
   label,
@@ -788,7 +807,7 @@ function BoardWordTile({ tile, width, height, resolved }: { tile: BoardTile; wid
       resolved.tier === 'category' || resolved.tier === 'unknown');
   const horizontal = width > height * 1.5;
   return (
-    <View style={[styles.wordTile, { width, height }]}>
+    <View style={[styles.wordTile, { width, height, borderColor: t.colors.symbolOutline }]}>
       <View
         style={[
           styles.wordTileFill,
@@ -1654,6 +1673,21 @@ interface BoardTileButtonProps {
   jiggle?: SharedValue<number>;
   /** Motor Access Mode: called on tile tap in edit mode for action sheet (Priority 5). */
   onEditTap?: (tileId: string) => void;
+  /** True when the bottom Edit Control Bar is in Select Mode. Overrides tap
+   *  behaviour so tapping a tile toggles selection instead of speaking. */
+  selectMode?: boolean;
+  /** True when the bottom Edit Control Bar is in Move Mode. Overrides tap
+   *  behaviour so tapping a folder tile picks it as the move destination. */
+  moveMode?: boolean;
+  /** True when this tile is currently in the selected-set (Select Mode). */
+  selected?: boolean;
+  /** Called with tile.id when Select Mode is active and the user taps. */
+  onToggleSelect?: (tileId: string) => void;
+  /** Called with the tile when Move Mode is active and the user taps a folder. */
+  onPickMoveDestination?: (tile: BoardTile) => void;
+  /** Shared value continuously tracks the finger's absolute Y during a drag,
+   *  driving auto-scroll near safe-area top/bottom edges. -1 when not dragging. */
+  dragAbsoluteY?: SharedValue<number>;
 }
 
 function BoardTileButton({
@@ -1680,6 +1714,12 @@ function BoardTileButton({
   onResize,
   jiggle,
   onEditTap,
+  selectMode = false,
+  moveMode = false,
+  selected = false,
+  onToggleSelect,
+  onPickMoveDestination,
+  dragAbsoluteY,
 }: BoardTileButtonProps) {
   // Actual visual dimensions default to a square of `size` for backwards
   // compatibility with existing single-slot tiles.
@@ -1816,13 +1856,32 @@ function BoardTileButton({
   }, [reduceMotion, scale, tileOpacity]);
 
   const isNav = tile.id === 'back' || tile.id === 'home';
-  const isDraggable = editMode && !isNav;
+  // Resize Mode enables resize-handle visuals but does NOT auto-enable drag.
+  // Drag requires a deliberate second long-press on the tile — see
+  // `.activateAfterLongPress(DRAG_LIFT_LONG_PRESS_MS)` on the Pan below. This
+  // lets the ScrollView scroll normally while Resize Mode is active.
+  const canLiftForDrag = editMode && !isNav;
+  // Legacy alias kept for a11y actions + edit outline + delete badge.
+  const isDraggable = canLiftForDrag;
   // All tiles are perfectly square: the gesture area, wrapper, and content
   // all match `size`. This prevents the old 1.25× height wrapper from
   // overflowing into the row below and misaligning the grid.
   const tileHeight = tileHeightPx;
 
   const handlePress = useCallback(() => {
+    // Select Mode: tap toggles selection. Never speak, never navigate.
+    if (selectMode) {
+      onToggleSelect?.(tile.id);
+      return;
+    }
+    // Move Mode: tap a folder tile to pick it as the destination. Symbols
+    // are ignored so the user can't accidentally move-into a word tile.
+    if (moveMode) {
+      if (tile.kind === 'folder' && !isNav) {
+        onPickMoveDestination?.(tile);
+      }
+      return;
+    }
     if (editMode) {
       // Motor Access Mode: tile taps show context menu instead of doing nothing
       if (onEditTap) { onEditTap(tile.id); return; }
@@ -1832,7 +1891,7 @@ function BoardTileButton({
     pressableRef.current?.measureInWindow((x, y, width, height) => {
       onPress({ x, y, width, height });
     });
-  }, [editMode, onEditTap, onMeasuredPress, onPress, tile.id]);
+  }, [editMode, isNav, moveMode, onEditTap, onMeasuredPress, onPickMoveDestination, onPress, onToggleSelect, selectMode, tile.id, tile.kind]);
 
   // Item 7 — word-type hint for VoiceOver (principle 23: don't rely on
   // colour alone). Folder tiles already say "Open …" in the label.
@@ -1860,8 +1919,12 @@ function BoardTileButton({
   }, [onMoveToSlot, snapSlot, dragSourceSlot]);
 
   const pan = useMemo(() => Gesture.Pan()
-    .enabled(isDraggable)
-    .onStart(() => {
+    .enabled(canLiftForDrag)
+    // Critical: only start recognising Pan after the user has held the tile
+    // for DRAG_LIFT_LONG_PRESS_MS. Any faster drag falls through to the
+    // ScrollView so the board scrolls normally in Resize Mode.
+    .activateAfterLongPress(DRAG_LIFT_LONG_PRESS_MS)
+    .onStart((e) => {
       lifted.value = withTiming(1, { duration: 100 });
       // Record source slot — drives both the SourceGhost outline AND
       // the live-shuffle reaction in sibling tiles.
@@ -1872,12 +1935,16 @@ function BoardTileButton({
       // Start "hovering own slot" so the first slot crossing is detected
       // cleanly and no stale snapSlot from a previous drag bleeds in.
       if (snapSlot) snapSlot.value = currentSlotSV.value;
+      // Auto-scroll: publish the finger position so the parent can nudge
+      // the ScrollView when the drag nears the top/bottom safe edges.
+      if (dragAbsoluteY) dragAbsoluteY.value = e.absoluteY;
       // Haptic on pickup — matches iOS app-rearrange "lift" feedback.
       runOnJS(hapticSelection)();
     })
     .onUpdate((e) => {
       dragX.value = e.translationX;
       dragY.value = e.translationY;
+      if (dragAbsoluteY) dragAbsoluteY.value = e.absoluteY;
 
       // Compute snap target and update DragPlaceholder + hover-dim effect.
       // Multi-slot tiles (fw>2 or fh>2) can't go past the right edge or
@@ -1941,16 +2008,23 @@ function BoardTileButton({
         dragX.value = withTiming(0, SNAP_TIMING);
         dragY.value = withTiming(0, SNAP_TIMING);
       }
+      // Auto-scroll off — clear the tracked finger Y.
+      if (dragAbsoluteY) dragAbsoluteY.value = -1;
+    })
+    .onFinalize(() => {
+      // Defensive: if the gesture ends abnormally (cancel, screen change) the
+      // auto-scroll loop must stop.
+      if (dragAbsoluteY) dragAbsoluteY.value = -1;
     })
     // fw/fh MUST be deps — without them a resized tile publishes stale
     // dragFw/dragFh on its next drag and the highlight stays one cell.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    , [currentSlotSV, dragSourceSlot, dragX, dragY, finalizeSwap, isDraggable, lifted, onMoveToSlot, size, snapSlot, tile.id, totalSlots, fw, fh, dragFw, dragFh]);
+    , [currentSlotSV, dragSourceSlot, dragX, dragY, finalizeSwap, canLiftForDrag, lifted, onMoveToSlot, size, snapSlot, tile.id, totalSlots, fw, fh, dragFw, dragFh, dragAbsoluteY]);
 
   const animatedDragStyle = useAnimatedStyle(() => {
     // Jiggle drives a continuous gentle wobble during edit mode.
     // We only rotate when NOT dragging so the dragged tile stays visually stable.
-    const rotateDeg = (!isDraggable || lifted.value < 0.1) && jiggle
+    const rotateDeg = (!canLiftForDrag || lifted.value < 0.1) && jiggle
       ? jiggle.value
       : 0;
     return {
@@ -1982,6 +2056,12 @@ function BoardTileButton({
       ]
     : undefined;
 
+  // Select-mode indicator geometry: circle sits centred on the tile at ~44%
+  // of tile width so it overlaps but never buries the label. Not shown on
+  // nav tiles (Back / Home) — those can't be part of a bulk selection.
+  const showSelectionIndicator = (selectMode || moveMode) && !isNav;
+  const indicatorDiameter = Math.max(28, Math.round(Math.min(tileWidth, tileHeightPx) * 0.44));
+
   const tileContent = (
     <>
       {isNav ? (
@@ -2002,6 +2082,29 @@ function BoardTileButton({
           <Icon name="close" size={16} color={t.colors.surface} />
         </Pressable>
       ) : null}
+      {showSelectionIndicator ? (
+        <View
+          pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+          style={[
+            styles.selectionIndicator,
+            {
+              width: indicatorDiameter,
+              height: indicatorDiameter,
+              borderRadius: indicatorDiameter / 2,
+              borderColor: selected ? t.colors.primary : t.colors.symbolOutline,
+              backgroundColor: selected ? t.colors.primary : (t.isDark ? t.colors.input : '#FFFFFF'),
+              marginLeft: -indicatorDiameter / 2,
+              marginTop: -indicatorDiameter / 2,
+            },
+          ]}
+        >
+          {selected ? (
+            <Icon name="checkmark" size={Math.round(indicatorDiameter * 0.6)} color="#FFFFFF" strokeWidth={3.2} />
+          ) : null}
+        </View>
+      ) : null}
     </>
   );
 
@@ -2017,20 +2120,34 @@ function BoardTileButton({
           ref={pressableRef}
           accessibilityRole="button"
           accessibilityLabel={
-            isNav
-              ? tile.label
-              : tile.kind === 'folder'
-                ? `Open ${tile.label}`
-                : `Say ${tile.label}`
+            selectMode
+              ? `${selected ? 'Selected' : 'Not selected'}, ${tile.label}`
+              : moveMode && tile.kind === 'folder' && !isNav
+                ? `Move selected into ${tile.label}`
+                : isNav
+                  ? tile.label
+                  : tile.kind === 'folder'
+                    ? `Open ${tile.label}`
+                    : `Say ${tile.label}`
           }
-          accessibilityHint={a11yHint}
+          accessibilityHint={
+            selectMode
+              ? 'Tap to toggle selection'
+              : moveMode && tile.kind === 'folder' && !isNav
+                ? 'Tap to choose this folder as the move destination'
+                : a11yHint
+          }
+          accessibilityState={{
+            selected: (selectMode || moveMode) ? selected : undefined,
+            disabled: moveMode && (tile.kind !== 'folder' || isNav) ? true : undefined,
+          }}
           accessibilityActions={accessibilityActions}
           onAccessibilityAction={handleAccessibilityAction}
           onPress={handlePress}
-          onLongPress={!editMode && !isNav ? () => onLongPressEnterEdit?.(tile.id) : undefined}
+          onLongPress={!editMode && !isNav && !selectMode && !moveMode ? () => onLongPressEnterEdit?.(tile.id) : undefined}
           delayLongPress={450}
-          onPressIn={() => !editMode && animateTo(0.94)}
-          onPressOut={() => !editMode && animateTo(1)}
+          onPressIn={() => !editMode && !selectMode && !moveMode && animateTo(0.94)}
+          onPressOut={() => !editMode && !selectMode && !moveMode && animateTo(1)}
           style={({ pressed: _pressed }) => [
             styles.tilePressable,
             isDraggable && [styles.tileEditOutline, { borderColor: t.colors.primary }],
@@ -2058,7 +2175,10 @@ function BoardTileButton({
     </Reanimated.View>
   );
 
-  if (isDraggable) {
+  // Attach the Pan gesture whenever the tile CAN lift for drag (Resize Mode).
+  // `.activateAfterLongPress` inside the gesture ensures quick swipes still
+  // fall through to the ScrollView — only a held press lifts the tile.
+  if (canLiftForDrag) {
     return <GestureDetector gesture={pan}>{inner}</GestureDetector>;
   }
   return inner;
@@ -2088,6 +2208,12 @@ const BoardTileCell = React.memo(function BoardTileCell({
   dragFh,
   jiggle,
   onEditTap,
+  selectMode,
+  moveMode,
+  selected,
+  onToggleSelect,
+  onPickMoveDestination,
+  dragAbsoluteY,
 }: {
   tile: BoardTile;
   size: number;
@@ -2110,6 +2236,12 @@ const BoardTileCell = React.memo(function BoardTileCell({
   dragFh?: SharedValue<number>;
   jiggle?: SharedValue<number>;
   onEditTap?: (tileId: string) => void;
+  selectMode?: boolean;
+  moveMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (tileId: string) => void;
+  onPickMoveDestination?: (tile: BoardTile) => void;
+  dragAbsoluteY?: SharedValue<number>;
 }) {
   const handlePress = useCallback(
     (rect: WindowRect | null) => onTilePress(tile, rect),
@@ -2138,6 +2270,12 @@ const BoardTileCell = React.memo(function BoardTileCell({
       dragFh={dragFh}
       jiggle={jiggle}
       onEditTap={onEditTap}
+      selectMode={selectMode}
+      moveMode={moveMode}
+      selected={selected}
+      onToggleSelect={onToggleSelect}
+      onPickMoveDestination={onPickMoveDestination}
+      dragAbsoluteY={dragAbsoluteY}
     />
   );
 });
@@ -2320,6 +2458,10 @@ export default function TalkScreen() {
   const dragFh = useSharedValue(2);
   const gridOverlayOpacity = useSharedValue(0);
   const jiggle = useSharedValue(0);
+  // Auto-scroll while dragging: BoardTileButton writes the finger's absolute
+  // Y into this SV during a lift-drag; the parent reads it from an interval
+  // and nudges the ScrollView when the finger is near a safe-area edge.
+  const dragAbsoluteY = useSharedValue(-1);
   const scrollRef = useRef<ScrollView>(null);
   const scrollPositions = useRef<Partial<Record<BoardMode, number>>>({});
   const reduceMotion = useReduceMotion();
@@ -2336,19 +2478,47 @@ export default function TalkScreen() {
   // Add + / Board Settings / < (rule 1 — simple first, advanced later).
   const [homeDockExpanded, setHomeDockExpanded] = useState(false);
   const [editFocusTileId, setEditFocusTileId] = useState<string | null>(null);
+  // ── Bottom Edit Control Bar state ─────────────────────────────────────
+  // editControlsOpen: the Edit Control Bar (Back / Select / Move / Delete /
+  // Resize / Done) is visible. This is DIFFERENT from `editMode` (Resize
+  // Mode's jiggle-and-handles view). Only one of them is active at a time.
+  const [editControlsOpen, setEditControlsOpen] = useState(false);
+  const [activeEditTool, setActiveEditTool] = useState<BoardEditTool>('none');
+  const [selectedTileIds, setSelectedTileIds] = useState<Set<string>>(() => new Set());
   // ── Undo toast for tile hide/delete (Rule 26) ─────────────────────────
   const [undoToast, setUndoToast] = useState<{ tileId: string; placement: TilePlacement; board: BoardMode } | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // ── Add Symbol / Add Folder modals (Priority 2) ────────────────────────
-  const [addSymbolModalVisible, setAddSymbolModalVisible] = useState(false);
+  // ── Add Symbol Pack / Add Folder modals (Priority 2) ───────────────────
+  const [symbolPackModalVisible, setSymbolPackModalVisible] = useState(false);
   const [addFolderModalVisible, setAddFolderModalVisible] = useState(false);
   const [showSentenceHistory, setShowSentenceHistory] = useState(true);
+  const [customBoardVersion, setCustomBoardVersion] = useState(0);
   const folderCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dockFade = useRef(new RNAnimated.Value(1)).current;
   const messageWordsRef = useRef(state.messageWords);
   messageWordsRef.current = state.messageWords;
   // User-added tiles (symbols/folders) that don't exist in the static BOARD_TILES data.
   const userTilesRef = useRef<Map<string, BoardTile>>(new Map());
+
+  const installedPresetBoards = useMemo(
+    () => buildPresetPackBoards(state.installedSymbolPackIds),
+    [state.installedSymbolPackIds],
+  );
+
+  const boardTileCollections = useMemo(() => {
+    const merged: Record<string, BoardTile[]> = { ...BOARD_TILES };
+    for (const [board, tilesForBoard] of Object.entries(installedPresetBoards)) {
+      merged[board] = board === 'home'
+        ? [...(merged.home ?? []), ...(tilesForBoard as BoardTile[])]
+        : (tilesForBoard as BoardTile[]);
+    }
+    return merged;
+  }, [customBoardVersion, installedPresetBoards]);
+
+  const getBoardTiles = useCallback(
+    (board: string): BoardTile[] => boardTileCollections[board] ?? [],
+    [boardTileCollections],
+  );
 
   // Chained-utterance run tracking — cancels any in-flight clause chain so
   // rapid re-taps on the strip never overlap audio (board_speech_rules.md).
@@ -2370,7 +2540,7 @@ export default function TalkScreen() {
     for (const key of Object.keys(persisted) as BoardMode[]) {
       const stored = persisted[key];
       if (!stored || stored.length === 0) continue;
-      const boardTiles = BOARD_TILES[key];
+      const boardTiles = getBoardTiles(key);
       if (!boardTiles) continue;
       // Start from stored placements
       const layout: BoardLayout = reflowLayoutSlots(
@@ -2392,7 +2562,7 @@ export default function TalkScreen() {
       setLayouts(prev => ({ ...prev, ...seeded }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [getBoardTiles, state.boardPlacements]);
 
   // ── Edit mode effects ────────────────────────────────────────────────────
   // Fade the grid overlay in/out and start/stop the jiggle animation when
@@ -2422,7 +2592,7 @@ export default function TalkScreen() {
   const enterEditFromTile = useCallback((tileId: string) => {
     hapticIfEnabled();
     const current: BoardLayout = layouts[activeMode]
-      ?? BOARD_TILES[activeMode].map((t, i) => ({ id: t.id, slot: i, fw: 2, fh: 2 }));
+      ?? getBoardTiles(activeMode).map((t, i) => ({ id: t.id, slot: i, fw: 2, fh: 2 }));
     layoutSnapshotRef.current = current.map(p => ({ ...p }));
     setLayoutDirty(false);
     setEditFocusTileId(tileId);
@@ -2483,12 +2653,22 @@ export default function TalkScreen() {
     exitEditClean();
   }, [exitEditClean, handleCancelEdit, layoutDirty]);
 
-  // Long-press on a tile: enter edit (focusing that tile) or, if already in
-  // edit mode, exit via the shared exit logic (which prompts when dirty).
+  // Long-press on a tile: enter Resize Mode (focusing that tile) or, if
+  // already in Resize Mode, exit via the shared exit logic (which prompts
+  // when dirty). Suppressed while the Edit Control Bar's Select/Move tools
+  // are active so a long-hold selection tap can't accidentally enter Resize.
   const handleTileLongPress = useCallback((tileId: string) => {
+    if (activeEditTool === 'select' || activeEditTool === 'move') return;
     if (editMode) { handleExitEdit(); return; }
+    // Long-press implicitly closes the Edit Control Bar and takes the user
+    // straight into Resize Mode (matches Part 9: long-press = Resize Mode).
+    if (editControlsOpen) {
+      setEditControlsOpen(false);
+      setActiveEditTool('none');
+      setSelectedTileIds(new Set());
+    }
     enterEditFromTile(tileId);
-  }, [editMode, enterEditFromTile, handleExitEdit]);
+  }, [activeEditTool, editControlsOpen, editMode, enterEditFromTile, handleExitEdit]);
 
   // Tap-outside overlay: never silently discard. When dirty the user must use
   // the visible Cancel / Save dock; a clean edit session exits immediately.
@@ -2530,7 +2710,7 @@ export default function TalkScreen() {
 
   const handleDockSymbol = useCallback(() => {
     hapticIfEnabled();
-    setAddSymbolModalVisible(true);
+    setSymbolPackModalVisible(true);
   }, [hapticIfEnabled]);
 
   const handleDockAddFolder = useCallback(() => {
@@ -2538,31 +2718,21 @@ export default function TalkScreen() {
     setAddFolderModalVisible(true);
   }, [hapticIfEnabled]);
 
-  // ── Add Symbol confirm: insert tile at first free slot ──────────────
-  const handleAddSymbolConfirm = useCallback((result: { symbolId: string; label: string; color: string; wordType: string }) => {
-    setAddSymbolModalVisible(false);
-    const tileId = `user_${result.label.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
+  // ── Add Symbol Pack confirm: install one collapsed folder on Home ───────
+  const handleAddSymbolPackConfirm = useCallback((pack: PresetSymbolPack) => {
+    setSymbolPackModalVisible(false);
+    const folderId = presetPackHomeTileId(pack.id);
+    dispatch({ type: 'INSTALL_SYMBOL_PACK', payload: pack.id });
     setLayouts(prev => {
-      const current: BoardLayout = prev[activeMode]
-        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+      const current: BoardLayout = prev.home
+        ?? getBoardTiles('home').map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+      if (current.some(placement => placement.id === folderId)) return prev;
       const maxSlot = current.reduce((max, p) => Math.max(max, p.slot + 1), 0);
-      return { ...prev, [activeMode]: [...current, { id: tileId, slot: maxSlot, fw: 2, fh: 2 }] };
+      return { ...prev, home: [...current, { id: folderId, slot: maxSlot, fw: 2, fh: 2 }] };
     });
-    // Register the tile in BOARD_TILES dynamically isn't possible with static data,
-    // so we store a user-added tile map. For now, add to the board tiles at runtime.
-    const newTile: BoardTile = {
-      id: tileId,
-      label: result.label,
-      kind: 'word',
-      color: result.color,
-      speech: result.label.toLowerCase(),
-      mulberrySymbolId: result.symbolId,
-      wordType: result.wordType,
-    };
-    userTilesRef.current.set(tileId, newTile);
-    setLayoutDirty(true);
     hapticIfEnabled();
-  }, [activeMode, hapticIfEnabled]);
+    AccessibilityInfo.announceForAccessibility(`${pack.title} added to Home`);
+  }, [dispatch, getBoardTiles, hapticIfEnabled]);
 
   // ── Add Folder confirm: insert folder tile ──────────────────────────
   const handleAddFolderConfirm = useCallback((result: { label: string; boardKey: string; color: string; mulberrySymbolId?: string }) => {
@@ -2570,7 +2740,7 @@ export default function TalkScreen() {
     const tileId = `folder_${result.boardKey}`;
     setLayouts(prev => {
       const current: BoardLayout = prev[activeMode]
-        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+        ?? getBoardTiles(activeMode).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
       const maxSlot = current.reduce((max, p) => Math.max(max, p.slot + 1), 0);
       return { ...prev, [activeMode]: [...current, { id: tileId, slot: maxSlot, fw: 2, fh: 2 }] };
     });
@@ -2588,6 +2758,7 @@ export default function TalkScreen() {
       (BOARD_TILES as Record<string, BoardTile[]>)[result.boardKey] = [
         { id: `back-${result.boardKey}`, label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
       ];
+      setCustomBoardVersion(version => version + 1);
     }
     setLayoutDirty(true);
     hapticIfEnabled();
@@ -2635,24 +2806,301 @@ export default function TalkScreen() {
     exitEditClean();
   }, [activeMode, exitEditClean, hapticIfEnabled]);
 
-  // ── Dock mode resolver (priority: dirty edit > add > edit > folder) ────────
+  // ── Bottom Edit Control Bar handlers ─────────────────────────────────
+  // Priority order (see DockMode): editDirty > editClean (long-press Resize)
+  // > editControls (bottom Edit) > add > folder/home. Long-press to Resize
+  // takes precedence so a user mid-resize is never yanked back to the Edit
+  // Control Bar until they finish/cancel.
+  const closeEditControls = useCallback(() => {
+    setEditControlsOpen(false);
+    setActiveEditTool('none');
+    setSelectedTileIds(new Set());
+  }, []);
+
+  const handleDockEditOpen = useCallback(() => {
+    hapticIfEnabled();
+    // Opening the Edit Control Bar closes the Add flow / folder-nav dock.
+    setAddFlowExpanded(false);
+    setEditControlsOpen(true);
+    setActiveEditTool('none');
+    setSelectedTileIds(new Set());
+    announceForEditTool('none');
+  }, [hapticIfEnabled]);
+
+  const handleEditDockBack = useCallback(() => {
+    hapticIfEnabled();
+    closeEditControls();
+  }, [closeEditControls, hapticIfEnabled]);
+
+  const handleEditDockDone = useCallback(() => {
+    hapticIfEnabled();
+    closeEditControls();
+  }, [closeEditControls, hapticIfEnabled]);
+
+  const handleEditDockSelect = useCallback(() => {
+    hapticIfEnabled();
+    setActiveEditTool(prev => (prev === 'select' ? 'none' : 'select'));
+  }, [hapticIfEnabled]);
+
+  const handleEditDockMove = useCallback(() => {
+    hapticIfEnabled();
+    if (selectedTileIds.size === 0) {
+      Alert.alert('Nothing selected', 'Select one or more tiles first, then choose Move.', [{ text: 'OK' }]);
+      return;
+    }
+    setActiveEditTool('move');
+  }, [hapticIfEnabled, selectedTileIds.size]);
+
+  const handleEditDockResize = useCallback(() => {
+    hapticIfEnabled();
+    // Resize Mode reuses the existing long-press edit flow — snapshot the
+    // current layout and enter jiggle/handle mode. The Edit Control Bar
+    // closes; leaving Resize returns the user to the plain board dock.
+    const current: BoardLayout = layouts[activeMode]
+      ?? getBoardTiles(activeMode).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+    layoutSnapshotRef.current = current.map(p => ({ ...p }));
+    setLayoutDirty(false);
+    setEditFocusTileId(null);
+    setAddFlowExpanded(false);
+    setEditMode(true);
+    closeEditControls();
+  }, [activeMode, closeEditControls, getBoardTiles, hapticIfEnabled, layouts]);
+
+  // ── Selection helpers ────────────────────────────────────────────────
+  const toggleTileSelection = useCallback((tileId: string) => {
+    hapticIfEnabled();
+    setSelectedTileIds(prev => {
+      const next = new Set(prev);
+      if (next.has(tileId)) next.delete(tileId);
+      else next.add(tileId);
+      return next;
+    });
+  }, [hapticIfEnabled]);
+
+  // ── Bulk delete (Edit Control Bar > Delete) ─────────────────────────
+  // Reuses the existing HIDE_TILE reducer so removals survive relaunch and
+  // Restore-via-undo remains compatible. Protected tiles are skipped, not
+  // silently accepted.
+  const handleEditDockDelete = useCallback(() => {
+    hapticIfEnabled();
+    const ids = Array.from(selectedTileIds);
+    if (ids.length === 0) {
+      Alert.alert('Nothing selected', 'Select one or more tiles first, then choose Delete.', [{ text: 'OK' }]);
+      return;
+    }
+    // Local tile lookup — avoids referencing `tileMapForMode`, which is
+    // declared later in this component. Same shape, just inline.
+    const localTiles = getBoardTiles(activeMode);
+    const localTileById = new Map<string, BoardTile>();
+    for (const tt of localTiles) localTileById.set(tt.id, tt);
+    for (const [uid, ut] of userTilesRef.current) {
+      if (!localTileById.has(uid)) localTileById.set(uid, ut);
+    }
+    const currentLayout: BoardLayout = layouts[activeMode]
+      ?? localTiles.map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+    // Split out protected tiles so the confirmation reflects real intent.
+    const removable: string[] = [];
+    const protectedIds: string[] = [];
+    for (const id of ids) {
+      const tile = localTileById.get(id);
+      if (tile?.isProtected) protectedIds.push(id);
+      else removable.push(id);
+    }
+    const firstId = removable[0];
+    if (!firstId) {
+      Alert.alert('Protected', 'None of the selected tiles can be removed.', [{ text: 'OK' }]);
+      return;
+    }
+    const message = removable.length === 1
+      ? `Remove "${localTileById.get(firstId)?.label ?? 'this tile'}" from this board?`
+      : `Remove ${removable.length} selected items from this board?`;
+    Alert.alert(
+      protectedIds.length > 0
+        ? `${protectedIds.length} protected tile${protectedIds.length === 1 ? '' : 's'} will be kept`
+        : 'Remove selected?',
+      message,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            // Capture placements for undo (only fires on last removal since
+            // the toast is single-slot). For multi-remove, undo restores the
+            // first tile only — this matches the existing undo model and
+            // keeps the AsyncStorage restore path unchanged.
+            const firstRemoved = currentLayout.find(p => p.id === firstId);
+            setLayouts(prev => {
+              const curr: BoardLayout = prev[activeMode]
+                ?? getBoardTiles(activeMode).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+              return { ...prev, [activeMode]: curr.filter(p => !removable.includes(p.id)) };
+            });
+            setLayoutDirty(true);
+            for (const id of removable) dispatch({ type: 'HIDE_TILE', payload: id });
+            if (firstRemoved) {
+              if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+              setUndoToast({ tileId: firstId, placement: firstRemoved, board: activeMode });
+              undoTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
+            }
+            setSelectedTileIds(new Set());
+            setActiveEditTool('none');
+            AccessibilityInfo.announceForAccessibility(
+              removable.length === 1 ? 'Tile removed' : `${removable.length} tiles removed`,
+            );
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [activeMode, dispatch, getBoardTiles, hapticIfEnabled, layouts, selectedTileIds]);
+
+  // ── Move destination handler (Move Mode + folder tap) ──────────────
+  // Persistence limitation: `boardPlacements` is per-board and there is no
+  // `boardMembership` slice today, so a real cross-board move requires a
+  // new data shape (see the "Persistence gap" note in the final report).
+  // Rather than fake a move that disappears on reload, this handler shows
+  // a calm alert explaining the limitation and clears Move Mode. Folder
+  // safety rules (no self / no child) are still checked for the day this
+  // is wired to real persistence.
+  const handlePickMoveDestination = useCallback((destTile: BoardTile) => {
+    hapticIfEnabled();
+    if (destTile.kind !== 'folder' || !destTile.target) {
+      Alert.alert('Choose a folder', 'Move destinations must be folder tiles.', [{ text: 'OK' }]);
+      return;
+    }
+    const selected = Array.from(selectedTileIds);
+    // Local tile lookup (see handleEditDockDelete for why).
+    const localTiles = getBoardTiles(activeMode);
+    const localTileById = new Map<string, BoardTile>();
+    for (const tt of localTiles) localTileById.set(tt.id, tt);
+    for (const [uid, ut] of userTilesRef.current) {
+      if (!localTileById.has(uid)) localTileById.set(uid, ut);
+    }
+    // Folder safety: prevent moving a folder into itself or into its own
+    // target board (which would be a loop / broken nesting).
+    for (const id of selected) {
+      const tile = localTileById.get(id);
+      if (!tile) continue;
+      if (tile.id === destTile.id) {
+        Alert.alert('Cannot move', 'A folder cannot be moved into itself.', [{ text: 'OK' }]);
+        return;
+      }
+      if (tile.kind === 'folder' && tile.target && tile.target === destTile.target) {
+        Alert.alert('Cannot move', 'A folder cannot be moved into itself.', [{ text: 'OK' }]);
+        return;
+      }
+      if (tile.isProtected) {
+        Alert.alert('Protected', `"${tile.label}" is protected and cannot be moved.`, [{ text: 'OK' }]);
+        return;
+      }
+    }
+    Alert.alert(
+      'Move not yet available',
+      `Moving ${selected.length} item${selected.length === 1 ? '' : 's'} into "${destTile.label}" needs a small persistence upgrade. Delete + re-add works today; full Move is coming next.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Close Edit',
+          onPress: () => closeEditControls(),
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [activeMode, closeEditControls, getBoardTiles, hapticIfEnabled, selectedTileIds]);
+
+  // Small helper: announce the current tool to VoiceOver so the mode change
+  // is audible even without visual dock feedback.
+  function announceForEditTool(tool: BoardEditTool) {
+    switch (tool) {
+      case 'select': AccessibilityInfo.announceForAccessibility('Select tool active. Tap tiles to select or deselect.'); break;
+      case 'move':   AccessibilityInfo.announceForAccessibility('Move tool active. Tap a folder to choose the destination.'); break;
+      case 'resize': AccessibilityInfo.announceForAccessibility('Resize mode active. Long-press a tile to lift and drag it.'); break;
+      default:       AccessibilityInfo.announceForAccessibility('Edit controls open.'); break;
+    }
+  }
+
+  // ── Auto-scroll while dragging a lifted tile ────────────────────────
+  // 0–32pt from either safe-area edge = fast scroll; 33–52pt = slower;
+  // more than 52pt from an edge = no auto-scroll. Uses `scrollRef` +
+  // `scrollPositions.current[activeMode]` (already the source of truth
+  // for board scroll state). Interval runs only while a lift-drag is
+  // active — the SV writes -1 in Pan.onEnd/onFinalize to stop it.
+  const autoScrollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const boardAreaLayoutRef = useRef<{ y: number; h: number } | null>(null);
+  const boardAreaViewRef = useRef<View>(null);
+  useAnimatedReaction(
+    () => dragAbsoluteY.value,
+    (current, previous) => {
+      'worklet';
+      if (current >= 0 && (previous === null || previous < 0)) {
+        runOnJS(startAutoScroll)();
+      } else if (current < 0 && previous !== null && previous >= 0) {
+        runOnJS(stopAutoScroll)();
+      }
+    },
+  );
+
+  function startAutoScroll() {
+    if (autoScrollTimerRef.current) return;
+    autoScrollTimerRef.current = setInterval(() => {
+      const y = dragAbsoluteY.value;
+      if (y < 0) return;
+      const layout = boardAreaLayoutRef.current;
+      if (!layout) return;
+      const topEdge = layout.y;
+      const bottomEdge = layout.y + layout.h;
+      const distTop = y - topEdge;
+      const distBottom = bottomEdge - y;
+      const currentY = scrollPositions.current[activeMode] ?? 0;
+      // Reduce Motion halves the delta so the scroll feels calm.
+      const fastDelta = reduceMotion ? 6 : 12;
+      const slowDelta = reduceMotion ? 3 : 6;
+      let delta = 0;
+      if (distTop < 32) delta = -fastDelta;
+      else if (distTop < 52) delta = -slowDelta;
+      else if (distBottom < 32) delta = fastDelta;
+      else if (distBottom < 52) delta = slowDelta;
+      if (delta === 0) return;
+      const nextY = Math.max(0, currentY + delta);
+      scrollPositions.current[activeMode] = nextY;
+      scrollRef.current?.scrollTo({ y: nextY, animated: false });
+    }, 16);
+  }
+
+  function stopAutoScroll() {
+    if (autoScrollTimerRef.current) {
+      clearInterval(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = null;
+    }
+  }
+
+  useEffect(() => () => stopAutoScroll(), []);
+
+  // ── Dock mode resolver (priority: dirty edit > Resize > Edit Control Bar > add > folder) ──
   const dockMode = useMemo<DockMode>(() => {
     if (editMode) {
       if (layoutDirty) return 'editDirty';
       if (addFlowExpanded) return 'addExpanded';
       return 'editClean';
     }
+    if (editControlsOpen) return 'editControls';
     if (addFlowExpanded) return 'addExpanded';
     if (activeMode === 'home') {
       return homeDockExpanded ? 'homeExpanded' : 'homeCollapsed';
     }
     return folderDockExpanded ? 'folderExpanded' : 'folderCollapsed';
-  }, [activeMode, addFlowExpanded, editMode, folderDockExpanded, homeDockExpanded, layoutDirty]);
+  }, [activeMode, addFlowExpanded, editControlsOpen, editMode, folderDockExpanded, homeDockExpanded, layoutDirty]);
 
   // On board change: reset add flow; folders start expanded with a 15s timer,
-  // home clears folder nav entirely.
+  // home clears folder nav entirely. The Edit Control Bar is also closed
+  // because tapping a folder in Move Mode navigates the board — the target
+  // board should start with the plain contextual dock, not carry the Edit
+  // Control Bar across the navigation.
   useEffect(() => {
     setAddFlowExpanded(false);
+    setEditControlsOpen(false);
+    setActiveEditTool('none');
+    setSelectedTileIds(new Set());
     setHomeDockExpanded(false); // home always lands calm — just ">"
     if (activeMode === 'home') {
       setFolderDockExpanded(false);
@@ -2692,7 +3140,7 @@ export default function TalkScreen() {
   const handleMoveToSlot = useCallback((tileId: string, targetSlot: number) => {
     setLayouts(prev => {
       const current: BoardLayout = prev[activeMode]
-        ?? BOARD_TILES[activeMode].map((t, i) => ({
+        ?? getBoardTiles(activeMode).map((t, i) => ({
           id: t.id, slot: i, fw: 2, fh: 2,
         }));
       const draggedIdx = current.findIndex(p => p.id === tileId);
@@ -2748,13 +3196,13 @@ export default function TalkScreen() {
           onPress: () => {
             // Capture current placement for undo (Rule 26)
             const currentLayout: BoardLayout = layouts[activeMode]
-              ?? BOARD_TILES[activeMode].map((t, i) => ({ id: t.id, slot: i, fw: 2, fh: 2 }));
+              ?? getBoardTiles(activeMode).map((t, i) => ({ id: t.id, slot: i, fw: 2, fh: 2 }));
             const removedPlacement = currentLayout.find(p => p.id === tile.id);
 
             // Remove from local placements
             setLayouts(prev => {
               const curr: BoardLayout = prev[activeMode]
-                ?? BOARD_TILES[activeMode].map((t, i) => ({ id: t.id, slot: i, fw: 2, fh: 2 }));
+                ?? getBoardTiles(activeMode).map((t, i) => ({ id: t.id, slot: i, fw: 2, fh: 2 }));
               return { ...prev, [activeMode]: curr.filter(p => p.id !== tile.id) };
             });
             setLayoutDirty(true);
@@ -2805,7 +3253,7 @@ export default function TalkScreen() {
     hapticIfEnabled();
     setLayouts(prev => {
       const current: BoardLayout = prev[activeMode]
-        ?? BOARD_TILES[activeMode].map((t, i) => ({
+        ?? getBoardTiles(activeMode).map((t, i) => ({
           id: t.id, slot: i, fw: 2, fh: 2,
         }));
       const idx = current.findIndex(p => p.id === tileId);
@@ -2898,13 +3346,13 @@ export default function TalkScreen() {
 
   // Lookup map: tileId → BoardTile for the active mode (includes user-added tiles).
   const tileMapForMode = useMemo(() => {
-    const map = new Map(BOARD_TILES[activeMode]?.map(t => [t.id, t]) ?? []);
+    const map = new Map(getBoardTiles(activeMode).map(t => [t.id, t]));
     // Merge user-added tiles so they resolve in the board renderer
     for (const [id, tile] of userTilesRef.current) {
       if (!map.has(id)) map.set(id, tile);
     }
     return map;
-  }, [activeMode, layouts]);
+  }, [activeMode, getBoardTiles, layouts]);
 
   // ── Motor Access Mode: tap-based context menu (Priority 5, Rule 20/25) ──
   const handleMotorAccessMenu = useCallback((tileId: string) => {
@@ -2925,22 +3373,22 @@ export default function TalkScreen() {
       (buttonIndex) => {
         if (buttonIndex === 0) {
           const layout = layouts[activeMode]
-            ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+            ?? getBoardTiles(activeMode).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
           const p = layout.find(lp => lp.id === tileId);
           if (p && p.slot > 0) handleMoveToSlot(tileId, p.slot - 1);
         } else if (buttonIndex === 1) {
           const layout = layouts[activeMode]
-            ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+            ?? getBoardTiles(activeMode).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
           const p = layout.find(lp => lp.id === tileId);
           if (p) handleMoveToSlot(tileId, p.slot + 1);
         } else if (buttonIndex === 2) {
           const layout = layouts[activeMode]
-            ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+            ?? getBoardTiles(activeMode).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
           const p = layout.find(lp => lp.id === tileId);
           if (p) handleResize(tileId, Math.min(p.fw + 2, 8), Math.min(p.fh + 2, 8), 0, 0);
         } else if (buttonIndex === 3) {
           const layout = layouts[activeMode]
-            ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+            ?? getBoardTiles(activeMode).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
           const p = layout.find(lp => lp.id === tileId);
           if (p) handleResize(tileId, Math.max(p.fw - 2, 2), Math.max(p.fh - 2, 2), 0, 0);
         } else if (buttonIndex === 4) {
@@ -2957,12 +3405,25 @@ export default function TalkScreen() {
   // Active layout for the current mode. Falls back to a sequential
   // default (each tile at its own slot, 2×2 fine size = 88×88).
   const activeLayout = useMemo<BoardLayout>(() => {
+    const boardTiles = getBoardTiles(activeMode);
     const custom = layouts[activeMode];
-    if (custom) return custom;
-    return BOARD_TILES[activeMode].map((t, i) => ({
+    if (custom) {
+      const knownIds = new Set(custom.map(placement => placement.id));
+      const maxSlot = custom.reduce((max, placement) => Math.max(max, placement.slot + 1), 0);
+      const missing = boardTiles
+        .filter(tile => !knownIds.has(tile.id))
+        .map((tile, index) => ({
+          id: tile.id,
+          slot: maxSlot + index,
+          fw: 2,
+          fh: 2,
+        }));
+      return missing.length > 0 ? [...custom, ...missing] : custom;
+    }
+    return boardTiles.map((t, i) => ({
       id: t.id, slot: i, fw: 2, fh: 2,
     }));
-  }, [activeMode, layouts]);
+  }, [activeMode, getBoardTiles, layouts]);
 
   // Fast lookup: slot index → placement (for collision checks + swap).
   const layoutBySlot = useMemo(() => {
@@ -3043,7 +3504,7 @@ export default function TalkScreen() {
   }, [applySort]);
 
   // Keep `tiles` for the Mulberry prewarm effect (all tiles in active mode).
-  const tiles = useMemo(() => BOARD_TILES[activeMode], [activeMode]);
+  const tiles = useMemo(() => getBoardTiles(activeMode), [activeMode, getBoardTiles]);
 
   useEffect(() => {
     const y = scrollPositions.current[activeMode] ?? 0;
@@ -3081,7 +3542,7 @@ export default function TalkScreen() {
   }, [tiles]);
   const chipTileLookup = useMemo(() => {
     const lookup = new Map<string, BoardTile>();
-    Object.values(BOARD_TILES).flat().forEach(tile => {
+    Object.values(boardTileCollections).flat().forEach(tile => {
       lookup.set((tile.speech ?? tile.label).toLowerCase(), tile);
       lookup.set(tile.label.toLowerCase(), tile);
     });
@@ -3350,7 +3811,7 @@ export default function TalkScreen() {
       navigateTo(tile.target);
       // Item 6 — richer folder announcement: include the symbol count so
       // VoiceOver users know what awaits them inside (principle 21).
-      const symbolCount = BOARD_TILES[tile.target]?.length ?? 0;
+      const symbolCount = getBoardTiles(tile.target).length;
       announce(`${tile.label} board, ${symbolCount} symbol${symbolCount !== 1 ? 's' : ''}`);
       return;
     }
@@ -3386,7 +3847,7 @@ export default function TalkScreen() {
     const target = editFocusTileId;
     setLayouts(prev => {
       const current: BoardLayout = prev[activeMode]
-        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+        ?? getBoardTiles(activeMode).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
       const next = current.filter(p => p.id !== target);
       return { ...prev, [activeMode]: next };
     });
@@ -3604,8 +4065,18 @@ export default function TalkScreen() {
 
         {/* Board area: ScrollView (flex:1) + pinned bottom dock */}
         <View
+          ref={boardAreaViewRef}
           style={styles.boardArea}
-          onLayout={e => setBoardAreaHeight(e.nativeEvent.layout.height)}
+          onLayout={e => {
+            setBoardAreaHeight(e.nativeEvent.layout.height);
+            // measureInWindow gives us the absolute Y — needed for the
+            // auto-scroll interval, which compares finger.absoluteY against
+            // this rect. onLayout's y is relative to the parent view, so
+            // we measure the view directly.
+            boardAreaViewRef.current?.measureInWindow((_x, y, _w, h) => {
+              boardAreaLayoutRef.current = { y, h };
+            });
+          }}
         >
           <ScrollView
             ref={scrollRef}
@@ -3700,6 +4171,12 @@ export default function TalkScreen() {
                           dragFh={dragFh}
                           jiggle={jiggle}
                           onEditTap={motorAccessEnabled ? handleMotorAccessMenu : undefined}
+                          selectMode={activeEditTool === 'select'}
+                          moveMode={activeEditTool === 'move'}
+                          selected={selectedTileIds.has(tile.id)}
+                          onToggleSelect={toggleTileSelection}
+                          onPickMoveDestination={handlePickMoveDestination}
+                          dragAbsoluteY={dragAbsoluteY}
                         />
                         {editMode && state.showUsageHeatmap && (state.tileTapCounts[tile.id] ?? 0) > 0 && (
                           <View
@@ -3778,13 +4255,22 @@ export default function TalkScreen() {
               ]}
             >
               {dockMode === 'homeCollapsed' ? (
-                <BoardDockAction
-                  icon="chevron-right" label="More"
-                  a11yLabel="More"
-                  a11yHint="Expand board controls. Shows Add and Board settings."
-                  onPress={handleHomeDockExpand}
-                  isToggle
-                />
+                <>
+                  <BoardDockAction
+                    icon="chevron-right" label="More"
+                    a11yLabel="More"
+                    a11yHint="Expand board controls. Shows Add and Board settings."
+                    onPress={handleHomeDockExpand}
+                    isToggle
+                  />
+                  <BoardDockAction
+                    icon="edit" label="Edit"
+                    a11yLabel="Edit"
+                    a11yHint="Open edit controls: Select, Move, Delete, Resize"
+                    onPress={handleDockEditOpen}
+                    kind="neutral"
+                  />
+                </>
               ) : dockMode === 'homeExpanded' ? (
                 <>
                   <BoardDockAction
@@ -3806,6 +4292,13 @@ export default function TalkScreen() {
                     a11yLabel="Board settings"
                     a11yHint="Opens board display and layout settings"
                     onPress={handleOpenBoardSettings}
+                    kind="neutral"
+                  />
+                  <BoardDockAction
+                    icon="edit" label="Edit"
+                    a11yLabel="Edit"
+                    a11yHint="Open edit controls: Select, Move, Delete, Resize"
+                    onPress={handleDockEditOpen}
                     kind="neutral"
                   />
                   <BoardDockAction
@@ -3863,6 +4356,13 @@ export default function TalkScreen() {
                     kind="neutral"
                   />
                   <BoardDockAction
+                    icon="edit" label="Edit"
+                    a11yLabel="Edit"
+                    a11yHint="Open edit controls: Select, Move, Delete, Resize"
+                    onPress={handleDockEditOpen}
+                    kind="neutral"
+                  />
+                  <BoardDockAction
                     icon="chevron-left" label="Hide"
                     a11yLabel="Hide"
                     a11yHint="Collapse actions. Hides Back and Add."
@@ -3870,12 +4370,70 @@ export default function TalkScreen() {
                   />
                 </>
               ) : dockMode === 'folderCollapsed' ? (
-                <BoardDockAction
-                  icon="chevron-right" label="More"
-                  a11yLabel="More"
-                  a11yHint="Expand actions. Shows Back and Add."
-                  onPress={handleFolderExpand} isToggle
-                />
+                <>
+                  <BoardDockAction
+                    icon="chevron-right" label="More"
+                    a11yLabel="More"
+                    a11yHint="Expand actions. Shows Back and Add."
+                    onPress={handleFolderExpand} isToggle
+                  />
+                  <BoardDockAction
+                    icon="edit" label="Edit"
+                    a11yLabel="Edit"
+                    a11yHint="Open edit controls: Select, Move, Delete, Resize"
+                    onPress={handleDockEditOpen}
+                    kind="neutral"
+                  />
+                </>
+              ) : dockMode === 'editControls' ? (
+                <>
+                  <BoardDockAction
+                    icon="back-out" label="Back"
+                    a11yLabel="Back"
+                    a11yHint="Close edit controls and return to the board actions"
+                    onPress={handleEditDockBack} kind="neutral"
+                  />
+                  <BoardDockAction
+                    icon="select" label="Select"
+                    a11yLabel="Select tiles"
+                    a11yHint="Turn on selection. Tap tiles to select or deselect."
+                    onPress={handleEditDockSelect}
+                    kind="neutral"
+                    isToggle
+                    isActive={activeEditTool === 'select'}
+                  />
+                  <BoardDockAction
+                    icon="move" label="Move"
+                    a11yLabel={selectedTileIds.size > 0 ? `Move ${selectedTileIds.size} selected item${selectedTileIds.size === 1 ? '' : 's'}` : 'Move'}
+                    a11yHint="Choose a destination folder for the selected tiles"
+                    onPress={handleEditDockMove}
+                    kind="neutral"
+                    disabled={selectedTileIds.size === 0}
+                    isToggle={activeEditTool === 'move'}
+                    isActive={activeEditTool === 'move'}
+                  />
+                  <BoardDockAction
+                    icon="remove" label="Delete"
+                    a11yLabel={selectedTileIds.size > 0 ? `Delete ${selectedTileIds.size} selected item${selectedTileIds.size === 1 ? '' : 's'}` : 'Delete'}
+                    a11yHint="Remove the selected tiles from this board"
+                    onPress={handleEditDockDelete}
+                    kind="muted"
+                    disabled={selectedTileIds.size === 0}
+                  />
+                  <BoardDockAction
+                    icon="resize" label="Resize"
+                    a11yLabel="Resize mode"
+                    a11yHint="Show resize handles. Long-press a tile to lift and drag it."
+                    onPress={handleEditDockResize}
+                    kind="neutral"
+                  />
+                  <BoardDockAction
+                    icon="checkmark" label="Done"
+                    a11yLabel="Done editing"
+                    a11yHint="Close edit controls"
+                    onPress={handleEditDockDone} kind="primary"
+                  />
+                </>
               ) : dockMode === 'editDirty' ? (
                 <>
                   <BoardDockAction
@@ -3937,11 +4495,12 @@ export default function TalkScreen() {
         </View>
       </View>
 
-      {/* ── Add Symbol / Folder modals (Priority 2) ───────────────────── */}
-      <AddSymbolModal
-        visible={addSymbolModalVisible}
-        onDismiss={() => setAddSymbolModalVisible(false)}
-        onAdd={handleAddSymbolConfirm}
+      {/* ── Add Symbol Pack / Folder modals (Priority 2) ──────────────── */}
+      <SymbolPackPickerModal
+        visible={symbolPackModalVisible}
+        installedPackIds={state.installedSymbolPackIds}
+        onDismiss={() => setSymbolPackModalVisible(false)}
+        onAddPack={handleAddSymbolPackConfirm}
       />
       <AddFolderModal
         visible={addFolderModalVisible}
@@ -4126,6 +4685,18 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderRadius: TILE_CORNER_RADIUS,
   },
+  // Circular Select-Mode indicator centred on the tile. Diameter, colours,
+  // and offsets are set inline so the same style works for word tiles,
+  // folder tiles, and every tile size (1x1 through 4x4).
+  selectionIndicator: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 6,
+  },
   tileShell: {
     position: 'relative',
   },
@@ -4171,6 +4742,9 @@ const styles = StyleSheet.create({
   },
   wordTile: {
     position: 'relative',
+    borderRadius: TILE_CORNER_RADIUS,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   // Flat coloured fill behind the symbol/label. Rounded corners match the
   // optical weight of the folder PNGs so word and folder tiles share a
