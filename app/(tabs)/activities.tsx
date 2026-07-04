@@ -182,6 +182,107 @@ function StarParticles({ trigger }: { trigger: number }) {
   );
 }
 
+const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300] as const;
+
+// --- StarParticles ---
+
+function StarParticles({ trigger }: { trigger: number }) {
+  const particles = useRef(
+    PARTICLE_ANGLES.map(() => ({
+      opacity:  new Animated.Value(0),
+      progress: new Animated.Value(0),
+    }))
+  ).current;
+
+  const lastTrigger = useRef(0);
+
+  useEffect(() => {
+    if (trigger === 0 || trigger === lastTrigger.current) return;
+    lastTrigger.current = trigger;
+
+    particles.forEach(p => {
+      p.opacity.setValue(0);
+      p.progress.setValue(0);
+    });
+
+    const anims = particles.map(p =>
+      Animated.parallel([
+        Animated.timing(p.progress, {
+          toValue: 1,
+          duration: 320,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.timing(p.opacity, {
+            toValue: 1,
+            duration: 55,
+            useNativeDriver: true,
+          }),
+          Animated.timing(p.opacity, {
+            toValue: 0,
+            duration: 240,
+            delay: 50,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
+
+    Animated.stagger(18, anims).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trigger]);
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {PARTICLE_ANGLES.map((angle, i) => {
+        const rad    = (angle * Math.PI) / 180;
+        const radius = 20;
+        const p      = particles[i];
+        if (!p) return null;
+        return (
+          <Animated.View
+            key={angle}
+            style={{
+              position:    'absolute',
+              top:         '50%',
+              left:        '50%',
+              width:       5,
+              height:      5,
+              marginTop:   -2.5,
+              marginLeft:  -2.5,
+              borderRadius: 2.5,
+              backgroundColor: '#F5B400',
+              opacity: p.opacity,
+              transform: [
+                {
+                  translateX: p.progress.interpolate({
+                    inputRange:  [0, 1],
+                    outputRange: [0, Math.cos(rad) * radius],
+                  }),
+                },
+                {
+                  translateY: p.progress.interpolate({
+                    inputRange:  [0, 1],
+                    outputRange: [0, Math.sin(rad) * radius],
+                  }),
+                },
+                {
+                  scale: p.progress.interpolate({
+                    inputRange:  [0, 0.3, 1],
+                    outputRange: [0.4, 1, 0.5],
+                  }),
+                },
+              ],
+            }}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
 // --- SectionHeader ---
 
 function SectionHeader({
