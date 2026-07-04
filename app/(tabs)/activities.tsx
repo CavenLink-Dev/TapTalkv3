@@ -32,6 +32,7 @@ import {
 } from '../../src/features/activities/favourites-store';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
+import { useReduceSensoryLoad } from '../../src/hooks/useReduceSensoryLoad';
 import { useTheme } from '../../src/theme/useTheme';
 
 // --- Data ---
@@ -82,6 +83,107 @@ const CARD_GAP    = spacing.xl;
 const STAR_SIZE   = 44;
 const PLAY_SIZE   = 52;
 const PLAY_ICON_SIZE = 32;
+
+const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300] as const;
+
+// --- StarParticles ---
+
+function StarParticles({ trigger }: { trigger: number }) {
+  const particles = useRef(
+    PARTICLE_ANGLES.map(() => ({
+      opacity:  new Animated.Value(0),
+      progress: new Animated.Value(0),
+    }))
+  ).current;
+
+  const lastTrigger = useRef(0);
+
+  useEffect(() => {
+    if (trigger === 0 || trigger === lastTrigger.current) return;
+    lastTrigger.current = trigger;
+
+    particles.forEach(p => {
+      p.opacity.setValue(0);
+      p.progress.setValue(0);
+    });
+
+    const anims = particles.map(p =>
+      Animated.parallel([
+        Animated.timing(p.progress, {
+          toValue: 1,
+          duration: 320,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.timing(p.opacity, {
+            toValue: 1,
+            duration: 55,
+            useNativeDriver: true,
+          }),
+          Animated.timing(p.opacity, {
+            toValue: 0,
+            duration: 240,
+            delay: 50,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
+
+    Animated.stagger(18, anims).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trigger]);
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {PARTICLE_ANGLES.map((angle, i) => {
+        const rad    = (angle * Math.PI) / 180;
+        const radius = 20;
+        const p      = particles[i];
+        if (!p) return null;
+        return (
+          <Animated.View
+            key={angle}
+            style={{
+              position:    'absolute',
+              top:         '50%',
+              left:        '50%',
+              width:       5,
+              height:      5,
+              marginTop:   -2.5,
+              marginLeft:  -2.5,
+              borderRadius: 2.5,
+              backgroundColor: '#F5B400',
+              opacity: p.opacity,
+              transform: [
+                {
+                  translateX: p.progress.interpolate({
+                    inputRange:  [0, 1],
+                    outputRange: [0, Math.cos(rad) * radius],
+                  }),
+                },
+                {
+                  translateY: p.progress.interpolate({
+                    inputRange:  [0, 1],
+                    outputRange: [0, Math.sin(rad) * radius],
+                  }),
+                },
+                {
+                  scale: p.progress.interpolate({
+                    inputRange:  [0, 0.3, 1],
+                    outputRange: [0.4, 1, 0.5],
+                  }),
+                },
+              ],
+            }}
+          />
+        );
+      })}
+    </View>
+  );
+}
 
 // --- SectionHeader ---
 
@@ -156,11 +258,15 @@ function ActivityCard({
 }) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
+  const reduceSensory = useReduceSensoryLoad();
 
   const mountProgress   = useRef(new Animated.Value(0)).current;
   const pressScale      = useRef(new Animated.Value(1)).current;
   const heroScale       = useRef(new Animated.Value(1)).current;
+  const shimmerProgress = useRef(new Animated.Value(0)).current;
   const starScale       = useRef(new Animated.Value(1)).current;
+  const starGlow        = useRef(new Animated.Value(favourite ? 1 : 0)).current;
+  const [particleTrigger, setParticleTrigger] = useState(0);
 
   // Mount entrance
   useEffect(() => {
@@ -178,23 +284,45 @@ function ActivityCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Star bounce
+  // Shimmer loop — favourites only, with a slightly stronger pass
+  useEffect(() => {
+    if (reduceMotion || reduceSensory || !favourite) return;
+    let timeout: ReturnType<typeof setTimeout>;
+    const runShimmer = () => {
+      shimmerProgress.setValue(0);
+      Animated.timing(shimmerProgress, {
+        toValue:  1,
+        duration: 760,
+        easing:   Easing.inOut(Easing.sin),
+        useNativeDriver: true,
+      }).start(() => {
+        timeout = setTimeout(runShimmer, 5_500 + Math.random() * 2_500);
+      });
+    };
+    timeout = setTimeout(runShimmer, 1_500 + index * 500 + Math.random() * 1_200);
+    return () => clearTimeout(timeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favourite, reduceMotion]);
+
+  // Star bounce + glow + particles
   const isMounted    = useRef(false);
   const wasFavourite = useRef(favourite);
 
   useEffect(() => {
     if (!isMounted.current) {
       isMounted.current = true;
+      starGlow.setValue(favourite ? 1 : 0);
       return;
     }
     const wasFav = wasFavourite.current;
     wasFavourite.current = favourite;
 
     if (reduceMotion) {
+      starGlow.setValue(favourite ? 1 : 0);
       return;
     }
 
-    if (favourite !== wasFav) {
+    Animated.parallel([
       Animated.sequence([
         Animated.spring(starScale, {
           toValue: favourite ? 1.18 : 0.9,
@@ -206,9 +334,19 @@ function ActivityCard({
           useNativeDriver: true,
           damping: 16, stiffness: 300, mass: 1,
         }),
-      ]).start();
+      ]),
+      Animated.timing(starGlow, {
+        toValue:  favourite ? 1 : 0,
+        duration: 240,
+        easing:   Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    if (favourite && !wasFav && !reduceMotion && !reduceSensory) {
+      setParticleTrigger(t => t + 1);
     }
-  }, [favourite, reduceMotion]);
+  }, [favourite, reduceMotion, reduceSensory]);
 
   const handlePressIn = () => {
     if (reduceMotion) return;
@@ -242,6 +380,19 @@ function ActivityCard({
     inputRange:  [0, 1],
     outputRange: [18, 0],
   });
+  const shimmerTranslateX = shimmerProgress.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [-160, 380],
+  });
+  const starGlowOpacity = starGlow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0, 0.7],
+  });
+  const starGlowScale = starGlow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.5, 1],
+  });
+
   const heroBackground = t.isDark ? `${activity.accent}33` : activity.heroBg;
 
   return (
@@ -273,6 +424,17 @@ function ActivityCard({
             />
           </Animated.View>
 
+          {favourite ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                { transform: [{ translateX: shimmerTranslateX }] },
+              ]}
+            >
+              <View style={styles.shimmerStripe} />
+            </Animated.View>
+          ) : null}
         </View>
 
         {/* Favourite star — top-left overlay over the hero (Rule 10) */}
