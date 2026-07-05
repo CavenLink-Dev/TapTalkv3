@@ -32,6 +32,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
+import { SettingsRow } from '../../src/components/native/SettingsRow';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSystemReduceMotion } from '../../src/hooks/useReduceMotion';
 import { useTheme } from '../../src/theme/useTheme';

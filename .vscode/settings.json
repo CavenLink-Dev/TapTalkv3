@@ -1,0 +1,26 @@
+{
+  "files.exclude": {
+    "**/.expo": true,
+    "**/.tmp": true,
+    "**/.venv": true,
+    "**/codex-workflows/.venv": true,
+    "**/ios/Pods": true,
+    "**/node_modules": true
+  },
+  "files.watcherExclude": {
+    "**/.expo/**": true,
+    "**/.tmp/**": true,
+    "**/.venv/**": true,
+    "**/codex-workflows/.venv/**": true,
+    "**/ios/Pods/**": true,
+    "**/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/.expo": true,
+    "**/.tmp": true,
+    "**/.venv": true,
+    "**/codex-workflows/.venv": true,
+    "**/ios/Pods": true,
+    "**/node_modules": true
+  }
+}

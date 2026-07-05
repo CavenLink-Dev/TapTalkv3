@@ -7,8 +7,12 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,51 +29,176 @@ import { fonts } from '../../theme/fonts';
 import { hapticSelection } from '../../utils/haptics';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { ColorPickerSheet } from '../native/ColorPickerSheet';
+import { pickFromLibrary, takePhoto, type PickOutcome } from '../../features/profile/pickImage';
 
 export interface AddFolderResult {
   label: string;
   boardKey: string;
   color: string;
   mulberrySymbolId?: string;
+  customImageUri?: string;
+  parentBoardKey?: string;
+}
+
+export interface FolderPlacementOption {
+  boardKey: string;
+  label: string;
 }
 
 interface Props {
   visible: boolean;
   onDismiss: () => void;
   onAdd: (result: AddFolderResult) => void;
+  placementOptions?: FolderPlacementOption[];
+  initialParentBoardKey?: string;
 }
 
 // Default folder tile colour. Any colour is reachable via the colour wheel —
 // there are intentionally no preset swatches (colour wheel only, app-wide).
 const DEFAULT_COLOR = '#1DCDFF';
 
-export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
+export function AddFolderModal({
+  visible,
+  onDismiss,
+  onAdd,
+  placementOptions = [],
+  initialParentBoardKey = 'home',
+}: Props) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
   const [label, setLabel] = useState('');
   const [iconId, setIconId] = useState<string | null>(null);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [color, setColor] = useState<string>(DEFAULT_COLOR);
   const [colorSheet, setColorSheet] = useState(false);
   const [iconSearch, setIconSearch] = useState(false);
   const [iconQuery, setIconQuery] = useState('');
+  const [parentBoardKey, setParentBoardKey] = useState(initialParentBoardKey);
   const inputRef = useRef<TextInput>(null);
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (focusTimerRef.current) {
+      clearTimeout(focusTimerRef.current);
+      focusTimerRef.current = null;
+    }
     if (visible) {
-      setTimeout(() => inputRef.current?.focus(), 400);
+      setParentBoardKey(initialParentBoardKey);
+      focusTimerRef.current = setTimeout(() => inputRef.current?.focus(), 400);
     } else {
       setLabel('');
       setIconId(null);
+      setPhotoUri(null);
       setColor(DEFAULT_COLOR);
       setIconSearch(false);
       setIconQuery('');
+      setParentBoardKey(initialParentBoardKey);
     }
-  }, [visible]);
+    return () => {
+      if (focusTimerRef.current) {
+        clearTimeout(focusTimerRef.current);
+        focusTimerRef.current = null;
+      }
+    };
+  }, [initialParentBoardKey, visible]);
+
+  const selectedPlacement = placementOptions.find(option => option.boardKey === parentBoardKey)
+    ?? placementOptions[0]
+    ?? { boardKey: initialParentBoardKey, label: 'Current board' };
 
   const handleSelectColor = useCallback((c: string) => {
     hapticSelection();
     setColor(c);
   }, []);
+
+  const handlePickOutcome = useCallback((outcome: PickOutcome) => {
+    if (outcome.status === 'picked') {
+      hapticSelection();
+      setPhotoUri(outcome.uri);
+      setIconId(null);
+      return;
+    }
+    if (outcome.status === 'denied') {
+      Alert.alert('Photo access needed', 'Allow photo access in Settings to use a photo as the folder icon.');
+    } else if (outcome.status === 'unavailable') {
+      Alert.alert('Photo picker unavailable', 'Choose a symbol for now.');
+    }
+  }, []);
+
+  const openSymbolSearch = useCallback(() => {
+    hapticSelection();
+    setIconQuery('');
+    setIconSearch(true);
+  }, []);
+
+  const handleTakePhoto = useCallback(async () => {
+    handlePickOutcome(await takePhoto());
+  }, [handlePickOutcome]);
+
+  const handleChoosePhoto = useCallback(async () => {
+    handlePickOutcome(await pickFromLibrary());
+  }, [handlePickOutcome]);
+
+  const showIconOptions = useCallback(() => {
+    hapticSelection();
+    const labels = ['Take Photo', 'Choose Photo from Library', 'Choose a Symbol', 'Cancel'];
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: labels,
+          cancelButtonIndex: 3,
+          userInterfaceStyle: t.isDark ? 'dark' : 'light',
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) void handleTakePhoto();
+          if (buttonIndex === 1) void handleChoosePhoto();
+          if (buttonIndex === 2) openSymbolSearch();
+        },
+      );
+      return;
+    }
+    Alert.alert('Search for an icon', undefined, [
+      { text: 'Take Photo', onPress: () => { void handleTakePhoto(); } },
+      { text: 'Choose Photo from Library', onPress: () => { void handleChoosePhoto(); } },
+      { text: 'Choose a Symbol', onPress: openSymbolSearch },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [handleChoosePhoto, handleTakePhoto, openSymbolSearch, t.isDark]);
+
+  const showPlacementOptions = useCallback(() => {
+    if (placementOptions.length === 0) return;
+    hapticSelection();
+    const labels = [...placementOptions.map(option => option.label), 'Cancel'];
+    const cancelButtonIndex = labels.length - 1;
+    const selectIndex = (index: number) => {
+      const option = placementOptions[index];
+      if (!option) return;
+      hapticSelection();
+      setParentBoardKey(option.boardKey);
+    };
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: labels,
+          cancelButtonIndex,
+          userInterfaceStyle: t.isDark ? 'dark' : 'light',
+        },
+        selectIndex,
+      );
+      return;
+    }
+    Alert.alert(
+      'Add folder to',
+      undefined,
+      [
+        ...placementOptions.map((option, index) => ({
+          text: option.label,
+          onPress: () => selectIndex(index),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    );
+  }, [placementOptions, t.isDark]);
 
   const handleConfirm = useCallback(() => {
     const trimmed = label.trim().replace(/\s+/g, ' ');
@@ -77,8 +206,15 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
     hapticSelection();
     // Generate a unique board key from the label
     const boardKey = `folder_${trimmed.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
-    onAdd({ label: trimmed, boardKey, color, mulberrySymbolId: iconId ?? undefined });
-  }, [color, iconId, label, onAdd]);
+    onAdd({
+      label: trimmed,
+      boardKey,
+      color,
+      mulberrySymbolId: iconId ?? undefined,
+      customImageUri: photoUri ?? undefined,
+      parentBoardKey: selectedPlacement.boardKey,
+    });
+  }, [color, iconId, label, onAdd, photoUri, selectedPlacement.boardKey]);
 
   return (
     <Modal
@@ -129,6 +265,8 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
             <View style={[styles.previewTile, { backgroundColor: color }]}>
               {iconId ? (
                 <MulberrySymbol symbolId={iconId} size={48} />
+              ) : photoUri ? (
+                <Image source={{ uri: photoUri }} style={styles.previewPhoto} />
               ) : (
                 <Ionicons name="folder" size={48} color="#FFFFFF" />
               )}
@@ -141,7 +279,7 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
           {/* Folder name input */}
           <View style={styles.fieldSection}>
             <ThemedText variant="eyebrow" color={t.colors.textTertiary} style={styles.sectionEyebrow}>
-              FOLDER NAME
+              Folder Name.
             </ThemedText>
             <TextInput
               ref={inputRef}
@@ -169,9 +307,9 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
             </ThemedText>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={iconId ? 'Change folder symbol' : 'Search for a folder symbol'}
-              accessibilityHint="Opens the symbol library to search and pick an icon"
-              onPress={() => { hapticSelection(); setIconQuery(''); setIconSearch(true); }}
+              accessibilityLabel="Search for an icon"
+              accessibilityHint="Choose a photo or symbol"
+              onPress={showIconOptions}
               style={({ pressed }) => [
                 styles.iconTrigger,
                 { backgroundColor: t.colors.inputBg },
@@ -181,18 +319,25 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
               <View style={styles.iconTriggerPreview}>
                 {iconId ? (
                   <MulberrySymbol symbolId={iconId} size={32} />
+                ) : photoUri ? (
+                  <Image source={{ uri: photoUri }} style={styles.iconPreviewPhoto} />
                 ) : (
                   <Ionicons name="search" size={22} color={t.colors.textMuted} />
                 )}
               </View>
               <ThemedText variant="body" color={t.colors.text} style={styles.iconTriggerLabel}>
-                {iconId ? 'Change symbol' : 'Search for a symbol'}
+                Search for an icon
               </ThemedText>
-              {iconId ? (
+              {iconId || photoUri ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Remove folder symbol"
-                  onPress={() => { hapticSelection(); setIconId(null); }}
+                  accessibilityLabel="Remove folder icon"
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    hapticSelection();
+                    setIconId(null);
+                    setPhotoUri(null);
+                  }}
                   hitSlop={10}
                 >
                   <Ionicons name="close-circle" size={22} color={t.colors.textMuted} />
@@ -230,10 +375,34 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
             </Pressable>
           </View>
 
+          {/* Placement — add this folder to the current board or an existing folder */}
+          <View style={styles.fieldSection}>
+            <ThemedText variant="eyebrow" color={t.colors.textTertiary} style={styles.sectionEyebrow}>
+              ADD TO
+            </ThemedText>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Add folder to ${selectedPlacement.label}`}
+              accessibilityHint="Choose where this folder appears"
+              onPress={showPlacementOptions}
+              style={({ pressed }) => [
+                styles.placementTrigger,
+                { backgroundColor: t.colors.inputBg },
+                pressed && { opacity: 0.75 },
+              ]}
+            >
+              <Ionicons name="folder-open-outline" size={22} color={t.colors.primary} />
+              <ThemedText variant="body" color={t.colors.text} style={styles.placementLabel}>
+                {selectedPlacement.label}
+              </ThemedText>
+              <Ionicons name="chevron-forward" size={20} color={t.colors.textTertiary} />
+            </Pressable>
+          </View>
+
           {/* Empty-state hint (Rule 24) */}
           <View style={styles.hint}>
             <ThemedText variant="callout" color={t.colors.textMuted} style={styles.hintText}>
-              The folder will appear as a tile. Tap it to open an empty board you can fill with symbols.
+              Tap Create when you are ready. The folder opens as a tile with its own board.
             </ThemedText>
           </View>
         </ScrollView>
@@ -251,7 +420,7 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
         }}
       />
 
-      {/* Search Symbol — full Mulberry library, no bundled quick-set */}
+      {/* Choose Symbol — full Mulberry library, no bundled quick-set */}
       <Modal
         visible={iconSearch}
         animationType={reduceMotion ? 'fade' : 'slide'}
@@ -269,7 +438,7 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
             >
               <ThemedText variant="body" color={t.colors.primary} style={styles.headerButtonText}>Cancel</ThemedText>
             </Pressable>
-            <ThemedText variant="heading" color={t.colors.text}>Search Symbol</ThemedText>
+            <ThemedText variant="heading" color={t.colors.text}>Choose Symbol</ThemedText>
             <View style={styles.searchSpacer} />
           </View>
           <View style={styles.searchBody}>
@@ -287,12 +456,13 @@ export function AddFolderModal({ visible, onDismiss, onAdd }: Props) {
               onSelect={(result) => {
                 hapticSelection();
                 setIconId(result.symbol.id);
+                setPhotoUri(null);
                 setIconSearch(false);
               }}
             />
             {!iconQuery.trim() ? (
               <ThemedText variant="callout" color={t.colors.textMuted} style={styles.searchHint}>
-                Search the full symbol library and tap one to use it as the folder icon.
+                Pick one symbol for the folder icon.
               </ThemedText>
             ) : null}
           </View>
@@ -342,6 +512,11 @@ const styles = StyleSheet.create({
     maxWidth: 104,
     textAlign: 'center',
   },
+  previewPhoto: {
+    width: 50,
+    height: 50,
+    borderRadius: radii.button,
+  },
   fieldSection: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
@@ -370,7 +545,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconPreviewPhoto: {
+    width: 34,
+    height: 34,
+    borderRadius: radii.button,
+  },
   iconTriggerLabel: {
+    flex: 1,
+    fontFamily: fonts.displayBold,
+  },
+  placementTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 56,
+    borderRadius: radii.button,
+    paddingHorizontal: spacing.md,
+  },
+  placementLabel: {
     flex: 1,
     fontFamily: fonts.displayBold,
   },

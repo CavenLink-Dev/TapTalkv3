@@ -85,6 +85,12 @@ export const colorsLight = {
 
   /** selected option / pill background */
   selectionBg:        '#EAF6FE',
+  /** message strip background — slightly darker than the page for separation */
+  messageStripBg:     '#E2E5E8',
+  /** warm favourite accent */
+  favouriteGold:      '#F5B400',
+  /** soft favourite halo / shadow */
+  favouriteGlow:      '#FFF0B3',
 
   // ── Settings icon tints (chip icon + soft background pairs)
   /** blue settings icon */
@@ -169,6 +175,9 @@ export const colorsDark: ColorTokens = {
 
   // Selection states
   selectionBg:        '#1A3A5F',
+  messageStripBg:     '#2A2D2F',
+  favouriteGold:      '#FFD45A',
+  favouriteGlow:      '#5A4316',
 } as const;
 
 export const colors = colorsLight;

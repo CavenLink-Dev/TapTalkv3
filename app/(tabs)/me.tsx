@@ -24,7 +24,6 @@ import {
   Pressable,
   Share,
   StyleSheet,
-  Switch,
   Text,
   UIManager,
   View,
@@ -35,6 +34,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { Screen } from '../../src/components/native/Screen';
+import { SettingsRow } from '../../src/components/native/SettingsRow';
 import { TextField } from '../../src/components/native/TextField';
 import { AvatarView } from '../../src/features/profile/AvatarView';
 import { useAppContext } from '../../src/hooks/useAppContext';
@@ -119,132 +119,6 @@ function Group({
   );
 }
 
-// ── Row ──────────────────────────────────────────────────────────────────────
-
-interface RowProps {
-  icon: IoniconName;
-  iconColor?: string;
-  iconBg?: string;
-  label: string;
-  value?: string;
-  hint?: string;
-  onPress?: () => void;
-  toggle?: { value: boolean; onValueChange: () => void };
-  destructive?: boolean;
-  info?: boolean;
-  showDivider?: boolean;
-}
-
-function Row({
-  icon,
-  iconColor,
-  iconBg,
-  label,
-  value,
-  hint,
-  onPress,
-  toggle,
-  destructive,
-  info,
-  showDivider = true,
-}: RowProps) {
-  const t = useTheme();
-  const resolvedIconColor = iconColor ?? t.colors.primary;
-  const resolvedIconBg = iconBg ?? t.colors.iconTintBlueBg;
-  const spokenLabel = value ? `${label}, ${value}` : label;
-
-  const body = (
-    <>
-      <View style={[styles.rowIcon, { backgroundColor: resolvedIconBg }]}>
-        <Ionicons name={icon} size={18} color={resolvedIconColor} />
-      </View>
-      <Text
-        style={[styles.rowLabel, { color: destructive ? t.colors.danger : t.colors.text }]}
-        numberOfLines={2}
-      >
-        {label}
-      </Text>
-      {value ? (
-        <Text style={[styles.rowValue, { color: t.colors.textTertiary }]} numberOfLines={1}>
-          {value}
-        </Text>
-      ) : null}
-      {toggle ? (
-        <View pointerEvents="none" importantForAccessibility="no">
-          <Switch
-            value={toggle.value}
-            trackColor={{ false: t.colors.disabled, true: t.colors.success }}
-            thumbColor={t.colors.surface}
-            ios_backgroundColor={t.colors.disabled}
-          />
-        </View>
-      ) : info ? null : (
-        <Ionicons
-          name="chevron-forward"
-          size={17}
-          color={t.colors.textTertiary}
-          accessibilityElementsHidden
-          importantForAccessibility="no"
-        />
-      )}
-    </>
-  );
-
-  const divider = showDivider ? (
-    <View style={[styles.rowDivider, { backgroundColor: t.colors.input }]} />
-  ) : null;
-
-  if (toggle) {
-    return (
-      <>
-        <Pressable
-          accessibilityRole="switch"
-          accessibilityLabel={spokenLabel}
-          accessibilityHint={hint}
-          accessibilityState={{ checked: toggle.value }}
-          onPress={() => {
-            hapticSelection();
-            toggle.onValueChange();
-          }}
-          style={({ pressed }) => [styles.row, pressed && { opacity: 0.75 }]}
-        >
-          {body}
-        </Pressable>
-        {divider}
-      </>
-    );
-  }
-
-  if (info || !onPress) {
-    return (
-      <>
-        <View style={styles.row} accessibilityRole="text" accessibilityLabel={spokenLabel}>
-          {body}
-        </View>
-        {divider}
-      </>
-    );
-  }
-
-  return (
-    <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={spokenLabel}
-        accessibilityHint={hint}
-        onPress={() => {
-          hapticSelection();
-          onPress();
-        }}
-        style={({ pressed }) => [styles.row, pressed && { opacity: 0.75 }]}
-      >
-        {body}
-      </Pressable>
-      {divider}
-    </>
-  );
-}
-
 // ── Screen ───────────────────────────────────────────────────────────────────
 
 export default function MeScreen() {
@@ -273,21 +147,24 @@ export default function MeScreen() {
       .catch(() => {});
   }, []);
 
-  const toggleAdvanced = useCallback(() => {
-    if (!reduceMotion) {
-      LayoutAnimation.configureNext({
-        duration: 200,
-        create: { type: 'easeInEaseOut', property: 'opacity' },
-        update: { type: 'easeInEaseOut' },
-        delete: { type: 'easeInEaseOut', property: 'opacity' },
+  const setAdvancedVisibility = useCallback(
+    (next: boolean) => {
+      if (next === showAdvanced) return;
+      if (!reduceMotion) {
+        LayoutAnimation.configureNext({
+          duration: 200,
+          create: { type: 'easeInEaseOut', property: 'opacity' },
+          update: { type: 'easeInEaseOut' },
+          delete: { type: 'easeInEaseOut', property: 'opacity' },
+        });
+      }
+      setShowAdvanced(() => {
+        AsyncStorage.setItem(SHOW_ADVANCED_KEY, next ? 'true' : 'false').catch(() => {});
+        return next;
       });
-    }
-    setShowAdvanced((prev) => {
-      const next = !prev;
-      AsyncStorage.setItem(SHOW_ADVANCED_KEY, next ? 'true' : 'false').catch(() => {});
-      return next;
-    });
-  }, [reduceMotion]);
+    },
+    [reduceMotion, showAdvanced],
+  );
 
   const name = state.user.displayName || state.user.nickname || state.user.name || 'Guest';
   const initial = name.charAt(0).toUpperCase() || '?';
@@ -307,19 +184,25 @@ export default function MeScreen() {
     setTimeout(() => setSaveNotice(''), 2000);
   }, []);
 
-  const toggleBiometrics = useCallback(() => {
-    dispatch({
-      type: 'SET_SECURE_METHOD',
-      payload: {
-        method: state.secureMethod ?? 'password',
-        biometricsEnabled: !state.biometricsEnabled,
-      },
-    });
-  }, [dispatch, state.secureMethod, state.biometricsEnabled]);
+  const handleToggleBiometrics = useCallback(
+    (next: boolean) => {
+      dispatch({
+        type: 'SET_SECURE_METHOD',
+        payload: {
+          method: state.secureMethod ?? 'password',
+          biometricsEnabled: next,
+        },
+      });
+    },
+    [dispatch, state.secureMethod],
+  );
 
-  const toggleRememberLogin = useCallback(() => {
-    dispatch({ type: 'SET_REMEMBER_LOGIN', payload: !state.rememberLogin });
-  }, [dispatch, state.rememberLogin]);
+  const handleToggleRememberLogin = useCallback(
+    (next: boolean) => {
+      dispatch({ type: 'SET_REMEMBER_LOGIN', payload: next });
+    },
+    [dispatch],
+  );
 
   // ── Caregiver lock ──
   const toggleLock = useCallback(() => {
@@ -335,6 +218,14 @@ export default function MeScreen() {
     dispatch({ type: 'SET_PARENT', payload: { lockEnabled: next } });
     showSaveNotice(next ? 'Caregiver Lock on' : 'Caregiver Lock off');
   }, [caregiverLocked, state.parent.pin, dispatch, showSaveNotice]);
+
+  const handleToggleLock = useCallback(
+    (next: boolean) => {
+      if (next === caregiverLocked) return;
+      toggleLock();
+    },
+    [caregiverLocked, toggleLock],
+  );
 
   const confirmPinAndDisable = useCallback(async () => {
     if (!pinInput) return;
@@ -500,14 +391,16 @@ export default function MeScreen() {
 
       {/* ── User Profile ── */}
       <Group label="User Profile">
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="person-circle-outline"
           label="Edit Profile"
           value={name === 'Guest' ? 'Set up' : 'Open'}
           hint="Edit your picture, name, nickname, and user type"
           onPress={() => router.push(accountRoute)}
         />
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="id-card-outline"
           iconColor={t.colors.iconTintPurple}
           iconBg={t.colors.iconTintPurpleBg}
@@ -521,14 +414,16 @@ export default function MeScreen() {
 
       {/* ── General ── */}
       <Group label="General">
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="volume-high-outline"
           label="Voice & Speech"
           value={voiceLabel}
           hint="Choose the voice, speed, and pitch"
           onPress={() => router.push(voiceRoute)}
         />
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="chatbubble-ellipses-outline"
           iconColor={t.colors.iconTintBlue}
           iconBg={t.colors.iconTintBlueBg}
@@ -536,7 +431,8 @@ export default function MeScreen() {
           hint="Fix how the voice says names and words"
           onPress={() => router.push(pronunciationRoute)}
         />
-        <Row
+        <SettingsRow
+          type="action"
           icon="notifications-outline"
           iconColor={t.colors.iconTintPurple}
           iconBg={t.colors.iconTintPurpleBg}
@@ -549,7 +445,8 @@ export default function MeScreen() {
             )
           }
         />
-        <Row
+        <SettingsRow
+          type="action"
           icon="language-outline"
           iconColor={t.colors.iconTintNeutral}
           iconBg={t.colors.iconTintNeutralBg}
@@ -569,7 +466,8 @@ export default function MeScreen() {
 
       {/* ── Accessibility — one home for everything ── */}
       <Group label="Accessibility">
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="options-outline"
           iconColor={t.colors.iconTintGreen}
           iconBg={t.colors.iconTintGreenBg}
@@ -583,13 +481,15 @@ export default function MeScreen() {
 
       {/* ── Privacy & Data ── */}
       <Group label="Privacy & Data">
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="shield-checkmark-outline"
           label="Privacy Policy"
           hint="How TapTalk stores, uses, and protects your data"
           onPress={() => router.push(privacyPolicyRoute)}
         />
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="options-outline"
           iconColor={t.colors.iconTintPurple}
           iconBg={t.colors.iconTintPurpleBg}
@@ -597,7 +497,8 @@ export default function MeScreen() {
           hint="Manage, export, delete, or request changes to your data"
           onPress={() => router.push(dataChoicesRoute)}
         />
-        <Row
+        <SettingsRow
+          type="action"
           icon="phone-portrait-outline"
           label="Local Data"
           value="On this device"
@@ -610,7 +511,8 @@ export default function MeScreen() {
             )
           }
         />
-        <Row
+        <SettingsRow
+          type="action"
           icon="download-outline"
           iconColor={t.colors.iconTintBlue}
           iconBg={t.colors.iconTintBlueBg}
@@ -618,7 +520,8 @@ export default function MeScreen() {
           hint="Share a copy of your profile as text"
           onPress={exportProfileData}
         />
-        <Row
+        <SettingsRow
+          type="action"
           icon="trash-outline"
           iconColor={t.colors.danger}
           iconBg={t.colors.iconTintDangerBg}
@@ -632,11 +535,13 @@ export default function MeScreen() {
 
       {/* ── Security & Access ── */}
       <Group label="Security & Access">
-        <Row
+        <SettingsRow
+          type="toggle"
           icon="lock-closed-outline"
           label="Caregiver Lock"
           hint="Requires a PIN before changing settings on a shared device"
-          toggle={{ value: caregiverLocked, onValueChange: toggleLock }}
+          toggleValue={caregiverLocked}
+          onToggle={handleToggleLock}
         />
         {pinPromptVisible ? (
           <View style={[styles.pinPrompt, { backgroundColor: t.colors.input }]}>
@@ -691,34 +596,40 @@ export default function MeScreen() {
             </View>
           </View>
         ) : null}
-        <Row
+        <SettingsRow
+          type="toggle"
           icon="finger-print-outline"
           iconColor={t.colors.iconTintGreen}
           iconBg={t.colors.iconTintGreenBg}
           label="Biometric Unlock"
           hint="Use Face ID or Touch ID to open TapTalk"
-          toggle={{ value: state.biometricsEnabled, onValueChange: toggleBiometrics }}
+          toggleValue={state.biometricsEnabled}
+          onToggle={handleToggleBiometrics}
         />
-        <Row
+        <SettingsRow
+          type="toggle"
           icon="log-in-outline"
           iconColor={t.colors.iconTintNeutral}
           iconBg={t.colors.iconTintNeutralBg}
           label="Keep Me Signed In"
           hint="Skip the sign-in screen on this device"
-          toggle={{ value: state.rememberLogin, onValueChange: toggleRememberLogin }}
+          toggleValue={state.rememberLogin}
+          onToggle={handleToggleRememberLogin}
           showDivider={false}
         />
       </Group>
 
       {/* ── Help & Support ── */}
       <Group label="Help & Support">
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="compass-outline"
           label="Replay the Tour"
           hint="Walk through Talk, Activity, Tools, and Profile again"
           onPress={() => router.push(tourRoute)}
         />
-        <Row
+        <SettingsRow
+          type="action"
           icon="mail-outline"
           iconColor={t.colors.iconTintBlue}
           iconBg={t.colors.iconTintBlueBg}
@@ -726,7 +637,8 @@ export default function MeScreen() {
           hint="Email the developer for help or privacy questions"
           onPress={contactSupport}
         />
-        <Row
+        <SettingsRow
+          type="action"
           icon="chatbox-ellipses-outline"
           iconColor={t.colors.iconTintPurple}
           iconBg={t.colors.iconTintPurpleBg}
@@ -739,7 +651,8 @@ export default function MeScreen() {
 
       {/* ── About & Legal ── */}
       <Group label="About & Legal">
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="heart-outline"
           iconColor={t.colors.iconTintBlue}
           iconBg={t.colors.iconTintBlueBg}
@@ -747,7 +660,8 @@ export default function MeScreen() {
           hint="What TapTalk stands for and who built it"
           onPress={() => router.push(beliefsRoute)}
         />
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="document-text-outline"
           iconColor={t.colors.iconTintNeutral}
           iconBg={t.colors.iconTintNeutralBg}
@@ -755,7 +669,8 @@ export default function MeScreen() {
           hint="Plain-English rules for using TapTalk safely"
           onPress={() => router.push(termsRoute)}
         />
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="medkit-outline"
           iconColor={t.colors.iconTintGreen}
           iconBg={t.colors.iconTintGreenBg}
@@ -763,7 +678,8 @@ export default function MeScreen() {
           hint="TapTalk supports communication but does not replace professional advice"
           onPress={() => router.push(medicalDisclaimerRoute)}
         />
-        <Row
+        <SettingsRow
+          type="navigation"
           icon="ribbon-outline"
           iconColor={t.colors.iconTintOrange}
           iconBg={t.colors.iconTintOrangeBg}
@@ -771,23 +687,32 @@ export default function MeScreen() {
           hint="Symbol, icon, sound, font, and open-source credits"
           onPress={() => router.push(attributionRoute)}
         />
-        <Row icon="information-circle-outline" label="App Version" value={APP_VERSION} info showDivider={false} />
+        <SettingsRow
+          type="static"
+          icon="information-circle-outline"
+          label="App Version"
+          value={APP_VERSION}
+          showDivider={false}
+        />
       </Group>
 
       {/* ── Advanced (hidden by default) ── */}
       <Group label="Advanced" last>
-        <Row
+        <SettingsRow
+          type="toggle"
           icon="construct-outline"
           iconColor={t.colors.iconTintNeutral}
           iconBg={t.colors.iconTintNeutralBg}
           label="Show Advanced Settings"
           hint="Less-used options. Hidden to keep this page simple."
-          toggle={{ value: showAdvanced, onValueChange: toggleAdvanced }}
+          toggleValue={showAdvanced}
+          onToggle={setAdvancedVisibility}
           showDivider={showAdvanced}
         />
         {showAdvanced ? (
           <>
-            <Row
+            <SettingsRow
+              type="navigation"
               icon="eye-off-outline"
               iconColor={t.colors.iconTintPurple}
               iconBg={t.colors.iconTintPurpleBg}
@@ -796,7 +721,8 @@ export default function MeScreen() {
               hint="See and restore words hidden from a board"
               onPress={() => router.push(hiddenTilesRoute)}
             />
-            <Row
+            <SettingsRow
+              type="action"
               icon="key-outline"
               label="Sign-in Method"
               value={signInLabel}
@@ -811,7 +737,8 @@ export default function MeScreen() {
                 )
               }
             />
-            <Row
+            <SettingsRow
+              type="action"
               icon="camera-outline"
               iconColor={t.colors.iconTintGreen}
               iconBg={t.colors.iconTintGreenBg}
@@ -824,7 +751,8 @@ export default function MeScreen() {
                 )
               }
             />
-            <Row
+            <SettingsRow
+              type="action"
               icon="images-outline"
               iconColor={t.colors.iconTintPurple}
               iconBg={t.colors.iconTintPurpleBg}

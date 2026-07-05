@@ -85,7 +85,7 @@ export function SymbolPackBrowser({
       accessibilityLabel={`Open ${folder.label} folder, ${packFolderSubtitle(folder)}`}
       onPress={() => handleOpenFolder(folder)}
       style={({ pressed }) => [
-        styles.folderRow,
+        styles.folderCell,
         { backgroundColor: pressed ? t.colors.inputBg : t.colors.surface },
       ]}
     >
@@ -186,7 +186,7 @@ export function SymbolPackBrowser({
           <ThemedText variant="eyebrow" color={t.colors.textTertiary} style={styles.sectionEyebrow}>
             {currentFolder ? 'FOLDERS' : 'SYMBOL PACK'}
           </ThemedText>
-          {folders.map(renderFolderRow)}
+          <View style={styles.folderGrid}>{folders.map(renderFolderRow)}</View>
         </>
       )}
 
@@ -231,14 +231,20 @@ const styles = StyleSheet.create({
   sectionEyebrowSpaced: {
     marginTop: spacing.lg,
   },
-  folderRow: {
+  folderGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  folderCell: {
+    width: '48%',
+    flexGrow: 1,
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 60,
     borderRadius: radii.card,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    marginBottom: spacing.sm,
     gap: spacing.md,
   },
   folderIcon: {

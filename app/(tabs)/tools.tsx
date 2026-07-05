@@ -6,13 +6,11 @@
  *   #17 linear for mechanical  #18 Reduce Motion guard  #19 haptics
  *   #20 44pt+ hit areas  #21 accessibility labels
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
   ImageBackground,
-  PanResponder,
-  PanResponderGestureState,
   Pressable,
   StyleSheet,
   Text,
@@ -25,7 +23,6 @@ import { animation as anim, radii, spacing, typography } from '../../src/theme/t
 import { fonts } from '../../src/theme/fonts';
 import {
   hapticLight,
-  hapticMedium,
   hapticSelection,
 } from '../../src/utils/haptics';
 import {
@@ -89,7 +86,7 @@ const TOOLS: Tool[] = [
 
 const TOOL_BY_ID = new Map<ToolId, Tool>(TOOLS.map(t => [t.id, t]));
 const CARD_GAP = spacing.xxl;
-const CARD_HEIGHT = 176;
+const CARD_HEIGHT = 188;
 
 // Six evenly-spaced angles for the star burst particles.
 const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300] as const;
@@ -104,9 +101,20 @@ function moveItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   return next;
 }
 
+function withAlpha(color: string, alpha: number): string {
+  const match = color.match(/^#([0-9a-fA-F]{6})$/);
+  if (!match) return color;
+  const hex = match[1] ?? '000000';
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // ─── StarParticles ─────────────────────────────────────────────────────────────
 
 function StarParticles({ trigger }: { trigger: number }) {
+  const t = useTheme();
   const particles = useRef(
     PARTICLE_ANGLES.map(() => ({
       opacity: new Animated.Value(0),
@@ -172,7 +180,7 @@ function StarParticles({ trigger }: { trigger: number }) {
               marginTop: -2.5,
               marginLeft: -2.5,
               borderRadius: 2.5,
-              backgroundColor: '#F5B400',
+              backgroundColor: t.colors.favouriteGold,
               opacity: p.opacity,
               transform: [
                 {
@@ -207,27 +215,27 @@ function StarParticles({ trigger }: { trigger: number }) {
 function ToolCard({
   tool,
   favourite,
-  showDragHandle,
-  dragging,
+  showReorderControls,
   index,
+  canMoveUp,
+  canMoveDown,
   onOpen,
-  onRevealDragHandles,
+  onRevealReorderControls,
+  onMoveUp,
+  onMoveDown,
   onToggleStar,
-  onDragStart,
-  onDragMove,
-  onDragEnd,
 }: {
   tool: Tool;
   favourite: boolean;
-  showDragHandle: boolean;
-  dragging: boolean;
+  showReorderControls: boolean;
   index: number;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
   onOpen: () => void;
-  onRevealDragHandles: () => void;
+  onRevealReorderControls: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   onToggleStar: () => void;
-  onDragStart: () => void;
-  onDragMove: (gesture: PanResponderGestureState) => void;
-  onDragEnd: () => void;
 }) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
@@ -241,9 +249,6 @@ function ToolCard({
   const pressScale = useRef(new Animated.Value(1)).current;
   const heroScale  = useRef(new Animated.Value(1)).current;
 
-  // Drag: card lifts to signal it is picked up — no tilt (disability-first, Law #30)
-  const dragScale = useRef(new Animated.Value(1)).current;
-
   // Star: bounce + warm glow halo + particle burst
   const starScale = useRef(new Animated.Value(1)).current;
   const starGlow  = useRef(new Animated.Value(favourite ? 1 : 0)).current;
@@ -251,10 +256,6 @@ function ToolCard({
 
   // Shimmer: favourites only, with a slightly stronger pass
   const shimmerProgress = useRef(new Animated.Value(0)).current;
-
-  // Drag handle: slides in from left when edit mode opens
-  const handleSlideX  = useRef(new Animated.Value(-20)).current;
-  const handleOpacity = useRef(new Animated.Value(0)).current;
 
   // Mount entrance (staggered by index)
   useEffect(() => {
@@ -296,61 +297,6 @@ function ToolCard({
     return () => clearTimeout(timeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [favourite, reduceMotion]);
-
-  // Drag handle slide in/out
-  useEffect(() => {
-    if (reduceMotion) {
-      handleSlideX.setValue(0);
-      handleOpacity.setValue(showDragHandle ? 1 : 0);
-      return;
-    }
-    if (showDragHandle) {
-      Animated.parallel([
-        Animated.spring(handleSlideX, {
-          toValue: 0,
-          useNativeDriver: true,
-          damping: 18,
-          stiffness: 320,
-          mass: 0.8,
-        }),
-        Animated.timing(handleOpacity, {
-          toValue: 1,
-          duration: 180,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(handleSlideX, {
-          toValue: -20,
-          duration: 150,
-          easing: Easing.in(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(handleOpacity, {
-          toValue: 0,
-          duration: 110,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [showDragHandle, reduceMotion]);
-
-  // Drag lift / settle — pure scale, no rotation (Law #30)
-  useEffect(() => {
-    if (reduceMotion) {
-      dragScale.setValue(1);
-      return;
-    }
-    Animated.spring(dragScale, {
-      toValue: dragging ? 1.03 : 1,
-      useNativeDriver: true,
-      damping: dragging ? 12 : 20,
-      stiffness: dragging ? 280 : 380,
-      mass: dragging ? 0.8 : 1,
-    }).start();
-  }, [dragging, reduceMotion]);
 
   // Star bounce + glow + particles
   const isMounted    = useRef(false);
@@ -441,28 +387,10 @@ function ToolCard({
     ]).start();
   };
 
-  const startDrag = useCallback(() => {
-    hapticMedium();
-    onDragStart();
-  }, [onDragStart]);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => showDragHandle,
-        onMoveShouldSetPanResponder: () => showDragHandle,
-        onPanResponderGrant: startDrag,
-        onPanResponderMove: (_e, gesture) => onDragMove(gesture),
-        onPanResponderRelease: onDragEnd,
-        onPanResponderTerminate: onDragEnd,
-      }),
-    [onDragEnd, onDragMove, showDragHandle, startDrag]
-  );
-
-  const revealDragHandles = () => {
+  const revealReorderControls = () => {
     suppressOpenAfterLongPress.current = true;
     hapticSelection();
-    onRevealDragHandles();
+    onRevealReorderControls();
   };
 
   // Interpolations
@@ -476,7 +404,7 @@ function ToolCard({
   });
   const starGlowOpacity = starGlow.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.7],
+    outputRange: [0, 0.45],
   });
   const starGlowScale = starGlow.interpolate({
     inputRange: [0, 1],
@@ -490,27 +418,25 @@ function ToolCard({
         transform: [
           { translateY: mountTranslateY },
           { scale: pressScale },
-          { scale: dragScale },
         ],
-        // Subtle, tight shadow so each tool card lifts off the page.
         borderRadius:  radii.card,
-        shadowColor:   '#000',
-        shadowOffset:  { width: 0, height: 3 },
-        shadowOpacity: 0.10,
-        shadowRadius:  7,
-        elevation:     3,
+        shadowColor:   favourite ? t.colors.favouriteGold : t.colors.favouriteGlow,
+        shadowOffset:  { width: 0, height: favourite ? 3 : 0 },
+        shadowOpacity: favourite ? 0.10 : 0,
+        shadowRadius:  favourite ? 6 : 0,
+        elevation:     0,
       }}
     >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open ${tool.title}. ${tool.subtitle}`}
         accessibilityHint={
-          showDragHandle
-            ? 'Use the menu handle on the left to reorder this tool.'
-            : 'Press and hold to show reorder handles.'
+          showReorderControls
+            ? 'Use the up and down buttons to reorder this tool.'
+            : 'Press and hold to show reorder controls.'
         }
-        onLongPress={revealDragHandles}
-        delayLongPress={240}
+        onLongPress={revealReorderControls}
+        delayLongPress={260}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={() => {
@@ -521,7 +447,7 @@ function ToolCard({
           hapticSelection();
           onOpen();
         }}
-        style={[styles.card, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}
+        style={[styles.card, { backgroundColor: t.colors.surface, borderColor: withAlpha(t.colors.border, 0.75) }]}
       >
         {/* Hero image + shimmer */}
         <View style={[styles.cardHero, { backgroundColor: tool.accentBg }]}>
@@ -565,44 +491,79 @@ function ToolCard({
           style={[styles.starOverlay, { backgroundColor: t.colors.surface }]}
         >
           <Animated.View
-            style={[styles.starGlow, { opacity: starGlowOpacity, transform: [{ scale: starGlowScale }] }]}
+            style={[
+              styles.starGlow,
+              {
+                backgroundColor: t.colors.favouriteGlow,
+                opacity: starGlowOpacity,
+                transform: [{ scale: starGlowScale }],
+              },
+            ]}
           />
           <Animated.View style={{ transform: [{ scale: starScale }] }}>
             <Ionicons
               name={favourite ? 'star' : 'star-outline'}
               size={22}
-              color={favourite ? '#F5B400' : t.colors.textTertiary}
+              color={favourite ? t.colors.favouriteGold : t.colors.textTertiary}
             />
           </Animated.View>
           <StarParticles trigger={particleTrigger} />
         </Pressable>
 
         {/* Card body */}
-        <View style={styles.cardBody}>
+        <View
+          style={[
+            styles.cardBody,
+            { backgroundColor: t.colors.surface, borderTopColor: withAlpha(t.colors.border, 0.75) },
+          ]}
+        >
           <View style={styles.cardContentRow}>
 
-            {showDragHandle ? (
-              <Animated.View
-                style={{
-                  opacity: handleOpacity,
-                  transform: [{ translateX: handleSlideX }],
-                }}
+            {showReorderControls ? (
+              <View
+                accessible
+                accessibilityRole="toolbar"
+                accessibilityLabel={`Reorder ${tool.title}`}
+                style={styles.reorderControls}
               >
-                <View
-                  accessible
+                <Ionicons name="reorder-three" size={22} color={t.colors.textMuted} />
+                <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Drag to reorder ${tool.title}`}
-                  accessibilityHint="Move up or down to change tool order"
-                  style={[styles.iconButton, styles.dragHandle]}
-                  {...panResponder.panHandlers}
+                  accessibilityLabel={`Move ${tool.title} up`}
+                  accessibilityState={{ disabled: !canMoveUp }}
+                  disabled={!canMoveUp}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    hapticSelection();
+                    onMoveUp();
+                  }}
+                  style={({ pressed }) => [
+                    styles.reorderButton,
+                    { backgroundColor: t.colors.inputBg },
+                    (!canMoveUp || pressed) && { opacity: !canMoveUp ? 0.35 : 0.75 },
+                  ]}
                 >
-                  <Ionicons
-                    name="menu"
-                    size={25}
-                    color={dragging ? tool.accent : t.colors.textMuted}
-                  />
-                </View>
-              </Animated.View>
+                  <Ionicons name="chevron-up" size={20} color={t.colors.textMuted} />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Move ${tool.title} down`}
+                  accessibilityState={{ disabled: !canMoveDown }}
+                  disabled={!canMoveDown}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    hapticSelection();
+                    onMoveDown();
+                  }}
+                  style={({ pressed }) => [
+                    styles.reorderButton,
+                    { backgroundColor: t.colors.inputBg },
+                    (!canMoveDown || pressed) && { opacity: !canMoveDown ? 0.35 : 0.75 },
+                  ]}
+                >
+                  <Ionicons name="chevron-down" size={20} color={t.colors.textMuted} />
+                </Pressable>
+              </View>
             ) : null}
 
             <View style={styles.copy}>
@@ -631,8 +592,8 @@ function ToolCard({
               >
                 <Ionicons
                   name="play"
-                  size={44}
-                  color="#fff"
+                  size={32}
+                  color={t.colors.textOnDark}
                   style={styles.playIcon}
                 />
               </Pressable>
@@ -687,12 +648,12 @@ function SectionHeader({
         { opacity: mountProgress, transform: [{ translateY }] },
       ]}
     >
-      {icon ? <Ionicons name={icon} size={15} color="#F5B400" /> : null}
+      {icon ? <Ionicons name={icon} size={15} color={t.colors.favouriteGold} /> : null}
       <Text
         style={[
           styles.sectionTitle,
           { color: t.colors.textMuted },
-          isFavourites && styles.sectionTitleFavourites,
+          isFavourites && { color: t.colors.favouriteGold },
         ]}
       >
         {label}
@@ -710,67 +671,42 @@ export default function ToolsScreen() {
   const { refreshing, onRefresh } = usePullRefresh();
   const savedOrder = useToolOrder();
 
-  const [showDragHandles, setShowDragHandles] = useState(false);
-  const [draftOrder,      setDraftOrder]      = useState<ToolId[] | null>(null);
-  const [draggingId,      setDraggingId]      = useState<ToolId | null>(null);
+  const [showReorderControls, setShowReorderControls] = useState(false);
 
-  const dragStartIndex = useRef(0);
-  const draftOrderRef  = useRef<ToolId[] | null>(null);
-  const draggingIdRef  = useRef<ToolId | null>(null);
-
-  const orderedIds    = draftOrder ?? savedOrder;
-  const orderedTools  = orderedIds
+  const orderedTools  = savedOrder
     .map(id => TOOL_BY_ID.get(id))
     .filter((tool): tool is Tool => Boolean(tool));
   const favouriteTools = orderedTools.filter(t => favs.includes(t.id));
   const regularTools   = orderedTools.filter(t => !favs.includes(t.id));
-  const visibleIds     = [...favouriteTools, ...regularTools].map(t => t.id);
 
   const open = (tool: Tool) => {
     hapticSelection();
     router.push(tool.route);
   };
 
-  const startDrag = (toolId: ToolId) => {
-    dragStartIndex.current = visibleIds.indexOf(toolId);
-    draftOrderRef.current  = visibleIds;
-    draggingIdRef.current  = toolId;
-    setDraftOrder(visibleIds);
-    setDraggingId(toolId);
-  };
+  const moveTool = useCallback((toolId: ToolId, direction: -1 | 1) => {
+    const fromIndex = savedOrder.indexOf(toolId);
+    const toIndex = fromIndex + direction;
+    if (fromIndex < 0 || toIndex < 0 || toIndex >= savedOrder.length) return;
+    setToolOrder(moveItem(savedOrder, fromIndex, toIndex));
+  }, [savedOrder]);
 
-  const moveDraggedTool = (gesture: PanResponderGestureState) => {
-    const activeId = draggingIdRef.current;
-    if (!activeId) return;
-
-    const currentOrder = draftOrderRef.current ?? visibleIds;
-    const fromIndex    = currentOrder.indexOf(activeId);
-    if (fromIndex < 0) return;
-
-    const rowHeight = CARD_HEIGHT + CARD_GAP;
-    const nextIndex = Math.max(
-      0,
-      Math.min(
-        currentOrder.length - 1,
-        dragStartIndex.current + Math.round(gesture.dy / rowHeight),
-      ),
-    );
-
-    if (nextIndex !== fromIndex) {
-      hapticSelection();
-      const nextOrder       = moveItem(currentOrder, fromIndex, nextIndex);
-      draftOrderRef.current = nextOrder;
-      setDraftOrder(nextOrder);
-    }
-  };
-
-  const endDrag = () => {
-    if (draftOrderRef.current) setToolOrder(draftOrderRef.current);
-    draftOrderRef.current = null;
-    draggingIdRef.current = null;
-    setDraggingId(null);
-    setDraftOrder(null);
-  };
+  const renderToolCard = (tool: Tool, index: number) => (
+    <ToolCard
+      key={tool.id}
+      tool={tool}
+      favourite={favs.includes(tool.id)}
+      showReorderControls={showReorderControls}
+      index={index}
+      canMoveUp={index > 0}
+      canMoveDown={index < orderedTools.length - 1}
+      onOpen={() => open(tool)}
+      onRevealReorderControls={() => setShowReorderControls(true)}
+      onMoveUp={() => moveTool(tool.id, -1)}
+      onMoveDown={() => moveTool(tool.id, 1)}
+      onToggleStar={() => toggleFavourite(tool.id)}
+    />
+  );
 
   return (
     <Screen
@@ -783,46 +719,47 @@ export default function ToolsScreen() {
       onRefresh={onRefresh}
     >
       {/* Reorder mode banner — Law #25: edit mode with a clear exit */}
-      {showDragHandles ? (
+      {showReorderControls ? (
         <Pressable
-          onPress={() => { hapticLight(); setShowDragHandles(false); }}
+          onPress={() => { hapticLight(); setShowReorderControls(false); }}
           accessibilityRole="button"
           accessibilityLabel="Done reordering tools"
-          style={[styles.doneBar, { backgroundColor: t.colors.surface, borderColor: t.colors.primary + '33' }]}
+          style={[styles.doneBar, { backgroundColor: t.colors.surface, borderColor: withAlpha(t.colors.primary, 0.2) }]}
         >
           <Ionicons name="reorder-three" size={18} color={t.colors.primary} />
-          <Text style={[styles.doneBarText, { color: t.colors.textMuted }]}>Drag ≡ to reorder</Text>
+          <Text style={[styles.doneBarText, { color: t.colors.textMuted }]}>Reordering</Text>
           <View style={[styles.doneChip, { backgroundColor: t.colors.primary }]}>
             <Text style={[styles.doneChipText, { color: t.colors.textOnDark }]}>Done</Text>
           </View>
         </Pressable>
       ) : null}
 
-      {favouriteTools.length > 0 ? (
-        <View style={[styles.section, styles.favouritesSection]}>
+      {showReorderControls ? (
+        <View style={styles.section}>
+          <View style={styles.list}>
+            {orderedTools.map(renderToolCard)}
+          </View>
+        </View>
+      ) : favouriteTools.length > 0 ? (
+        <View
+          style={[
+            styles.section,
+            styles.favouritesSection,
+            {
+              backgroundColor: t.isDark
+                ? withAlpha(t.colors.favouriteGold, 0.16)
+                : withAlpha(t.colors.favouriteGold, 0.08),
+            },
+          ]}
+        >
           <SectionHeader icon="star" label="Favourites" entryDelay={0} isFavourites />
           <View style={styles.list}>
-            {favouriteTools.map((tool, i) => (
-              <ToolCard
-                key={tool.id}
-                tool={tool}
-                favourite={favs.includes(tool.id)}
-                showDragHandle={showDragHandles}
-                dragging={draggingId === tool.id}
-                index={i}
-                onOpen={() => open(tool)}
-                onRevealDragHandles={() => setShowDragHandles(true)}
-                onToggleStar={() => toggleFavourite(tool.id)}
-                onDragStart={() => startDrag(tool.id)}
-                onDragMove={moveDraggedTool}
-                onDragEnd={endDrag}
-              />
-            ))}
+            {favouriteTools.map((tool, i) => renderToolCard(tool, i))}
           </View>
         </View>
       ) : null}
 
-      {regularTools.length > 0 ? (
+      {!showReorderControls && regularTools.length > 0 ? (
         <View style={styles.section}>
           {favouriteTools.length > 0 ? (
             <SectionHeader
@@ -831,22 +768,7 @@ export default function ToolsScreen() {
             />
           ) : null}
           <View style={styles.list}>
-            {regularTools.map((tool, i) => (
-              <ToolCard
-                key={tool.id}
-                tool={tool}
-                favourite={favs.includes(tool.id)}
-                showDragHandle={showDragHandles}
-                dragging={draggingId === tool.id}
-                index={favouriteTools.length + i}
-                onOpen={() => open(tool)}
-                onRevealDragHandles={() => setShowDragHandles(true)}
-                onToggleStar={() => toggleFavourite(tool.id)}
-                onDragStart={() => startDrag(tool.id)}
-                onDragMove={moveDraggedTool}
-                onDragEnd={endDrag}
-              />
-            ))}
+            {regularTools.map((tool, i) => renderToolCard(tool, favouriteTools.length + i))}
           </View>
         </View>
       ) : null}
@@ -895,17 +817,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.30)',
     transform: [{ rotate: '18deg' }]},
   cardBody: {
-    // Bottom content area trimmed further: 8 → 5 (~÷1.5) for a tighter strip.
-    paddingVertical: 5,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
-    justifyContent: 'center'},
+    justifyContent: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth},
   cardContentRow: {
-    minHeight: 44,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm},
   copy: {
     flex: 1,
+    minHeight: 52,
+    justifyContent: 'space-between',
     gap: 4},
   tag: {
     alignSelf: 'flex-start',
@@ -927,32 +850,42 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center'},
-  dragHandle: {
-    borderRadius: 22},
+  reorderControls: {
+    minWidth: 44,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  reorderButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   starButton: {
     borderRadius: 22},
   playButton: {
-    width:          64,
-    height:         64,
-    borderRadius:   18,
+    width:          52,
+    height:         52,
+    borderRadius:   15,
     alignItems:     'center',
     justifyContent: 'center'},
   // Play triangles read left-heavy; a small optical nudge centres them.
   playIcon: {
-    marginLeft: 4},
+    marginLeft: 3},
   // Golden halo — only visible (opacity > 0) when card is favourited
   starGlow: {
     position: 'absolute',
     width: 34,
     height: 34,
-    borderRadius: 17,
-    backgroundColor: '#FFF0B3'},
+    borderRadius: 17},
   section: {
     gap: spacing.sm,
     marginBottom: spacing.xxl},
   // Favourites section gets a warm golden tint strip — visually separates it
   favouritesSection: {
-    backgroundColor: 'rgba(245, 180, 0, 0.06)',
     borderRadius: radii.card,
     padding: spacing.sm,
     marginHorizontal: -spacing.sm,
@@ -969,9 +902,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
-  // Favourites section title uses the star gold — pops without being loud
-  sectionTitleFavourites: {
-    color: '#C68A00'},
   // Reorder mode banner — Law #25: clear edit-mode entry/exit
   doneBar: {
     flexDirection: 'row',
@@ -982,7 +912,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.md,
-    borderWidth: 1.5},
+    borderWidth: 0.5},
   doneBarText: {
     flex: 1,
     fontFamily: fonts.body,

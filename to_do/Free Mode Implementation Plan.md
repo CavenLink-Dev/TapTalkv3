@@ -1,620 +1,744 @@
-# Free Mode Implementation Plan
+# FABLE 5 / TAPTALK AAC BOARD + ACCESSIBILITY + PERFORMANCE FIX PASS
 
-## Purpose
+Act as a senior iOS product designer, React Native / Expo engineer, AAC accessibility specialist, and disability-focused UX reviewer.
 
-- Create a free AAC board mode for TapTalk.
-- Keep communication access free.
-- Avoid cloud storage costs for free users.
-- Store free user data locally on the user's device.
-- Keep paid/cloud features separate from free/local features.
-- Protect privacy, accessibility, and user dignity.
+Follow the existing project rules already available in the project.
 
----
+Do not repeat the rules.
+Do not redesign the whole app.
+Do not remove tabs.
+Do not remove core AAC features.
+Do not implement Focus Mode yet.
+Do not add backend/auth systems in this task.
 
-## Main Product Decision
+Your task is to improve the current app where it is visually heavy, inconsistent, inaccessible, laggy, or using incorrect frontend logic.
 
-- The paid app remains the full cloud-connected TapTalk experience.
-- The free mode is called **Free Mode** or **Guest Mode**.
-- Free Mode uses local device storage only.
-- Free Mode does not require login, sign-up, email, name, phone number, or profile.
-- Free Mode does not sync to cloud.
-- Free Mode does not use paid-user cloud data.
-- Cloud sync only starts when the user chooses paid/account mode and gives consent.
+Prioritise:
 
----
+* AAC board usability
+* visual density
+* message strip readability
+* bottom control bar consistency
+* top navigation performance
+* dark mode accessibility
+* correct theme token usage
+* correct settings row behaviour
+* safe frontend legal/contact fixes
+* activity accessibility issues that are clear and contained
 
-## Start-To-Finish Free Mode Flow
-
-- User downloads TapTalk.
-- User opens TapTalk for the first time.
-- User sees a mode selector screen.
-- User chooses:
-  - **Continue Free**
-  - **Sign In / Create Account**
-- User taps **Continue Free**.
-- User sees a short Free Mode notice.
-- User enters the Free Mode board.
-- User uses the AAC board immediately.
-- User changes board settings if needed.
-- User saves phrases locally.
-- User exits the app.
-- App saves Free Mode data locally.
-- User opens the app again.
-- App reloads the same local board.
-- No account is created.
-- No cloud data is used.
-- No personal information is requested.
+If a requested item is risky, too large, or requires backend/server work, do not force it. Report it clearly.
 
 ---
 
-## Free Mode Board
+# IMPLEMENTATION / BOARD_TOUCH_TARGET_AND_DENSITY_SYSTEM
 
-- The Free Mode board should be a one-to-one replica of the current TapTalk board.
-- The board should look and feel the same as the current board.
-- The board should still support AAC communication.
-- The board should still allow tap-to-speak.
-- The board should still allow folders.
-- The board should still allow symbols.
-- The board should still allow symbol packs.
-- The board should still allow sentence building.
-- The board should still allow delete/backspace.
-- The board should still allow clear.
-- The board should still allow saved QuickTalk phrases.
-- The board should still allow simple board settings.
-- The board should still use calm, accessible, iOS-native design.
-- The difference is storage, not communication ability.
+Create or update a clear reusable size system.
 
----
+Use these rules:
 
-## Naming
+* absolute minimum touch target anywhere: 50 × 50 px
+* main AAC symbols and folders: maximum 64 × 64 px where safe
+* bottom control bar buttons: 50–56 px range
+* top navigation buttons: 50–56 px range
+* sub-options above the bottom control bar: minimum 50 px high where safe
+* never go below 44 px under any circumstance
+* decorative icons can be visually smaller, but their touch parent must remain accessible
 
-- Public user name:
-  - **Free Mode**
-- Technical/internal name:
-  - **Guest Mode**
-- User-facing wording:
-  - **Free Mode**
-  - **Saved on this device**
-  - **No account required**
-  - **No cloud backup**
+Inspect the current board density:
 
----
+* top navigation buttons currently around 72 × 57
+* top navigation bar height currently around 76
+* input bar height currently around 104
+* symbol/folder tiles currently around 88 high
+* bottom control bar items currently around 68 × 68
 
-## Free Mode Features
+Tasks:
 
-- AAC board
-- Tap-to-speak symbols
-- Folder navigation
-- Symbol packs
-- Sentence input bar
-- Backspace/delete
-- Clear sentence
-- Save QuickTalk phrase
-- Favourite QuickTalk phrase
-- Reorder QuickTalk phrases
-- Recently spoken history
-- Basic word suggestions
-- Basic symbol suggestions
-- Time-of-day suggestions
-- Planner / step sequence
-- Countdown timer for planner steps
-- Local settings
-- Export backup
-- Import backup
-- Delete local data
-- Local backup limit
+* reduce visual heaviness without reducing usability
+* keep all important controls at least 50 × 50 px
+* bring main symbols/folders closer to 64 × 64 px where safe
+* make the top navigation less screen-consuming
+* make the input bar shorter only if readability remains safe
+* make the bottom control bar smaller and calmer
+* keep all spacing predictable
+* resize icons and text proportionally with their parent container
+* do not shrink the container while leaving inner icons oversized
+* preserve padding
+* preserve consistent gaps
+* use shared sizing constants where possible
+* avoid random one-off sizing values
 
 ---
 
-## Free Mode Capacity
+# IMPLEMENTATION / BOARD_MESSAGE_STRIP_TEXT_SCALING
 
-- Up to 3,500 symbols
-- 14 symbol packs
-- 100 to 300 symbols per pack
-- Nested folders allowed
-- 3 to 5 folder levels allowed
-- Up to 50 QuickTalk phrases
-- QuickTalk favourites allowed
-- QuickTalk reorder allowed
-- Local spoken history allowed
-- Local planner steps allowed
-- 10 to 20 accessibility/settings options
-- Local backups limited to 3 to 5 backups
+Fix message strip text scaling.
 
----
+Current issues to inspect:
 
-## What Free Mode Should Not Include
+* message chip labels may be hardcoded around 9pt
+* sentence/message text may use raw font sizes and weights
+* message strip text may not respond to the user’s selected text size
+* message strip typography may not use the app’s font/token system
 
-- No login
-- No sign-up
-- No email collection
-- No name collection
-- No phone number collection
-- No cloud sync
-- No cloud backup
-- No paid AI cloud processing
-- No account profile
-- No cross-device sync
-- No hidden analytics
-- No advertising trackers
-- No third-party tracking SDKs
-- No automatic upload of board data
-- No automatic upload of saved phrases
-- No automatic upload of history
-- No automatic upload of planner data
+Tasks:
+
+* make message chip labels scale with the user’s selected text size
+* make the main message strip sentence text scale with the user’s selected text size
+* use typography/font tokens instead of raw hardcoded values where possible
+* keep minimum rendered text legible
+* ensure placeholder text follows the same font system
+* ensure no text is clipped at larger text size settings
+* ensure VoiceOver still reads message strip content correctly
+
+Acceptance checks:
+
+* changing text size in app accessibility settings visibly changes message strip text
+* chip labels remain readable
+* sentence text remains readable
+* placeholder text remains visually consistent
+* no message strip text is clipped or overlapping
 
 ---
 
-## Local Storage Integration
+# IMPLEMENTATION / BOARD_NAVIGATION_HANDLE_TOUCH_TARGET
 
-- Use SQLite for Free Mode local storage.
-- SQLite stores data on the user's device.
-- SQLite does not create a cloud account.
-- SQLite does not charge cloud storage fees.
-- SQLite should store structured data only.
-- Store references, not heavy files.
-- Store symbol IDs, not duplicate symbol assets.
-- Store folder structure as IDs and parent-child relationships.
-- Store QuickTalk phrases as text.
-- Store settings as small values.
-- Store history as local records.
-- Store planner steps as local records.
-- Store backups as limited local files or database snapshots.
+Fix the board navigation dropdown handle touch target.
 
----
+Current issue:
 
-## Data To Store Locally
+* the visual handle may be compact, but the effective tap area may be too small
 
-- Board layout
-- Folder structure
-- Symbol placement
-- Symbol IDs
-- Symbol labels
-- Symbol pack selections
-- Tile size
-- Folder colour
-- Symbol colour
-- Text colour
-- Outline setting
-- Haptic setting
-- Board size setting
-- Accessibility settings
-- QuickTalk phrases
-- QuickTalk favourites
-- QuickTalk order
-- Recently spoken history
-- Planner steps
-- Timer settings
-- Local backup metadata
+Tasks:
+
+* keep the handle visually compact
+* increase hitSlop or touch parent size so the effective touch area is at least 44 × 44 px
+* prefer 50 × 50 px effective touch area if safe
+* ensure it does not cover board tiles or message content
+* ensure VoiceOver can focus and activate it
+* keep the visual design calm and minimal
 
 ---
 
-## Data To Avoid In Free Mode
+# IMPLEMENTATION / BOARD_TOP_NAVIGATION_LAG
 
-- Legal name
-- Email
-- Phone number
-- Address
-- Date of birth
-- NDIS number
-- Support worker details
-- Medical records
-- Diagnosis fields
-- Payment details
-- Account ID
-- Cloud user ID
-- Device advertising ID
-- Precise location
-- Photos
-- Voice recordings
-- Contact list
-- Background tracking data
+The top navigation bar toggle is laggy.
 
----
+Investigate:
 
-## Free Mode Settings
+* unnecessary re-renders
+* expensive layout recalculations
+* state changes causing the whole board to re-render
+* heavy components remounting during toggle
+* animation running on the JS thread
+* layout animation conflicts with Reduce Motion
+* non-memoised derived values
+* symbol/folder grid re-rendering during top bar toggle
 
-- Symbol size
-- Folder size
-- Board size
-- Text size
-- Text colour
-- Tile colour
-- Folder colour
-- Outline on/off
-- Outline thickness
-- Haptics on/off
-- Reduce Motion support
-- Animation intensity
-- Speech speed
-- Speak on tap on/off
-- Show labels on/off
-- Show history on/off
-- QuickTalk limit display
-- Backup/export controls
-- Delete local data control
+Tasks:
+
+* fix the lag if safe
+* avoid flashy animation
+* respect Reduce Motion
+* avoid forcing a large rewrite
+* if unsafe, report the exact cause and safest next step
 
 ---
 
-## Free Mode Planner
+# IMPLEMENTATION / BOARD_BOTTOM_CONTROL_BAR_CONSISTENCY
 
-- User creates a simple plan.
-- User adds steps.
-- Each step can use a symbol or short phrase.
-- Each step can have an optional timer.
-- User can move to the next step.
-- Completion feedback must stay calm.
-- Avoid overwhelming animations.
-- Respect Reduce Motion.
-- Confetti should be optional or reduced when Reduce Motion is enabled.
-- Planner data stays local only.
+The bottom control bar needs to feel like one controlled component system.
 
----
+Tasks:
 
-## Symbol Packs
-
-- Symbol packs should be prebuilt groups of symbols and folders.
-- Symbol packs should install into the local board.
-- Symbol packs should use symbol references.
-- Symbol packs should not duplicate heavy assets.
-- Symbol packs should be optional.
-- User can add a pack without adding symbols one by one.
-- User can still edit symbols and folders after adding a pack.
+* make all bottom control items visually consistent
+* make icon thickness appear equal
+* make icon size appear equal, even if actual dimensions differ
+* make label text visually consistent
+* make icon-to-text gaps consistent
+* make top, bottom, and side padding consistent
+* make item widths feel balanced
+* make colours consistent using existing tokens
+* make the collapse/toggle symbol smaller and visually balanced
+* reduce screen consumption without making controls harder to use
+* refactor into a shared bottom control item component only if it safely reduces duplication
 
 ---
 
-## Suggested Symbol Pack Structure
+# IMPLEMENTATION / BOARD_BOTTOM_CONTROL_BAR_SUB_OPTIONS
 
-- Responses
-- Feelings
-- Actions
-- People
-- Social
-- Places
-- Transport
-- School
-- Home
-- Health
-- Food
-- Activities
-- Safety
-- ABC & 123
+Sub-options should appear above their selected bottom control item.
 
----
+Tasks:
 
-## Local Backup Rules
+* show sub-options directly above the parent control
+* match the sub-option width to the parent bottom control item width
+* make each sub-option at least 50 px high where safe
+* never go below 44 px
+* if one option has three sub-options, stack three vertical squares above it
+* keep the sub-option visually connected to the parent item
+* avoid covering important AAC content unnecessarily
+* keep the design calm and predictable
 
-- Allow manual backup.
-- Allow import backup.
-- Limit local backups to 3 to 5.
-- Delete the oldest backup when the limit is reached.
-- Show a warning before export.
-- Show a warning before import.
-- Show a warning before deleting local data.
-- Do not silently create unlimited backups.
+Example:
+
+* Quick is pressed
+* Manage appears directly above Quick
+* Manage uses the same visual width as Quick
 
 ---
 
-## Free Mode Privacy Rules
+# IMPLEMENTATION / BOARD_EDIT_MODE_FOLDER_NAVIGATION
 
-- Free Mode data stays on device.
-- Free Mode does not collect personal information.
-- Free Mode does not require an account.
-- Free Mode does not send board data to cloud.
-- Free Mode does not send saved phrases to cloud.
-- Free Mode does not send usage history to cloud.
-- Free Mode does not send planner data to cloud.
-- User can delete local data.
-- User can export local data if they choose.
-- User must be warned that exported data is their responsibility.
+There is a navigation problem in edit mode.
 
----
+Current issue:
 
-## Cloud / Paid Separation
+* user enters edit mode
+* user opens a folder
+* user cannot go back
+* controls only show Undo, Select, Move, and Save
 
-- Paid mode uses account login.
-- Paid mode can use cloud sync.
-- Paid mode can use cloud backup.
-- Paid mode can use cross-device sync.
-- Paid mode can use subscription features.
-- Paid mode can use AI features if disclosed.
-- Paid mode needs cloud consent.
-- Paid mode needs account deletion.
-- Paid mode needs cloud data deletion.
-- Paid mode must not automatically import Free Mode data without user consent.
-- Free Mode must not automatically upload to paid/cloud storage.
+Tasks:
+
+* add Back on the far left when inside a folder during edit mode
+* Back should return to the previous board/folder level
+* Back should not unexpectedly exit edit mode
+* do not break normal folder navigation outside edit mode
 
 ---
 
-## Upgrade From Free Mode To Paid Mode
+# IMPLEMENTATION / BOARD_SAVE_DONE_CANCEL_BEHAVIOUR
 
-- User chooses upgrade.
-- App explains what will change.
-- App asks for account creation.
-- App asks for cloud sync consent.
-- User chooses whether to upload local board data.
-- User can continue without upload.
-- User can stay in Free Mode.
-- No forced upgrade.
-- No loss of voice access if they do not upgrade.
+Some buttons say Save or Done when no changes were made.
 
----
+Tasks:
 
-## Required Documents
-
-- Privacy Policy
-- Terms of Use
-- Data Collection Summary
-- Guest Mode / Free Mode Data Notice
-- Cloud Sync Data Notice
-- Cloud Sync Consent Statement
-- Export / Import Data Warning
-- Delete Guest Data Notice
-- Delete Account Notice
-- Subscription Terms
-- App Store Privacy Label Answers
-- Privacy Impact Assessment
-- NDIS Dignity and Choice Statement
-- Data Retention Policy
-- Data Deletion Policy
-- Security Summary
-- Third-Party Services List
-- Contact / Privacy Support Details
+* make Save/Done state-aware
+* if no changes were made, show Cancel
+* if changes were made, show Save or Done depending on the flow
+* apply this consistently across bottom control bar flows
+* do not show Save when there is nothing to save
 
 ---
 
-## Where Documents Should Go
+# IMPLEMENTATION / BOARD_QUICK_MANAGE_SELECTED_STATE
 
-### First Mode Selector Screen
+Quick Manage currently does not show existing quick-tagged symbols as selected.
 
-- Free Mode short notice
-- Cloud/Paid Mode short notice
-- Privacy Policy link
-- Terms of Use link
+Tasks:
 
-### Free Mode Board
-
-- No large legal block
-- Keep the board clean
-- Legal links should stay in settings
-
-### Free Mode Settings
-
-- Free Mode Data Notice
-- Delete Guest Data Notice
-- Export / Import Data Warning
-- Privacy Policy link
-- Terms of Use link
-- Contact / Privacy Support link
-
-### Legal & Privacy Settings
-
-- Privacy Policy
-- Terms of Use
-- Data Collection Summary
-- Free Mode Data Notice
-- Cloud Sync Data Notice
-- Data Retention Policy
-- Data Deletion Policy
-- Security Summary
-- Third-Party Services List
-- Contact / Privacy Support Details
-
-### Export / Import Screen
-
-- Export / Import Data Warning
-- Backup privacy warning
-- Import safety warning
-
-### Delete Guest Data Screen
-
-- Delete Guest Data Notice
-- Final confirmation message
-
-### Sign Up / Login Screen
-
-- Cloud Sync Data Notice
-- Privacy Policy link
-- Terms of Use link
-
-### Cloud Sync Consent Screen
-
-- Cloud Sync Consent Statement
-- Data Collection Summary link
-- Privacy Policy link
-
-### Account Settings
-
-- Delete Account Notice
-- Cloud data deletion option
-- Privacy Policy link
-- Terms of Use link
-
-### Paywall / Subscription Screen
-
-- Subscription Terms
-- Payment disclosure
-- Restore purchases button
-- Privacy Policy link
-- Terms of Use link
+* when entering Quick manage/select mode, preselect symbols already tagged with Quick
+* allow users to unselect symbols that are already tagged
+* make it clear which symbols are already part of Quick
 
 ---
 
-## Simple User Notices
+# IMPLEMENTATION / BOARD_QUICK_SORT_ORDER
 
-### Free Mode Notice
+When Quick is active:
 
-- Free Mode does not need an account.
-- Your board saves on this device only.
-- TapTalk does not upload your Free Mode board to cloud.
-- If you delete the app, your local data may be lost.
-- You can export a backup in settings.
-
-### Cloud Sync Notice
-
-- Cloud sync stores your TapTalk data online.
-- This can help backup and sync your board across devices.
-- Cloud sync requires an account.
-- Cloud sync only starts after you give consent.
-
-### Export Warning
-
-- Your export may include saved phrases, board setup, history, settings, and planner steps.
-- Keep the file private.
-- Anyone with access to the file may be able to restore or view your setup.
-
-### Delete Guest Data Warning
-
-- This deletes Free Mode data stored on this device.
-- This may include board setup, saved phrases, settings, history, and planner steps.
-- This cannot be undone unless you exported a backup.
+* symbols must appear first
+* folders must appear below symbols
 
 ---
 
-## Legal / Compliance Basics
+# IMPLEMENTATION / BOARD_QUICK_TAGGED_VISIBILITY
 
-- Be clear about local storage.
-- Be clear about cloud storage.
-- Do not hide data collection.
-- Do not collect personal data in Free Mode.
-- Do not use cloud sync without consent.
-- Do not claim NDIS approval unless officially approved.
-- Do not claim medical or clinical proof unless properly supported.
-- Keep App Store Privacy Label answers accurate.
-- Keep privacy policy matching the real app behaviour.
-- Keep account deletion available for account users.
-- Keep guest data deletion available for Free Mode users.
+When Quick is inactive or toggled off:
+
+* quick-tagged symbols should not appear in the current Quick view
+* quick-tagged folders should not appear in the current Quick view
+* do not delete the actual items
+* only remove them from the filtered Quick view
 
 ---
 
-## Apple Notes To Remember
+# IMPLEMENTATION / BOARD_COLLAPSED_CONTROL_BAR
 
-- Apple requires accurate App Store privacy disclosures.
-- Apple treats transmitted and retained off-device data as collected data.
-- Apple says data processed only on device is generally not collected for App Store privacy answers.
-- Apple requires a privacy policy URL.
-- Apple requires account deletion inside the app if account creation is available.
-- App Store privacy labels must match the real app.
+When the bottom control bar is collapsed:
 
-Official Apple references:
-- https://developer.apple.com/app-store/app-privacy-details/
-- https://developer.apple.com/support/offering-account-deletion-in-your-app/
+* keep the hugging/peeking toggle button
+* make the peeking toggle area taller
+* the peeking area should visually match the bottom control bar height
+* keep it accessible and easy to tap
 
 ---
 
-## Australia / Privacy Notes To Remember
+# IMPLEMENTATION / BOARD_PLACES_FOLDER_MODE_RENAME
 
-- The Privacy Act and Australian Privacy Principles focus on personal information.
-- Personal information means information that identifies a person or could reasonably identify a person.
-- Free Mode should avoid collecting personal information.
-- If cloud mode collects account/user data, disclose it clearly.
-- Keep privacy wording simple and understandable.
+Fix the internal board naming mismatch.
 
-Official OAIC reference:
-- https://www.oaic.gov.au/privacy/australian-privacy-principles/australian-privacy-principles-quick-reference
+Current issue:
 
----
+* the Places folder may point to a board mode named `animals`
+* the board content appears to be places vocabulary
+* this creates false internal semantics and blocks future animals vocabulary
 
-## NDIS Notes To Remember
+Tasks:
 
-- Respect privacy.
-- Respect dignity.
-- Respect choice and control.
-- Do not make communication access dependent on payment.
-- Do not use patronising language.
-- Do not make false NDIS approval claims.
-- Keep the app calm, accessible, and safe for people with disability.
+* rename the internal board mode from `animals` to `places` if it currently contains places content
+* update the Places folder target to `places`
+* update the board mode type
+* update all references safely
+* do not create a new animals board in this task unless it already exists
+* ensure TypeScript passes after the rename
 
-Official NDIS Commission reference:
-- https://www.ndiscommission.gov.au/rules-and-standards/ndis-code-conduct
+Acceptance checks:
 
----
-
-## Implementation Basics
-
-- Add Free Mode selector.
-- Add Free Mode local SQLite database.
-- Create separate local storage service.
-- Keep Free Mode separate from cloud sync service.
-- Add board save/load from SQLite.
-- Add QuickTalk save/load from SQLite.
-- Add settings save/load from SQLite.
-- Add history save/load from SQLite.
-- Add planner save/load from SQLite.
-- Add export/import.
-- Add delete guest data.
-- Add local backup limit.
-- Add Free Mode data notice.
-- Add Legal & Privacy settings page.
-- Add Cloud Sync consent before upload.
-- Add account deletion for cloud users.
-- Add App Store privacy label answers document.
-- Add privacy impact assessment document.
+* Places points to `places`
+* places vocabulary lives under `places`
+* no animals key remains incorrectly holding places content
+* folder navigation still works
 
 ---
 
-## Testing Basics
+# IMPLEMENTATION / BOARD_DARK_MODE_FOLDER_TOKENS
 
-- Test fresh install.
-- Test Free Mode without internet.
-- Test Free Mode with airplane mode.
-- Test closing and reopening app.
-- Test app update with existing local data.
-- Test deleting guest data.
-- Test export backup.
-- Test import backup.
-- Test upgrade from Free Mode to paid mode.
-- Test refusing cloud sync.
-- Test cloud sync consent.
-- Test Reduce Motion.
-- Test VoiceOver.
-- Test large text.
-- Test small screens.
-- Test slow older devices.
-- Run typecheck.
+Fix folder colours in dark mode if they are too bright or copied from light mode.
 
----
+Current issue to inspect:
 
-## Risks
+* dark mode folder background may be the same bright yellow as light mode
+* folder flap overlay may be near-white
+* this can create glare and sensory load on a dark AAC board
 
-- Local database migration can break old saved boards.
-- Free Mode and Cloud Mode can accidentally mix if not separated clearly.
-- Export files can contain user-created sensitive text.
-- Unlimited backups can waste local storage.
-- Hidden analytics can create privacy risk.
-- Too many animations can harm accessibility.
-- Complex folder depth can confuse users.
-- App Store privacy labels can become wrong if features change.
-- Cloud sync consent can be unclear if wording is too vague.
+Tasks:
+
+* make dark mode folder background calmer and less glaring
+* make dark mode folder flap/fold less bright
+* keep folders visually distinct from normal symbols
+* do not rely on brightness alone
+* use token-based colours
+* avoid random hardcoded colours
+
+Acceptance checks:
+
+* dark mode folder tiles are not harsh bright yellow
+* folder fold is not near-white in dark mode
+* folder tiles remain easy to identify
+* no sensory-load regression is introduced
 
 ---
 
-## Final Build Rule
+# IMPLEMENTATION / PROFILE_SETTINGS_ICON_ERROR
 
-- Free Mode gives users a voice.
-- Free Mode saves locally.
-- Free Mode costs TapTalk no cloud storage.
-- Paid Mode adds convenience.
-- Paid Mode adds backup, sync, account, and premium services.
-- Do not take away core communication because someone does not pay.
+Current issue:
 
----
+* `assets/symbol/toggle_off_Chevron` may be applied to every setting row
+* this happens even when the row does not have multiple options
 
-## Final Report Format For Claude / Fable / Cursor
+Tasks:
 
-1. What changed
-2. Files touched
-3. Why it matters
-4. Accessibility impact
-5. Privacy impact
-6. Risks
-7. Typecheck result
-8. Next recommended step
+* fix the icon logic
+* use the correct icon based on row type
+* do not use toggle-style icons for simple page rows
 
 ---
 
-## Not Legal Advice
+# IMPLEMENTATION / REGISTRATION_ACCESSIBILITY_DARK_MODE_TEXT
 
-- This plan is a product and implementation planning document.
-- It is not legal advice.
-- A lawyer should review the final Privacy Policy, Terms of Use, subscription wording, and App Store disclosures before launch.
+Fix dark mode text visibility in the registration accessibility screen if static light colours are being used.
+
+Current issue to inspect:
+
+* some section labels may use static light-mode `colors.text`
+* dark mode may render near-black text on a dark background
+
+Tasks:
+
+* replace static light colour usage with active theme colours
+* ensure section headings are readable in dark mode
+* make similar registration sections use one consistent theming approach
+* do not introduce hardcoded colours
+
+Acceptance checks:
+
+* Theme and Symbol Colour Scheme labels are readable in dark mode
+* section labels use active theme text colour
+* contrast remains accessible
+
+---
+
+# IMPLEMENTATION / DARK_MODE_DISABLED_AND_PROGRESS_TOKENS
+
+Fix dark mode disabled and progress track tokens if they are copied from light mode and fail contrast.
+
+Tasks:
+
+* inspect `disabled` and `progressTrack` dark mode tokens
+* make them visually distinct against dark surfaces
+* ensure Switch off tracks remain visible
+* ensure progress bars remain visible
+* do not make them harsh or overstimulating
+* use token-based values
+
+Acceptance checks:
+
+* Switch off states are visible in dark mode
+* activity progress bars are visible in dark mode
+* dark tokens are not blindly identical to light tokens where that causes contrast failure
+
+---
+
+# IMPLEMENTATION / ACTIVITY_THEME_TOKEN_USAGE
+
+Fix activity screens that import or use static light-mode colours.
+
+Activities to inspect:
+
+* Shape Match
+* Colour Pop
+* Memory Match
+
+Tasks:
+
+* remove static light-mode colour usage where active theme colours should be used
+* migrate styles to active theme colours
+* pass theme-aware colours into SVG/shape components where needed
+* ensure dark mode activity screens do not show light-mode surfaces or overlays
+* keep activity visuals calm and simple
+
+Acceptance checks:
+
+* activity screens respect dark mode
+* static `colors` imports are removed where inappropriate
+* theme-aware values are used consistently
+* typecheck passes
+
+---
+
+# IMPLEMENTATION / MEMORY_MATCH_GEOMETRY_ACCESSIBILITY
+
+Fix Memory Match if any shapes differ only by colour.
+
+Current issue to inspect:
+
+* duplicate circles may exist with different colours only
+* duplicate squares may exist with different colours only
+* colour should not be the only way to distinguish choices
+
+Tasks:
+
+* make every shape geometrically unique
+* do not rely only on colour
+* update accessibility labels to match the new geometry
+* keep shapes simple and 2D
+* do not add complex decoration or animation
+
+Acceptance checks:
+
+* no two shapes have the same visual form
+* users can distinguish shapes without colour information
+* accessibility labels are accurate
+
+---
+
+# IMPLEMENTATION / COLOUR_POP_CVD_ACCESSIBILITY
+
+Fix Colour Pop if colour is the only mechanic with no CVD-safe alternative.
+
+Tasks:
+
+* respect the app’s CVD-safe colour scheme if it exists
+* use CVD-safe colours when the user has selected that setting
+* avoid red/green conflict pairs in CVD-safe mode
+* source colours from existing palette/tokens where possible
+* consider simple secondary visual differentiators only if already compatible with the app style
+* do not make the game visually noisy
+
+Acceptance checks:
+
+* Colour Pop changes to CVD-safe colours when enabled
+* colours are not hardcoded where active accessibility settings should apply
+* the activity remains simple and readable
+
+---
+
+# IMPLEMENTATION / VISUAL_TIMER_FONT_SYSTEM
+
+Fix Visual Timer font consistency.
+
+Tasks:
+
+* make countdown numerals use the app’s font system
+* use existing display font tokens where appropriate
+* remove raw font family string literals if present
+* keep the timer visually calm and readable
+
+Acceptance checks:
+
+* countdown numerals match the app’s design system
+* no unsupported font literals remain
+* timer still renders correctly
+
+---
+
+# IMPLEMENTATION / LEGAL_CONSENT_LINKS
+
+Fix registration consent links if they still point to stand-in external URLs.
+
+Tasks:
+
+* Terms link should open the in-app Terms screen
+* Privacy link should open the in-app Privacy Policy screen
+* remove stand-in external URL references from the consent flow
+* avoid external browser dependency during consent
+* keep the flow usable offline where possible
+
+Acceptance checks:
+
+* tapping Terms opens the in-app Terms screen
+* tapping Privacy opens the in-app Privacy Policy screen
+* no stand-in external legal URLs remain in the registration consent step
+
+---
+
+# IMPLEMENTATION / LEGAL_EMAIL_LINKS
+
+Fix legal screen support email links.
+
+Screens to inspect:
+
+* Privacy Policy
+* Terms of Use
+* Data Choices
+
+Tasks:
+
+* make support email addresses tappable where they are presented as contact actions
+* use `mailto:` handling
+* add correct accessibility role and label
+* keep visible tap affordance subtle and clear
+* fix JSX spacing issues around email text
+* make all legal screens consistent
+
+Acceptance checks:
+
+* tapping support email opens native mail compose
+* VoiceOver announces it as a link
+* sentences do not lose spacing around the email address
+
+---
+
+# IMPLEMENTATION / APP_VERSION_SOURCE
+
+Fix hardcoded app version display if present.
+
+Tasks:
+
+* remove hardcoded app version strings
+* read version from the app/build config source already used by the project
+* include a graceful fallback if unavailable
+* keep the Profile/About row stable
+
+Acceptance checks:
+
+* displayed version changes when app config version changes
+* no permanent hardcoded `0.1.0` style version remains
+* typecheck passes
+
+---
+
+# IMPLEMENTATION / GUARDIAN_SYMBOL_OVERRIDE_NO_FALLBACK
+
+Fix unsafe guardian symbol override fallback.
+
+Current issue to inspect:
+
+* route may default to a hardcoded concept such as `CONCEPT_HELLO`
+* missing concept ID should not silently edit the wrong symbol
+
+Tasks:
+
+* remove hardcoded concept fallback
+* if no concept ID is provided, show a calm error/empty state
+* provide a Back or dismiss action
+* valid concept IDs should continue to work
+* do not open the editor for the wrong concept
+
+Acceptance checks:
+
+* missing concept ID does not edit Hello or any default concept
+* user sees a clear error state
+* valid concept route still works
+
+---
+
+# IMPLEMENTATION / ROLE_MODEL_THERAPIST_VS_GUARDIAN
+
+Audit the role model if Therapist is mapped to Guardian.
+
+This is a sensitive data-model issue. Implement only if the fix is safe and contained.
+
+Current issue to inspect:
+
+* Therapist may be internally stored as `guardian`
+* guardian and therapist are legally and practically different roles
+* role-based consent logic may be affected
+
+Tasks:
+
+* check whether Therapist maps to `guardian`
+* if safe, create a distinct `therapist` role
+* update labels/options so Therapist maps to `therapist`
+* keep Guardian for legal guardian/parent/authorised decision-maker
+* audit role-based consent logic
+* do not rewrite the registration system unnecessarily
+* if the change is too wide, report exactly what needs a separate role-model migration
+
+Acceptance checks:
+
+* Therapist does not save as Guardian
+* guardian-only flows do not apply to therapists
+* TypeScript passes
+* no role label becomes misleading
+
+---
+
+# IMPLEMENTATION / PROFILE_SETTINGS_ROW_ICON_LOGIC
+
+Fix the Profile and Settings row icon behaviour so it follows an iOS-style settings pattern.
+
+Current issue:
+
+* `assets/symbol/toggle_off_Chevron` is being applied to too many setting rows.
+* Some rows show a toggle-style chevron even when they are not expandable.
+* Some rows only open a simple page, but visually look like they have multiple options.
+* This creates visual clutter and makes the settings harder to understand.
+
+Important iOS-style rule:
+
+* A row that directly turns something on or off should use an actual iOS-style toggle switch.
+* A row that opens another screen should use a normal navigation chevron.
+* A row that expands inline to show multiple sub-options should use an expand/collapse indicator.
+* A row that does not open anything, does not toggle anything, and does not expand should not show a chevron or toggle-style icon.
+
+Do not use `toggle_off_Chevron` as the default icon for every row.
+
+Create clear row types instead of using one icon everywhere.
+
+Recommended row types:
+
+* `navigation`
+* `toggle`
+* `expandable`
+* `static`
+* `action`
+
+Row behaviour:
+
+* `navigation`
+
+  * use for rows that open another page
+  * example: Privacy Policy, Terms of Use, Account Details
+  * show a normal right chevron only
+  * do not show a toggle-style icon
+
+* `toggle`
+
+  * use for rows that immediately turn a setting on or off
+  * example: Reduce Motion, Dark Mode, Haptics, Sound Feedback
+  * show the actual iOS-style switch control
+  * do not show a chevron
+
+* `expandable`
+
+  * use only when the row reveals multiple sub-options inside the same screen
+  * example: Voice and Speech if it expands to show Speech Rate, Pitch, Pronunciation, and Voice options
+  * show an expand/collapse indicator
+  * update accessibility state when expanded or collapsed
+
+* `static`
+
+  * use for read-only information
+  * example: App Version
+  * show no chevron
+  * show no toggle
+  * do not make it look interactive unless it is interactive
+
+* `action`
+
+  * use for one-step actions
+  * example: Reset, Sign Out, Contact Support
+  * show no chevron unless it opens a confirmation/details screen
+  * use calm styling and avoid harsh destructive colours unless absolutely required
+
+Tasks:
+
+* inspect the Profile and Settings row components
+* remove the logic that applies `assets/symbol/toggle_off_Chevron` to every row
+* create or update a reusable settings row component with explicit row type support
+* make the icon/accessory depend on the row type
+* use normal navigation chevrons for page-opening rows
+* use actual switch controls for true toggles
+* use expand/collapse indicators only for rows that reveal multiple inline sub-options
+* remove chevrons/icons from rows that do not need them
+* keep spacing, padding, text size, and row height consistent
+* use existing design tokens
+* keep the settings visually calm and not overstimulating
+
+Accessibility requirements:
+
+* navigation rows need `accessibilityRole="button"`
+* toggle rows need correct switch role/state
+* expandable rows need `accessibilityRole="button"` and expanded/collapsed state
+* static rows should not be announced as buttons
+* action rows need clear labels and hints where needed
+* every row should have a clear accessibility label
+
+Acceptance checks:
+
+* Privacy Policy opens as a normal navigation row with a standard chevron, not a toggle-style icon.
+* Terms of Use opens as a normal navigation row with a standard chevron, not a toggle-style icon.
+* Reduce Motion and similar true on/off settings use actual iOS-style switches.
+* Voice and Speech only uses expandable styling if it reveals multiple sub-options inline.
+* App Version or other read-only rows show no chevron and no toggle.
+* `toggle_off_Chevron` is no longer used as the default accessory for every setting row.
+* Settings are visually cleaner and easier to scan.
+* Typecheck passes.
+
+---
+
+# OUT_OF_SCOPE / DO_NOT_IMPLEMENT_THIS_PASS
+
+Do not implement these in this pass unless the project already has a safe existing backend/API path:
+
+* real SMS verification system
+* duplicate email server check
+* new authentication backend
+* production account verification system
+* full TTS voice selector feature
+* Focus Mode
+* full-screen mode
+* large navigation redesign
+* new activity system
+* new real symbol pack library
+
+If these are found as problems, report them as separate future tasks.
+
+---
+
+# FINAL CHECKS
+
+Before finishing:
+
+* confirm all important controls remain accessible
+* confirm icons and text resize with their containers
+* confirm padding and gaps are consistent
+* confirm no important control drops below minimum touch target
+* confirm existing AAC speech behaviour still works
+* confirm folder navigation still works
+* confirm quick mode still works
+* confirm edit mode still works
+* confirm dark mode remains readable
+* confirm activity screens still work
+* confirm no legal/contact link regression
+
+---
+
+# FINAL REPORT FORMAT
+
+1. Next 10 Implementation plan that should be done that makes sense after this pass
+
+# END FABLE 5 / TAPTALK AAC BOARD + ACCESSIBILITY + PERFORMANCE FIX PASS

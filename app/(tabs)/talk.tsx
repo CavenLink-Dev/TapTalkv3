@@ -42,7 +42,7 @@ import { Href, useRouter } from 'expo-router';
 import { BackOutIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcons';
 import { TalkMessageStrip, type MessageStripTile } from '../../src/components/talk/TalkMessageStrip';
 import { AddSymbolModal } from '../../src/components/talk/AddSymbolModal';
-import { AddFolderModal } from '../../src/components/talk/AddFolderModal';
+import { AddFolderModal, type FolderPlacementOption } from '../../src/components/talk/AddFolderModal';
 import {
   CustomSymbolEditor,
   type CustomSymbolEditorResult,
@@ -2920,6 +2920,29 @@ export default function TalkScreen() {
     });
   }, [state.customBoardTiles]);
 
+  const folderPlacementOptions = useMemo<FolderPlacementOption[]>(() => {
+    const options = new Map<string, string>();
+    options.set(activeMode, activeMode === 'home' ? 'Current board' : 'Current folder');
+
+    const addFolderTarget = (tile: BoardTile) => {
+      if (tile.kind !== 'folder' || !tile.target) return;
+      if (!options.has(tile.target)) {
+        options.set(tile.target, `${tile.label} folder`);
+      }
+    };
+
+    Object.values(BOARD_TILES).forEach(tiles => tiles.forEach(addFolderTarget));
+    userTilesRef.current.forEach(addFolderTarget);
+
+    return Array.from(options.entries())
+      .sort(([boardKeyA, labelA], [boardKeyB, labelB]) => {
+        if (boardKeyA === activeMode) return -1;
+        if (boardKeyB === activeMode) return 1;
+        return labelA.localeCompare(labelB);
+      })
+      .map(([boardKey, label]) => ({ boardKey, label }));
+  }, [activeMode, layouts]);
+
   // Chained-utterance run tracking — cancels any in-flight clause chain so
   // rapid re-taps on the strip never overlap audio (board_speech_rules.md).
   const speakRunIdRef = useRef(0);
@@ -3198,14 +3221,22 @@ export default function TalkScreen() {
   }, [activeMode, addTileToCurrentBoard, hapticIfEnabled, quickManageOpen]);
 
   // ── Add Folder confirm: insert folder tile ──────────────────────────
-  const handleAddFolderConfirm = useCallback((result: { label: string; boardKey: string; color: string; mulberrySymbolId?: string }) => {
+  const handleAddFolderConfirm = useCallback((result: {
+    label: string;
+    boardKey: string;
+    color: string;
+    mulberrySymbolId?: string;
+    customImageUri?: string;
+    parentBoardKey?: string;
+  }) => {
     setAddFolderModalVisible(false);
     const tileId = `folder_${result.boardKey}`;
+    const parentBoard = (result.parentBoardKey ?? activeMode) as BoardMode;
     setLayouts(prev => {
-      const current: BoardLayout = prev[activeMode]
-        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+      const current: BoardLayout = prev[parentBoard]
+        ?? (BOARD_TILES[parentBoard] ?? []).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
       const maxSlot = current.reduce((max, p) => Math.max(max, p.slot + 1), 0);
-      return { ...prev, [activeMode]: [...current, { id: tileId, slot: maxSlot, fw: 2, fh: 2 }] };
+      return { ...prev, [parentBoard]: [...current, { id: tileId, slot: maxSlot, fw: 2, fh: 2 }] };
     });
     const newTile: BoardTile = {
       id: tileId,
@@ -3214,6 +3245,7 @@ export default function TalkScreen() {
       color: result.color,
       target: result.boardKey as BoardMode,
       mulberrySymbolId: result.mulberrySymbolId,
+      customImageUri: result.customImageUri,
     };
     userTilesRef.current.set(tileId, newTile);
     // Register the empty child board
@@ -5903,6 +5935,8 @@ export default function TalkScreen() {
         visible={addFolderModalVisible}
         onDismiss={() => setAddFolderModalVisible(false)}
         onAdd={handleAddFolderConfirm}
+        placementOptions={folderPlacementOptions}
+        initialParentBoardKey={activeMode}
       />
     </SafeAreaView>
   );

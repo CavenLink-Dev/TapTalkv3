@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/native/Card';
+import { SettingsRow } from '../../src/components/native/SettingsRow';
 import { DisclosureRow } from '../../src/components/native/DisclosureRow';
 import { WheelPicker } from '../../src/components/native/WheelPicker';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
@@ -174,35 +175,19 @@ export default function VoiceSettingsScreen() {
           onPress={testVoice}
         />
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Pronunciations"
-          accessibilityHint="Fix how the voice says names and words"
+        <SettingsRow
+          type="navigation"
+          icon="chatbubble-ellipses-outline"
+          iconColor={t.colors.iconTintBlue}
+          iconBg={t.colors.iconTintBlueBg}
+          label="Pronunciations"
+          hint="Fix how the voice says names and words"
           onPress={() => {
             hapticSelection();
             router.push('/settings/pronunciation' as Href);
           }}
-          style={({ pressed }) => [
-            styles.pronRow,
-            { backgroundColor: t.colors.surface },
-            pressed && { opacity: 0.75 },
-          ]}
-        >
-          <View style={[styles.pronIcon, { backgroundColor: t.colors.iconTintBlueBg }]}>
-            <Ionicons name="chatbubble-ellipses-outline" size={20} color={t.colors.primary} />
-          </View>
-          <View style={styles.pronCopy}>
-            <Text style={[styles.pronLabel, { color: t.colors.text }]}>Pronunciations</Text>
-            <Text style={[styles.pronDesc, { color: t.colors.textMuted }]}>Say names and words your way</Text>
-          </View>
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color={t.colors.textTertiary}
-            accessibilityElementsHidden
-            importantForAccessibility="no"
-          />
-        </Pressable>
+          showDivider={false}
+        />
 
       </ScrollView>
     </SafeAreaView>

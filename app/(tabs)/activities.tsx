@@ -9,7 +9,7 @@
  *   • No tags — clean, professional, disability-first
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -30,6 +30,7 @@ import {
   toggleFavourite,
   useFavouriteActivities,
 } from '../../src/features/activities/favourites-store';
+import { setActivityOrder, useActivityOrder } from '../../src/features/activities/order-store';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { useReduceSensoryLoad } from '../../src/hooks/useReduceSensoryLoad';
@@ -77,15 +78,36 @@ const ACTIVITIES: Activity[] = [
   },
 ];
 
-const CARD_HEIGHT = 176;
+const ACTIVITY_BY_ID = new Map<ActivityId, Activity>(ACTIVITIES.map(activity => [activity.id, activity]));
+
+const CARD_HEIGHT = 188;
 const HERO_HEIGHT = 112;
 const CARD_GAP    = spacing.xxl;
 
 const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300] as const;
 
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  const next = [...items];
+  const [item] = next.splice(fromIndex, 1);
+  if (item === undefined) return items;
+  next.splice(toIndex, 0, item);
+  return next;
+}
+
+function withAlpha(color: string, alpha: number): string {
+  const match = color.match(/^#([0-9a-fA-F]{6})$/);
+  if (!match) return color;
+  const hex = match[1] ?? '000000';
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // --- StarParticles ---
 
 function StarParticles({ trigger }: { trigger: number }) {
+  const t = useTheme();
   const particles = useRef(
     PARTICLE_ANGLES.map(() => ({
       opacity:  new Animated.Value(0),
@@ -152,7 +174,7 @@ function StarParticles({ trigger }: { trigger: number }) {
               marginTop:   -2.5,
               marginLeft:  -2.5,
               borderRadius: 2.5,
-              backgroundColor: '#F5B400',
+              backgroundColor: t.colors.favouriteGold,
               opacity: p.opacity,
               transform: [
                 {
@@ -225,11 +247,11 @@ function SectionHeader({
         { opacity: mountProgress, transform: [{ translateY }] },
       ]}
     >
-      {icon ? <Ionicons name={icon} size={15} color="#F5B400" /> : null}
+      {icon ? <Ionicons name={icon} size={15} color={t.colors.favouriteGold} /> : null}
       <Text
         style={[
           styles.sectionTitle,
-          { color: isFavourites ? '#F5B400' : t.colors.textMuted },
+          { color: isFavourites ? t.colors.favouriteGold : t.colors.textMuted },
         ]}
       >
         {label}
@@ -243,14 +265,26 @@ function SectionHeader({
 function ActivityCard({
   activity,
   favourite,
+  showReorderControls,
   index,
+  canMoveUp,
+  canMoveDown,
   onPress,
+  onRevealReorderControls,
+  onMoveUp,
+  onMoveDown,
   onToggleStar,
 }: {
   activity: Activity;
   favourite: boolean;
+  showReorderControls: boolean;
   index: number;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
   onPress: () => void;
+  onRevealReorderControls: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   onToggleStar: () => void;
 }) {
   const t = useTheme();
@@ -264,6 +298,7 @@ function ActivityCard({
   const starScale       = useRef(new Animated.Value(1)).current;
   const starGlow        = useRef(new Animated.Value(favourite ? 1 : 0)).current;
   const [particleTrigger, setParticleTrigger] = useState(0);
+  const suppressOpenAfterLongPress = useRef(false);
 
   // Mount entrance
   useEffect(() => {
@@ -383,7 +418,7 @@ function ActivityCard({
   });
   const starGlowOpacity = starGlow.interpolate({
     inputRange:  [0, 1],
-    outputRange: [0, 0.7],
+    outputRange: [0, 0.45],
   });
   const starGlowScale = starGlow.interpolate({
     inputRange:  [0, 1],
@@ -391,29 +426,47 @@ function ActivityCard({
   });
 
   const heroBackground = t.isDark ? `${activity.accent}33` : activity.heroBg;
+  const cardBorderColor = withAlpha(t.colors.border, 0.75);
+
+  const revealReorderControls = () => {
+    suppressOpenAfterLongPress.current = true;
+    hapticSelection();
+    onRevealReorderControls();
+  };
 
   return (
     <Animated.View
       style={{
         opacity:   mountProgress,
         transform: [{ translateY: mountTranslateY }, { scale: pressScale }],
-        // Subtle, tight shadow so each card lifts off the page without
-        // spreading far (Rule: soft separation, not a heavy drop shadow).
         borderRadius:  radii.card,
-        shadowColor:   '#000',
-        shadowOffset:  { width: 0, height: 3 },
-        shadowOpacity: 0.10,
-        shadowRadius:  7,
-        elevation:     3,
+        shadowColor:   favourite ? t.colors.favouriteGold : t.colors.favouriteGlow,
+        shadowOffset:  { width: 0, height: favourite ? 3 : 0 },
+        shadowOpacity: favourite ? 0.10 : 0,
+        shadowRadius:  favourite ? 6 : 0,
+        elevation:     0,
       }}
     >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open ${activity.title}. ${activity.subtitle}`}
+        accessibilityHint={
+          showReorderControls
+            ? 'Use the up and down buttons to reorder this activity.'
+            : 'Press and hold to show reorder controls.'
+        }
+        onLongPress={revealReorderControls}
+        delayLongPress={260}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        onPress={onPress}
-        style={[styles.card, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}
+        onPress={() => {
+          if (suppressOpenAfterLongPress.current) {
+            suppressOpenAfterLongPress.current = false;
+            return;
+          }
+          onPress();
+        }}
+        style={[styles.card, { backgroundColor: t.colors.surface, borderColor: cardBorderColor }]}
       >
         {/* Hero image band */}
         <View style={[styles.cardHero, { backgroundColor: heroBackground }]}>
@@ -459,14 +512,21 @@ function ActivityCard({
           style={[styles.starOverlay, { backgroundColor: t.colors.surface }]}
         >
           <Animated.View
-            style={[styles.starGlow, { opacity: starGlowOpacity, transform: [{ scale: starGlowScale }] }]}
+            style={[
+              styles.starGlow,
+              {
+                backgroundColor: t.colors.favouriteGlow,
+                opacity: starGlowOpacity,
+                transform: [{ scale: starGlowScale }],
+              },
+            ]}
           />
           <Animated.View style={{ transform: [{ scale: starScale }] }}>
             <Ionicons
-              name={favourite ? 'star' : 'star-outline'}
-              size={22}
-              color={favourite ? '#F5B400' : t.colors.textTertiary}
-            />
+                name={favourite ? 'star' : 'star-outline'}
+                size={22}
+                color={favourite ? t.colors.favouriteGold : t.colors.textTertiary}
+              />
           </Animated.View>
           <StarParticles trigger={particleTrigger} />
         </Pressable>
@@ -474,10 +534,56 @@ function ActivityCard({
         <View
           style={[
             styles.cardBody,
-            { backgroundColor: t.colors.surface, borderTopColor: t.colors.border },
+            { backgroundColor: t.colors.surface, borderTopColor: cardBorderColor },
           ]}
         >
           <View style={styles.cardContentRow}>
+            {showReorderControls ? (
+              <View
+                accessible
+                accessibilityRole="toolbar"
+                accessibilityLabel={`Reorder ${activity.title}`}
+                style={styles.reorderControls}
+              >
+                <Ionicons name="reorder-three" size={22} color={t.colors.textMuted} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Move ${activity.title} up`}
+                  accessibilityState={{ disabled: !canMoveUp }}
+                  disabled={!canMoveUp}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    hapticSelection();
+                    onMoveUp();
+                  }}
+                  style={({ pressed }) => [
+                    styles.reorderButton,
+                    { backgroundColor: t.colors.inputBg },
+                    (!canMoveUp || pressed) && { opacity: !canMoveUp ? 0.35 : 0.75 },
+                  ]}
+                >
+                  <Ionicons name="chevron-up" size={20} color={t.colors.textMuted} />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Move ${activity.title} down`}
+                  accessibilityState={{ disabled: !canMoveDown }}
+                  disabled={!canMoveDown}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    hapticSelection();
+                    onMoveDown();
+                  }}
+                  style={({ pressed }) => [
+                    styles.reorderButton,
+                    { backgroundColor: t.colors.inputBg },
+                    (!canMoveDown || pressed) && { opacity: !canMoveDown ? 0.35 : 0.75 },
+                  ]}
+                >
+                  <Ionicons name="chevron-down" size={20} color={t.colors.textMuted} />
+                </Pressable>
+              </View>
+            ) : null}
             <View style={styles.copy}>
               <Text style={[styles.cardName, { color: t.colors.text }]}>{activity.title}</Text>
               <Text style={[styles.cardSubtitle, { color: t.colors.textMuted }]} numberOfLines={2}>
@@ -523,15 +629,44 @@ export default function ActivitiesScreen() {
   const router = useRouter();
   const t = useTheme();
   const favs   = useFavouriteActivities();
+  const savedOrder = useActivityOrder();
   const { refreshing, onRefresh } = usePullRefresh();
+  const [showReorderControls, setShowReorderControls] = useState(false);
 
-  const favouriteActivities = ACTIVITIES.filter(a => favs.includes(a.id));
-  const regularActivities   = ACTIVITIES.filter(a => !favs.includes(a.id));
+  const orderedActivities = savedOrder
+    .map(id => ACTIVITY_BY_ID.get(id))
+    .filter((activity): activity is Activity => Boolean(activity));
+  const favouriteActivities = orderedActivities.filter(a => favs.includes(a.id));
+  const regularActivities   = orderedActivities.filter(a => !favs.includes(a.id));
 
   const open = (activity: Activity) => {
     hapticSelection();
     router.push(activity.route);
   };
+
+  const moveActivity = useCallback((activityId: ActivityId, direction: -1 | 1) => {
+    const fromIndex = savedOrder.indexOf(activityId);
+    const toIndex = fromIndex + direction;
+    if (fromIndex < 0 || toIndex < 0 || toIndex >= savedOrder.length) return;
+    setActivityOrder(moveItem(savedOrder, fromIndex, toIndex));
+  }, [savedOrder]);
+
+  const renderActivityCard = (activity: Activity, index: number) => (
+    <ActivityCard
+      key={activity.id}
+      activity={activity}
+      favourite={favs.includes(activity.id)}
+      showReorderControls={showReorderControls}
+      index={index}
+      canMoveUp={index > 0}
+      canMoveDown={index < orderedActivities.length - 1}
+      onPress={() => open(activity)}
+      onRevealReorderControls={() => setShowReorderControls(true)}
+      onMoveUp={() => moveActivity(activity.id, -1)}
+      onMoveDown={() => moveActivity(activity.id, 1)}
+      onToggleStar={() => toggleFavourite(activity.id)}
+    />
+  );
 
   return (
     <Screen
@@ -543,35 +678,46 @@ export default function ActivitiesScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      {favouriteActivities.length > 0 ? (
+      {showReorderControls ? (
+        <>
+          <Pressable
+            onPress={() => { hapticLight(); setShowReorderControls(false); }}
+            accessibilityRole="button"
+            accessibilityLabel="Done reordering activities"
+            style={[styles.doneBar, { backgroundColor: t.colors.surface, borderColor: withAlpha(t.colors.primary, 0.2) }]}
+          >
+            <Ionicons name="reorder-three" size={18} color={t.colors.primary} />
+            <Text style={[styles.doneBarText, { color: t.colors.textMuted }]}>Reordering</Text>
+            <View style={[styles.doneChip, { backgroundColor: t.colors.primary }]}>
+              <Text style={[styles.doneChipText, { color: t.colors.textOnDark }]}>Done</Text>
+            </View>
+          </Pressable>
+          <View style={styles.section}>
+            <View style={styles.list}>
+              {orderedActivities.map(renderActivityCard)}
+            </View>
+          </View>
+        </>
+      ) : favouriteActivities.length > 0 ? (
         <View
           style={[
             styles.section,
             styles.favouritesSection,
             {
               backgroundColor: t.isDark
-                ? 'rgba(245, 180, 0, 0.12)'
-                : 'rgba(245, 180, 0, 0.06)',
+                ? withAlpha(t.colors.favouriteGold, 0.16)
+                : withAlpha(t.colors.favouriteGold, 0.08),
             },
           ]}
         >
           <SectionHeader icon="star" label="Favourites" entryDelay={0} isFavourites />
           <View style={styles.list}>
-            {favouriteActivities.map((activity, i) => (
-              <ActivityCard
-                key={activity.id}
-                activity={activity}
-                favourite
-                index={i}
-                onPress={() => open(activity)}
-                onToggleStar={() => toggleFavourite(activity.id)}
-              />
-            ))}
+            {favouriteActivities.map((activity, i) => renderActivityCard(activity, i))}
           </View>
         </View>
       ) : null}
 
-      {regularActivities.length > 0 ? (
+      {!showReorderControls && regularActivities.length > 0 ? (
         <View style={styles.section}>
           {favouriteActivities.length > 0 ? (
             <SectionHeader
@@ -580,16 +726,7 @@ export default function ActivitiesScreen() {
             />
           ) : null}
           <View style={styles.list}>
-            {regularActivities.map((activity, i) => (
-              <ActivityCard
-                key={activity.id}
-                activity={activity}
-                favourite={false}
-                index={favouriteActivities.length + i}
-                onPress={() => open(activity)}
-                onToggleStar={() => toggleFavourite(activity.id)}
-              />
-            ))}
+            {regularActivities.map((activity, i) => renderActivityCard(activity, favouriteActivities.length + i))}
           </View>
         </View>
       ) : null}
@@ -716,19 +853,19 @@ const styles = StyleSheet.create({
   cardBody: {
     flex:              1,
     paddingHorizontal: spacing.md,
-    // Bottom strip padding reduced ~1.5× (8 → 5) so the strip is shorter and
-    // the title/description/play read as one tight inline row.
-    paddingVertical:   5,
+    paddingVertical:   spacing.md,
     justifyContent:    'center',
     borderTopWidth:    StyleSheet.hairlineWidth},
 
   cardContentRow: {
     flexDirection: 'row',
-    alignItems:    'center',
+    alignItems:    'flex-start',
     gap:           spacing.sm},
 
   copy: {
     flex: 1,
+    minHeight: 52,
+    justifyContent: 'space-between',
     gap:  4},
 
   cardName: {
@@ -761,8 +898,56 @@ const styles = StyleSheet.create({
     position:        'absolute',
     width:           34,
     height:          34,
-    borderRadius:    17,
-    backgroundColor: '#FFF0B3'},
+    borderRadius:    17},
+
+  reorderControls: {
+    minWidth: 44,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+
+  reorderButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  doneBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.button,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 0.5,
+  },
+
+  doneBarText: {
+    flex: 1,
+    fontFamily: fonts.body,
+    fontSize: typography.caption,
+    fontWeight: '600',
+  },
+
+  doneChip: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  doneChipText: {
+    fontFamily: fonts.displayBold,
+    fontSize: typography.caption,
+    letterSpacing: 0.2,
+  },
 
   playButton: {
     width:          52,
