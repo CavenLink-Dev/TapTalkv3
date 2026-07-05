@@ -5,7 +5,7 @@ import { ThemedText } from '../../src/components/native/ThemedText';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticSelection } from '../../src/utils/haptics';
 
-const FOOTER_CAPTION = 'This information helps explain how TapTalk handles data and app responsibilities.';
+const FOOTER_CAPTION = 'These choices explain local data controls, cloud/account requests, and support contact options.';
 
 const SUPPORT_EMAIL = 'hello@taptalk.app';
 
@@ -26,30 +26,47 @@ export default function DataChoicesScreen() {
       reviewNotice={FOOTER_CAPTION}
     >
       <LegalSection heading="Where your data lives">
-        TapTalk stores profile details, boards, routines, lists, and activity progress on this iPhone or
-        iPad by default. Nothing is sent to a cloud server unless you choose to sign in, export data, or
-        email support.
+        TapTalk stores profile details, boards, routines, lists, accessibility settings, and activity
+        progress on this iPhone or iPad by default. If you sign in or use cloud sync, selected profile
+        and app data may also be saved to your TapTalk account so supported information can be restored
+        or synced.
       </LegalSection>
 
       <LegalSection heading="Review your data">
-        Open Profile → Privacy & Data → Local Data for a summary of on-device storage. Your boards,
-        routines, and settings are visible inside the app as you use TapTalk.
+        Your boards, routines, settings, profile details, and saved tools are visible inside the app as
+        you use TapTalk. Open Profile → Privacy & Data → Local Data for a plain-language summary of
+        on-device storage.
       </LegalSection>
 
-      <LegalSection heading="Export your data">
-        In Profile → Privacy & Data, tap Export My Data to share a text copy of your profile and settings.
-        You choose where the export goes — Messages, Mail, Files, or another app on your device.
+      <LegalSection heading="Export local data">
+        In Profile → Privacy & Data, tap Export My Data to share a text copy of local profile and app
+        settings. You choose where the export goes, such as Messages, Mail, Files, or another app on
+        your device. After export, the copy is controlled by the app or person you share it with.
       </LegalSection>
 
-      <LegalSection heading="Delete your data">
-        In Profile → Privacy & Data, tap Delete Profile Data. TapTalk asks you to confirm before anything
-        is removed. This clears profile content on this device and cannot be undone. Display and
-        accessibility choices are kept so the app stays usable.
+      <LegalSection heading="Delete local data">
+        In Profile → Privacy & Data, tap Delete Profile Data to clear profile content from this device.
+        TapTalk asks you to confirm before anything is removed. This cannot be undone. Display and
+        accessibility choices may be kept so the app remains usable.
       </LegalSection>
 
-      <LegalSection heading="Request changes or deletion by email">
-        For help updating or deleting data, or for privacy questions, email us at {SUPPORT_EMAIL}. Include
-        the device you use and a short description of your request.
+      <LegalSection heading="Cloud and account deletion">
+        Deleting local data does not automatically delete cloud account records. For help deleting account
+        data, cloud sync records, or support emails, contact {SUPPORT_EMAIL} with the subject line “Data
+        deletion request”. Include the email or phone number used for the account and a short description
+        of what you want deleted.
+      </LegalSection>
+
+      <LegalSection heading="Withdraw permissions">
+        You can change camera, photo, notification, and other device permissions in iOS Settings →
+        TapTalk. If a permission is turned off, TapTalk will continue to work where possible and may ask
+        again only when that permission is needed for a feature you choose to use.
+      </LegalSection>
+
+      <LegalSection heading="Request correction or access">
+        For help accessing, correcting, exporting, or deleting account data, email {SUPPORT_EMAIL}. Include
+        the device you use, the account contact details, and a short description of your request. Do not
+        include unnecessary medical, NDIS, or highly sensitive information in the email.
       </LegalSection>
 
       <Pressable
