@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Href, useRouter } from 'expo-router';
 import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { RegistrationScaffold } from '../../src/components/registration/RegistrationScaffold';
@@ -14,9 +14,10 @@ import { fonts } from '../../src/theme/fonts';
 
 const nextRoute = '/registration/06-verify' as Href;
 
-// Stand-in URLs until the legal pages ship.
-const TERMS_URL = 'https://taptalk.app/terms';
-const PRIVACY_URL = 'https://taptalk.app/privacy';
+// In-app legal screens — no external browser dependency during consent,
+// and the flow stays usable offline.
+const termsRoute = '/legal/terms-of-use' as Href;
+const privacyRoute = '/legal/privacy-policy' as Href;
 
 export default function RegStep5Consent() {
   const router = useRouter();
@@ -32,8 +33,8 @@ export default function RegStep5Consent() {
     data.consents.photo &&
     (guardian ? data.consents.guardian : true);
 
-  const openLink = (url: string) => {
-    Linking.openURL(url).catch(() => undefined);
+  const openLegal = (route: Href) => {
+    router.push(route);
   };
 
   return (
@@ -62,8 +63,9 @@ export default function RegStep5Consent() {
         />
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel="Open the Terms and Conditions in your browser"
-          onPress={() => openLink(TERMS_URL)}
+          accessibilityLabel="Read the Terms of Use"
+          accessibilityHint="Opens the Terms of Use inside the app"
+          onPress={() => openLegal(termsRoute)}
           hitSlop={8}
           style={styles.linkRow}
         >
@@ -80,8 +82,9 @@ export default function RegStep5Consent() {
         />
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel="Open the Privacy Policy in your browser"
-          onPress={() => openLink(PRIVACY_URL)}
+          accessibilityLabel="Read the Privacy Policy"
+          accessibilityHint="Opens the Privacy Policy inside the app"
+          onPress={() => openLegal(privacyRoute)}
           hitSlop={8}
           style={styles.linkRow}
         >

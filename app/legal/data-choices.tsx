@@ -1,6 +1,10 @@
 import React from 'react';
 import { Linking, Pressable } from 'react-native';
-import { LegalDocumentScreen, LegalSection } from '../../src/screens/LegalDocumentScreen';
+import {
+  LegalDocumentScreen,
+  LegalSection,
+  SupportEmailLink,
+} from '../../src/screens/LegalDocumentScreen';
 import { ThemedText } from '../../src/components/native/ThemedText';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticSelection } from '../../src/utils/haptics';
@@ -51,10 +55,11 @@ export default function DataChoicesScreen() {
       </LegalSection>
 
       <LegalSection heading="Cloud and account deletion">
-        Deleting local data does not automatically delete cloud account records. For help deleting account
-        data, cloud sync records, or support emails, contact {SUPPORT_EMAIL} with the subject line “Data
-        deletion request”. Include the email or phone number used for the account and a short description
-        of what you want deleted.
+        Deleting local data does not automatically delete cloud account records. For help deleting
+        account data, cloud sync records, or support emails,
+        contact <SupportEmailLink email={SUPPORT_EMAIL} subject="Data deletion request" /> with the
+        subject line “Data deletion request”. Include the email or phone number used for the account
+        and a short description of what you want deleted.
       </LegalSection>
 
       <LegalSection heading="Withdraw permissions">
@@ -64,8 +69,9 @@ export default function DataChoicesScreen() {
       </LegalSection>
 
       <LegalSection heading="Request correction or access">
-        For help accessing, correcting, exporting, or deleting account data, email {SUPPORT_EMAIL}. Include
-        the device you use, the account contact details, and a short description of your request. Do not
+        For help accessing, correcting, exporting, or deleting account data,
+        email <SupportEmailLink email={SUPPORT_EMAIL} subject="TapTalk data request" />. Include the
+        device you use, the account contact details, and a short description of your request. Do not
         include unnecessary medical, NDIS, or highly sensitive information in the email.
       </LegalSection>
 

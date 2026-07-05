@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,41 @@ import { ThemedText } from '../components/native/ThemedText';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { hapticSelection } from '../utils/haptics';
+
+/**
+ * SupportEmailLink — tappable inline email address for legal screens.
+ * Opens the native mail composer via mailto:. Announced as a link by
+ * VoiceOver, with a subtle underline as the visible tap affordance.
+ * Renders inline inside a parent <Text>, so surrounding sentence spacing
+ * is preserved by the caller (always include explicit spaces around it).
+ */
+export function SupportEmailLink({
+  email,
+  subject,
+}: {
+  email: string;
+  subject?: string;
+}) {
+  const t = useTheme();
+  const openMail = () => {
+    hapticSelection();
+    const url = subject
+      ? `mailto:${email}?subject=${encodeURIComponent(subject)}`
+      : `mailto:${email}`;
+    Linking.openURL(url).catch(() => undefined);
+  };
+  return (
+    <Text
+      accessibilityRole="link"
+      accessibilityLabel={`Email ${email}`}
+      accessibilityHint="Opens your mail app"
+      onPress={openMail}
+      style={{ color: t.colors.primary, textDecorationLine: 'underline' }}
+    >
+      {email}
+    </Text>
+  );
+}
 
 interface LegalSectionProps {
   heading: string;

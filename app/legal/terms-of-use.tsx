@@ -1,5 +1,9 @@
 import React from 'react';
-import { LegalDocumentScreen, LegalSection } from '../../src/screens/LegalDocumentScreen';
+import {
+  LegalDocumentScreen,
+  LegalSection,
+  SupportEmailLink,
+} from '../../src/screens/LegalDocumentScreen';
 
 const SUPPORT_EMAIL = 'hello@taptalk.app';
 
@@ -59,8 +63,10 @@ export default function TermsOfUseScreen() {
 
       <LegalSection heading="Data deletion">
         TapTalk includes local data controls in Profile → Privacy & Data. Deleting local profile data
-        removes TapTalk content from that device but may not remove account or cloud records. For account
-        or cloud deletion help, contact {SUPPORT_EMAIL} with the subject line “Data deletion request”.
+        removes TapTalk content from that device but may not remove account or cloud records. For
+        account or cloud deletion help,
+        contact <SupportEmailLink email={SUPPORT_EMAIL} subject="Data deletion request" /> with the
+        subject line “Data deletion request”.
       </LegalSection>
 
       <LegalSection heading="Intellectual property">
@@ -83,8 +89,9 @@ export default function TermsOfUseScreen() {
       </LegalSection>
 
       <LegalSection heading="Changes and contact">
-        TapTalk may update these terms as features, legal requirements, or data practices change. Material
-        changes will be reflected in the app or policy text. For questions, email {SUPPORT_EMAIL}.
+        TapTalk may update these terms as features, legal requirements, or data practices change.
+        Material changes will be reflected in the app or policy text. For questions,
+        email <SupportEmailLink email={SUPPORT_EMAIL} />.
       </LegalSection>
     </LegalDocumentScreen>
   );

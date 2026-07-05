@@ -47,8 +47,12 @@ import { radii, spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 import { supabase } from '../../src/lib/supabase';
+import Constants from 'expo-constants';
 
-const APP_VERSION = '0.1.0';
+// App version comes from the build config (app.json → expo.version) so the
+// About row always tracks the shipped build. Graceful fallback if the
+// config is unavailable in an unusual runtime.
+const APP_VERSION = Constants.expoConfig?.version ?? 'Unknown';
 const SUPPORT_EMAIL = 'hello@taptalk.app';
 
 const SHOW_ADVANCED_KEY = '@taptalk/profile/showAdvanced/v1';
@@ -72,7 +76,9 @@ const USER_TYPE_LABELS: Record<string, string> = {
   myself: 'AAC user',
   parent: 'Parent / Family',
   support: 'Support worker',
-  guardian: 'Therapist',
+  // Distinct roles — guardian (legal decision-maker) is not a therapist.
+  guardian: 'Guardian',
+  therapist: 'Therapist',
 };
 
 const TEXT_SIZE_LABELS: Record<string, string> = {

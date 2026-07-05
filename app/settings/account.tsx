@@ -40,16 +40,20 @@ const USER_TYPE_LABELS: Record<string, string> = {
   myself: 'AAC user',
   parent: 'Parent / Family',
   support: 'Support worker',
-  guardian: 'Therapist',
+  // Guardian and therapist are distinct roles — a therapist is not a legal
+  // guardian. The old mapping displayed 'guardian' as "Therapist".
+  guardian: 'Guardian',
+  therapist: 'Therapist',
 };
 
-type Role = 'myself' | 'parent' | 'support' | 'guardian';
+type Role = 'myself' | 'parent' | 'support' | 'guardian' | 'therapist';
 
 const ROLE_OPTIONS: { label: string; role: Role }[] = [
   { label: 'AAC user', role: 'myself' },
   { label: 'Parent / Family', role: 'parent' },
+  { label: 'Guardian', role: 'guardian' },
   { label: 'Support worker', role: 'support' },
-  { label: 'Therapist', role: 'guardian' },
+  { label: 'Therapist', role: 'therapist' },
 ];
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];

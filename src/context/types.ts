@@ -57,7 +57,14 @@ export interface AppState {
     name: string;
     nickname: string;
     age: number | null;
-    role: 'myself' | 'parent' | 'support' | 'guardian' | null;
+    /**
+     * Who this account belongs to / who manages it.
+     * `guardian` = legal guardian / parent / authorised decision-maker.
+     * `therapist` = allied-health professional — legally and practically a
+     * DIFFERENT role from guardian (was previously mislabelled: the
+     * "Therapist" option saved as `guardian`).
+     */
+    role: 'myself' | 'parent' | 'support' | 'guardian' | 'therapist' | null;
     useCases: string[];
   };
   parent: {

@@ -1,5 +1,9 @@
 import React from 'react';
-import { LegalDocumentScreen, LegalSection } from '../../src/screens/LegalDocumentScreen';
+import {
+  LegalDocumentScreen,
+  LegalSection,
+  SupportEmailLink,
+} from '../../src/screens/LegalDocumentScreen';
 
 const SUPPORT_EMAIL = 'hello@taptalk.app';
 
@@ -84,8 +88,9 @@ export default function PrivacyPolicyScreen() {
       <LegalSection heading="Retention and deletion">
         Local data stays on the device until you delete it, sign out, reset the app, or remove the app.
         Profile → Privacy & Data lets you export or delete local profile data. Deleting local data does
-        not automatically delete cloud account records. For help deleting account or cloud data, contact
-        {SUPPORT_EMAIL} with the subject line “Data deletion request”.
+        not automatically delete cloud account records. For help deleting account or cloud data,
+        contact <SupportEmailLink email={SUPPORT_EMAIL} subject="Data deletion request" /> with the
+        subject line “Data deletion request”.
       </LegalSection>
 
       <LegalSection heading="Security">
@@ -97,14 +102,15 @@ export default function PrivacyPolicyScreen() {
 
       <LegalSection heading="Your choices and rights">
         You can review, update, export, and delete local data from Profile → Privacy & Data. You can
-        withdraw device permissions in iOS Settings. You can also ask for help accessing, correcting, or
-        deleting account data by contacting {SUPPORT_EMAIL}. TapTalk will respond using the contact
-        details you provide.
+        withdraw device permissions in iOS Settings. You can also ask for help accessing, correcting,
+        or deleting account data by contacting <SupportEmailLink email={SUPPORT_EMAIL} />. TapTalk
+        will respond using the contact details you provide.
       </LegalSection>
 
       <LegalSection heading="Contact">
-        Questions about privacy, account data, cloud storage, or deletion requests can be emailed to
-        {SUPPORT_EMAIL} with the subject line “Privacy question”.
+        Questions about privacy, account data, cloud storage, or deletion requests can be emailed
+        to <SupportEmailLink email={SUPPORT_EMAIL} subject="Privacy question" /> with the subject
+        line “Privacy question”.
       </LegalSection>
     </LegalDocumentScreen>
   );
