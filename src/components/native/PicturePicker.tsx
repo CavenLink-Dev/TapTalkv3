@@ -53,11 +53,13 @@ interface PicturePickerProps {
   initial: string;
   onChange: (value: string | null) => void;
   size?: number;
+  /** Circle for avatars, square for board tiles. */
+  shape?: 'circle' | 'square';
   /** Caption under the circle. Defaults to "Pick A Picture". */
   label?: string;
 }
 
-export function PicturePicker({ value, initial, onChange, size = 112, label }: PicturePickerProps) {
+export function PicturePicker({ value, initial, onChange, size = 112, shape = 'circle', label }: PicturePickerProps) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
   const [symbolSearch, setSymbolSearch] = useState(false);
@@ -67,6 +69,7 @@ export function PicturePicker({ value, initial, onChange, size = 112, label }: P
   const avatar = parseAvatar(value);
   const hasPicture = hasCustomAvatar(value);
   const currentColor = avatar.kind === 'color' ? avatar.hex : t.colors.primary;
+  const pickerRadius = shape === 'square' ? radii.card : size / 2;
 
   const handleOutcome = useCallback(
     (outcome: PickOutcome, source: 'Library' | 'Camera') => {
@@ -174,7 +177,7 @@ export function PicturePicker({ value, initial, onChange, size = 112, label }: P
         style={({ pressed }) => [styles.circle, pressed && { opacity: 0.75 }]}
         hitSlop={8}
       >
-        <AvatarView value={value} size={size} initial={initial} />
+        <AvatarView value={value} size={size} initial={initial} borderRadius={pickerRadius} />
         <View style={[styles.badge, { backgroundColor: t.colors.primary, borderColor: t.colors.surface }]}>
           <Ionicons name="camera" size={16} color="#FFFFFF" />
         </View>

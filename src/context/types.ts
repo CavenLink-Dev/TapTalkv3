@@ -86,6 +86,8 @@ export interface AppState {
    * relaunches. `boardLayouts` is kept for backward-compat/migration.
    */
   boardPlacements: Record<string, { id: string; slot: number; fw: number; fh: number }[]>;
+  /** User-created board tiles that need to survive app relaunch. */
+  customBoardTiles: CustomBoardTile[];
   /** IDs of tiles the user has hidden via the edit-mode delete badge. */
   hiddenTileIds: string[];
 
@@ -170,6 +172,20 @@ export interface AACWord {
   source?: 'board' | 'suggestion' | 'typed';
 }
 
+export interface CustomBoardTile {
+  id: string;
+  board: string;
+  label: string;
+  speech?: string;
+  color: string;
+  wordType?: string;
+  mulberrySymbolId?: string;
+  customImageUri?: string;
+  backgroundOpacity?: number;
+  outlineColor?: string;
+  outlineOpacity?: number;
+}
+
 export interface TaskTag {
   id: string;
   color: string;
@@ -252,6 +268,7 @@ export type Action =
   | { type: 'SET_BOARD'; payload: string }
   | { type: 'SET_BOARD_ORDER'; payload: { board: string; order: string[] } }
   | { type: 'SET_BOARD_PLACEMENTS'; payload: { board: string; placements: { id: string; slot: number; fw: number; fh: number }[] } }
+  | { type: 'UPSERT_CUSTOM_BOARD_TILE'; payload: CustomBoardTile }
   | { type: 'HIDE_TILE'; payload: string }
   | { type: 'RESTORE_TILE'; payload: string }
   | { type: 'SET_KEYBOARD_TEXT'; payload: string }

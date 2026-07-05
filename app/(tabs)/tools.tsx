@@ -6,11 +6,10 @@
  *   #17 linear for mechanical  #18 Reduce Motion guard  #19 haptics
  *   #20 44pt+ hit areas  #21 accessibility labels
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
-  GestureResponderEvent,
   ImageBackground,
   PanResponder,
   PanResponderGestureState,
@@ -402,17 +401,6 @@ function ToolCard({
     }
   }, [favourite, reduceMotion, reduceSensory]);
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: () => dragging,
-        onPanResponderMove: (_e, gesture) => onDragMove(gesture),
-        onPanResponderRelease: onDragEnd,
-        onPanResponderTerminate: onDragEnd,
-      }),
-    [dragging, onDragEnd, onDragMove]
-  );
-
   const handlePressIn = () => {
     if (reduceMotion) return;
     Animated.parallel([
@@ -453,11 +441,23 @@ function ToolCard({
     ]).start();
   };
 
-  const startDrag = (event: GestureResponderEvent) => {
-    event.stopPropagation();
+  const startDrag = useCallback(() => {
     hapticMedium();
     onDragStart();
-  };
+  }, [onDragStart]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => showDragHandle,
+        onMoveShouldSetPanResponder: () => showDragHandle,
+        onPanResponderGrant: startDrag,
+        onPanResponderMove: (_e, gesture) => onDragMove(gesture),
+        onPanResponderRelease: onDragEnd,
+        onPanResponderTerminate: onDragEnd,
+      }),
+    [onDragEnd, onDragMove, showDragHandle, startDrag]
+  );
 
   const revealDragHandles = () => {
     suppressOpenAfterLongPress.current = true;
@@ -588,12 +588,11 @@ function ToolCard({
                   transform: [{ translateX: handleSlideX }],
                 }}
               >
-                <Pressable
-                  onLongPress={startDrag}
-                  delayLongPress={180}
-                  hitSlop={12}
+                <View
+                  accessible
                   accessibilityRole="button"
-                  accessibilityLabel={`Hold and drag to reorder ${tool.title}`}
+                  accessibilityLabel={`Drag to reorder ${tool.title}`}
+                  accessibilityHint="Move up or down to change tool order"
                   style={[styles.iconButton, styles.dragHandle]}
                   {...panResponder.panHandlers}
                 >
@@ -602,7 +601,7 @@ function ToolCard({
                     size={25}
                     color={dragging ? tool.accent : t.colors.textMuted}
                   />
-                </Pressable>
+                </View>
               </Animated.View>
             ) : null}
 
@@ -792,7 +791,7 @@ export default function ToolsScreen() {
           style={[styles.doneBar, { backgroundColor: t.colors.surface, borderColor: t.colors.primary + '33' }]}
         >
           <Ionicons name="reorder-three" size={18} color={t.colors.primary} />
-          <Text style={[styles.doneBarText, { color: t.colors.textMuted }]}>Hold ≡ then drag to reorder</Text>
+          <Text style={[styles.doneBarText, { color: t.colors.textMuted }]}>Drag ≡ to reorder</Text>
           <View style={[styles.doneChip, { backgroundColor: t.colors.primary }]}>
             <Text style={[styles.doneChipText, { color: t.colors.textOnDark }]}>Done</Text>
           </View>

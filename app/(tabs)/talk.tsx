@@ -43,7 +43,13 @@ import { BackOutIcon, BoardHomeIcon } from '../../src/components/icons/FigmaIcon
 import { TalkMessageStrip, type MessageStripTile } from '../../src/components/talk/TalkMessageStrip';
 import { AddSymbolModal } from '../../src/components/talk/AddSymbolModal';
 import { AddFolderModal } from '../../src/components/talk/AddFolderModal';
+import {
+  CustomSymbolEditor,
+  type CustomSymbolEditorResult,
+} from '../../src/components/talk/CustomSymbolEditor';
 import { MulberrySymbol, prewarmMulberryAssets } from '../../src/components/symbols/MulberrySymbol';
+import { AvatarView } from '../../src/features/profile/AvatarView';
+import { parseAvatar } from '../../src/features/profile/avatar';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
 import { buildMessageUtterances } from '../../src/utils/speechRules';
@@ -51,6 +57,7 @@ import { animation, CHROME_SEPARATOR_WIDTH, colors, radii, spacing } from '../..
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
+import type { CustomBoardTile } from '../../src/context/types';
 import {
   resolveSymbolForKeyword,
   ResolvedSymbol,
@@ -74,6 +81,10 @@ type BoardTile = {
   target?: BoardMode;
   speech?: string;
   background?: keyof typeof TILE_ASSETS;
+  backgroundOpacity?: number;
+  outlineColor?: string;
+  outlineOpacity?: number;
+  customImageUri?: string;
   // Production-quality Mulberry pictogram (asset-map ID, e.g.
   // `mulberry_apple_1ogqpa9`). Resolves through `expo-asset` for a sharp
   // bundled SVG.
@@ -90,6 +101,27 @@ type BoardTile = {
 };
 
 type WindowRect = LayoutRectangle;
+
+function boardTileFromCustomTile(tile: CustomBoardTile): BoardTile {
+  return {
+    id: tile.id,
+    label: tile.label,
+    kind: 'word',
+    color: tile.color,
+    speech: tile.speech ?? tile.label,
+    wordType: tile.wordType,
+    mulberrySymbolId: tile.mulberrySymbolId,
+    customImageUri: tile.customImageUri,
+    backgroundOpacity: tile.backgroundOpacity,
+    outlineColor: tile.outlineColor,
+    outlineOpacity: tile.outlineOpacity,
+  };
+}
+
+function labelForBoardTile(label: string): string {
+  const words = label.trim().replace(/\s+/g, ' ').split(' ').filter(Boolean);
+  return words[0] ?? 'Symbol';
+}
 
 // Tile placement: which slot it starts in (coarse 88+10px grid), and
 // its size in TILE UNITS. fw=1 → one 88px tile, fw=2 → 186px (spans
@@ -581,8 +613,8 @@ const BoardDockAction = React.memo(function BoardDockAction({
   const dim = size;
   const isRowLabel = Boolean(icon && label && iconLabelLayout === 'row');
   const softFill = t.colors.surface;
-  const effectiveKind: DockActionKind =
-    isActive && isToggle ? 'primary' : kind;
+  const effectiveKind: DockActionKind = kind;
+  const activeNeutral = isActive && effectiveKind !== 'primary';
   const dockIconProps = {
     strokeWidth: DOCK_ICON_STROKE,
   } as const;
@@ -598,14 +630,10 @@ const BoardDockAction = React.memo(function BoardDockAction({
       onPress={onPress}
       style={({ pressed }) => {
         const bg =
-          pressed
-            ? effectiveKind === 'primary'
-              ? t.colors.primaryPressed
-              : effectiveKind === 'muted'
-                ? (t.isDark ? t.colors.input : '#E8ECF0')
-                : (t.isDark ? t.colors.input : colors.softBlue)
-            : effectiveKind === 'primary'
-              ? t.colors.primary
+          effectiveKind === 'primary'
+            ? (pressed ? t.colors.primaryPressed : t.colors.primary)
+            : activeNeutral
+              ? t.colors.selectionBg
               : softFill;
         return [
           styles.dockAction,
@@ -621,10 +649,11 @@ const BoardDockAction = React.memo(function BoardDockAction({
                 : DOCK_ACTION_PADDING,
             paddingVertical: DOCK_ACTION_PADDING,
             backgroundColor: bg,
-            borderColor: pressed && effectiveKind !== 'primary'
-              ? (tint ?? t.colors.text)
+            borderColor: activeNeutral
+              ? (tint ?? t.colors.primary)
               : (tint ?? t.colors.symbolOutline),
-            borderWidth: effectiveKind === 'primary' ? 0 : 1.6,
+            borderWidth: effectiveKind === 'primary' ? 0 : activeNeutral ? 2 : 1.6,
+            opacity: pressed ? 0.82 : 1,
           },
           disabled && { opacity: 0.4 },
         ];
@@ -632,12 +661,12 @@ const BoardDockAction = React.memo(function BoardDockAction({
     >
       {({ pressed }) => {
         const contentColor =
-          pressed && effectiveKind !== 'primary'
-            ? (tint ?? t.colors.text)
-            : effectiveKind === 'primary'
-              ? '#FFFFFF'
-              : tint
-                ? tint
+          effectiveKind === 'primary'
+            ? '#FFFFFF'
+            : tint
+              ? tint
+              : activeNeutral
+                ? t.colors.primary
                 : effectiveKind === 'muted'
                   ? t.colors.textMuted
                   : t.colors.text;
@@ -1030,6 +1059,45 @@ function BoardFolderTile({ tile, width, height, resolved }: { tile: BoardTile; w
   );
 }
 
+function CustomTilePicture({
+  tile,
+  width,
+  height,
+  horizontal,
+}: {
+  tile: BoardTile;
+  width: number;
+  height: number;
+  horizontal: boolean;
+}) {
+  if (!tile.customImageUri) return null;
+  const size = Math.round(horizontal ? Math.min(height * 0.58, width * 0.28) : Math.min(width, height) * 0.44);
+  const top = horizontal ? Math.round((height - size) / 2) : Math.round(height * 0.17);
+  const left = horizontal ? Math.round(width * 0.09) : Math.round((width - size) / 2);
+  const initial = tile.label.trim().charAt(0).toUpperCase() || '+';
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        styles.customTilePicture,
+        {
+          width: size,
+          height: size,
+          top,
+          left,
+        },
+      ]}
+    >
+      <AvatarView
+        value={tile.customImageUri}
+        size={size}
+        initial={initial}
+        borderRadius={TILE_CORNER_RADIUS}
+      />
+    </View>
+  );
+}
+
 function BoardWordTile({ tile, width, height, resolved }: { tile: BoardTile; width: number; height: number; resolved?: ResolvedSymbol }) {
   const t = useTheme();
   const isFallback =
@@ -1039,14 +1107,30 @@ function BoardWordTile({ tile, width, height, resolved }: { tile: BoardTile; wid
     (resolved.tier === 'fuzzy' || resolved.tier === 'semantic' ||
       resolved.tier === 'category' || resolved.tier === 'unknown');
   const horizontal = width > height * 1.5;
+  const fillColor = tile.color;
+  const fillOpacity = tile.backgroundOpacity ?? 0.3;
+  const outlineOpacity = tile.outlineOpacity ?? 0;
   return (
     <View style={[styles.wordTile, { width, height }]}>
       <View
         style={[
           styles.wordTileFill,
-          { width, height, backgroundColor: tile.color, opacity: 0.3 },
+          { width, height, backgroundColor: fillColor, opacity: fillOpacity },
         ]}
       />
+      {outlineOpacity > 0 ? (
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            styles.wordTileCustomOutline,
+            {
+              borderColor: tile.outlineColor ?? t.colors.primary,
+              opacity: outlineOpacity,
+            },
+          ]}
+        />
+      ) : null}
       {isFallback ? (
         <View
           style={[
@@ -1075,7 +1159,11 @@ function BoardWordTile({ tile, width, height, resolved }: { tile: BoardTile; wid
       >
         {isFallback ? '≈ ' : ''}{tile.label}
       </Text>
-      <TileSymbol tile={tile} width={width} height={height} resolved={resolved} horizontal={horizontal} />
+      {tile.customImageUri ? (
+        <CustomTilePicture tile={tile} width={width} height={height} horizontal={horizontal} />
+      ) : (
+        <TileSymbol tile={tile} width={width} height={height} resolved={resolved} horizontal={horizontal} />
+      )}
     </View>
   );
 }
@@ -1905,6 +1993,10 @@ interface BoardTileButtonProps {
   onAccessibilityReorder?: (tileId: string, direction: 'forward' | 'back') => void;
   /** Called when the user commits a resize via the corner/edge handles. */
   onResize?: (tileId: string, newFw: number, newFh: number, dCols: number, dRows: number) => void;
+  /** Layout Mode: show handles only after this tile is selected. */
+  resizeHandlesVisible?: boolean;
+  /** Layout Mode: tap selects which tile owns the resize handles. */
+  onLayoutSelect?: (tileId: string) => void;
   jiggle?: SharedValue<number>;
   /** Motor Access Mode: called on tile tap in edit mode for action sheet (Priority 5). */
   onEditTap?: (tileId: string) => void;
@@ -1941,6 +2033,8 @@ function BoardTileButton({
   onHide,
   onAccessibilityReorder,
   onResize,
+  resizeHandlesVisible = false,
+  onLayoutSelect,
   jiggle,
   onEditTap,
   selectable = false,
@@ -2107,6 +2201,7 @@ function BoardTileButton({
       return;
     }
     if (editMode) {
+      onLayoutSelect?.(tile.id);
       // Motor Access Mode: tile taps show context menu instead of doing nothing
       if (onEditTap) { onEditTap(tile.id); return; }
       return;
@@ -2115,7 +2210,7 @@ function BoardTileButton({
     pressableRef.current?.measureInWindow((x, y, width, height) => {
       onPress({ x, y, width, height });
     });
-  }, [editMode, moveDestinationMode, onEditTap, onMeasuredPress, onPress, selectable, tile.id]);
+  }, [editMode, moveDestinationMode, onEditTap, onLayoutSelect, onMeasuredPress, onPress, selectable, tile.id]);
 
   // Item 7 — word-type hint for VoiceOver (principle 23: don't rely on
   // colour alone). Folder tiles already say "Open …" in the label.
@@ -2326,7 +2421,7 @@ function BoardTileButton({
           ]}
         >
           {isSelected ? (
-            <Icon name="checkmark" size={26} color="#FFFFFF" strokeWidth={4} />
+            <Icon name="checkmark" size={20} color="#FFFFFF" strokeWidth={4} />
           ) : null}
         </View>
       ) : null}
@@ -2396,7 +2491,7 @@ function BoardTileButton({
       {/* Resize handles — visible in edit mode, absolute-positioned around
           the tile edges. All 4 edges + 4 corners are functional; left/top
           shift the anchor slot in whole cells. Nav tiles skip handles. */}
-      {editMode && !isNav && onResize ? (
+      {editMode && resizeHandlesVisible && !isNav && onResize ? (
         <ResizeHandles
           editMode={editMode}
           width={tileWidth}
@@ -2443,6 +2538,8 @@ const BoardTileCell = React.memo(function BoardTileCell({
   dragFingerAbsY,
   jiggle,
   onEditTap,
+  resizeHandlesVisible,
+  onLayoutSelect,
   selectable,
   isSelected,
   moveDestinationMode,
@@ -2470,6 +2567,8 @@ const BoardTileCell = React.memo(function BoardTileCell({
   dragFingerAbsY?: SharedValue<number>;
   jiggle?: SharedValue<number>;
   onEditTap?: (tileId: string) => void;
+  resizeHandlesVisible?: boolean;
+  onLayoutSelect?: (tileId: string) => void;
   selectable?: boolean;
   isSelected?: boolean;
   moveDestinationMode?: boolean;
@@ -2503,6 +2602,8 @@ const BoardTileCell = React.memo(function BoardTileCell({
       dragFingerAbsY={dragFingerAbsY}
       jiggle={jiggle}
       onEditTap={onEditTap}
+      resizeHandlesVisible={resizeHandlesVisible}
+      onLayoutSelect={onLayoutSelect}
       selectable={selectable}
       isSelected={isSelected}
       moveDestinationMode={moveDestinationMode}
@@ -2700,6 +2801,7 @@ export default function TalkScreen() {
   const reduceMotion = useReduceMotion();
   const [boardAreaHeight, setBoardAreaHeight] = useState(0);
   const [layoutDirty, setLayoutDirty] = useState(false);
+  const [selectedLayoutTileId, setSelectedLayoutTileId] = useState<string | null>(null);
   const layoutSnapshotRef = useRef<BoardLayout | null>(null);
   // ── Contextual dock state ────────────────────────────────────────────────
   // addFlowExpanded: Add + sub-menu open (Back / Symbol / Folder / <)
@@ -2804,12 +2906,19 @@ export default function TalkScreen() {
   // ── Add Symbol / Add Folder modals (Priority 2) ────────────────────────
   const [addSymbolModalVisible, setAddSymbolModalVisible] = useState(false);
   const [addFolderModalVisible, setAddFolderModalVisible] = useState(false);
+  const [customSymbolEditorVisible, setCustomSymbolEditorVisible] = useState(false);
   const folderCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dockFade = useRef(new RNAnimated.Value(1)).current;
   const messageWordsRef = useRef(state.messageWords);
   messageWordsRef.current = state.messageWords;
   // User-added tiles (symbols/folders) that don't exist in the static BOARD_TILES data.
   const userTilesRef = useRef<Map<string, BoardTile>>(new Map());
+
+  useEffect(() => {
+    state.customBoardTiles.forEach(tile => {
+      userTilesRef.current.set(tile.id, boardTileFromCustomTile(tile));
+    });
+  }, [state.customBoardTiles]);
 
   // Chained-utterance run tracking — cancels any in-flight clause chain so
   // rapid re-taps on the strip never overlap audio (board_speech_rules.md).
@@ -2862,13 +2971,13 @@ export default function TalkScreen() {
   useEffect(() => {
     gridOverlayOpacity.value = withTiming(editMode ? 1 : 0, { duration: 200 });
     if (editMode && !reduceMotion && !state.accessibility.reduceSensoryLoad) {
-      // Gentle continuous wobble while in edit mode — ±0.7° at ~80ms per
+      // Gentle continuous wobble while in edit mode — subtle enough to stay calm.
       // half-cycle. Subtle enough to not be annoying, clear enough to signal
       // "you're in rearrange mode." Stops the moment edit mode exits.
       jiggle.value = withRepeat(
         withSequence(
-          withTiming(-0.7, { duration: 80 }),
-          withTiming( 0.7, { duration: 80 }),
+          withTiming(-0.35, { duration: 110 }),
+          withTiming( 0.35, { duration: 110 }),
         ),
         -1,   // loop forever
         true, // reverse direction each cycle
@@ -2887,6 +2996,7 @@ export default function TalkScreen() {
     layoutSnapshotRef.current = current.map(p => ({ ...p }));
     setLayoutDirty(false);
     setEditFocusTileId(tileId);
+    setSelectedLayoutTileId(tileId);
     setAddFlowExpanded(false);
     setEditMode(true);
   }, [activeMode, hapticIfEnabled, layouts]);
@@ -2896,6 +3006,7 @@ export default function TalkScreen() {
     setEditMode(false);
     setLayoutDirty(false);
     setEditFocusTileId(null);
+    setSelectedLayoutTileId(null);
     setAddFlowExpanded(false);
     // Land back on the full default_control_bar (Add + | Sort | Fullscreen | Hide).
     setHomeDockExpanded(true);
@@ -2998,38 +3109,93 @@ export default function TalkScreen() {
     setAddFolderModalVisible(true);
   }, [hapticIfEnabled]);
 
+  const addTileToCurrentBoard = useCallback((tile: BoardTile, persistedTile?: CustomBoardTile) => {
+    const current: BoardLayout = layouts[activeMode]
+      ?? (BOARD_TILES[activeMode] ?? []).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+    const maxSlot = current.reduce((max, p) => Math.max(max, p.slot + 1), 0);
+    const nextLayout = [...current, { id: tile.id, slot: maxSlot, fw: 2, fh: 2 }];
+    userTilesRef.current.set(tile.id, tile);
+    setLayouts(prev => ({ ...prev, [activeMode]: nextLayout }));
+    dispatch({
+      type: 'SET_BOARD_PLACEMENTS',
+      payload: {
+        board: activeMode,
+        placements: nextLayout.map(p => ({ id: p.id, slot: p.slot, fw: p.fw, fh: p.fh })),
+      },
+    });
+    if (persistedTile) {
+      dispatch({ type: 'UPSERT_CUSTOM_BOARD_TILE', payload: persistedTile });
+    }
+    setLayoutDirty(true);
+  }, [activeMode, dispatch, layouts]);
+
   // ── Add Symbol confirm: insert tile at first free slot ──────────────
   const handleAddSymbolConfirm = useCallback((result: { symbolId: string; label: string; color: string; wordType: string }) => {
     setAddSymbolModalVisible(false);
-    const tileId = `user_${result.label.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
-    setLayouts(prev => {
-      const current: BoardLayout = prev[activeMode]
-        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
-      const maxSlot = current.reduce((max, p) => Math.max(max, p.slot + 1), 0);
-      return { ...prev, [activeMode]: [...current, { id: tileId, slot: maxSlot, fw: 2, fh: 2 }] };
-    });
-    // Register the tile in BOARD_TILES dynamically isn't possible with static data,
-    // so we store a user-added tile map. For now, add to the board tiles at runtime.
-    const newTile: BoardTile = {
+    const label = result.label.trim().replace(/\s+/g, ' ');
+    const tileLabel = labelForBoardTile(label);
+    const tileId = `user_${tileLabel.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
+    const persistedTile: CustomBoardTile = {
       id: tileId,
-      label: result.label,
-      kind: 'word',
+      board: activeMode,
+      label: tileLabel,
+      speech: label || tileLabel,
       color: result.color,
-      speech: result.label.toLowerCase(),
-      mulberrySymbolId: result.symbolId,
       wordType: result.wordType,
+      mulberrySymbolId: result.symbolId,
+      backgroundOpacity: 0.3,
+      outlineOpacity: 0,
     };
-    userTilesRef.current.set(tileId, newTile);
-    setLayoutDirty(true);
+    const newTile = boardTileFromCustomTile(persistedTile);
+    addTileToCurrentBoard(newTile, persistedTile);
     // Created from the Quick Manage bar → Quick-tagged from birth, and
     // Done becomes visible (a pending change now exists).
     if (quickManageOpen) {
       setQuickTaggedIds(prev => new Set(prev).add(tileId));
       setManageCreatedTag(true);
-      AccessibilityInfo.announceForAccessibility?.(`${result.label} added and pinned to Quick`);
+      AccessibilityInfo.announceForAccessibility?.(`${tileLabel} added and pinned to Quick`);
     }
     hapticIfEnabled();
-  }, [activeMode, hapticIfEnabled, quickManageOpen]);
+  }, [activeMode, addTileToCurrentBoard, hapticIfEnabled, quickManageOpen]);
+
+  const handleOpenCustomSymbolEditor = useCallback(() => {
+    hapticIfEnabled();
+    setAddSymbolModalVisible(false);
+    setCustomSymbolEditorVisible(true);
+  }, [hapticIfEnabled]);
+
+  const handleCustomSymbolDone = useCallback((result: CustomSymbolEditorResult) => {
+    setCustomSymbolEditorVisible(false);
+    setAddSymbolModalVisible(false);
+    const fullLabel = result.label.trim().replace(/\s+/g, ' ');
+    const tileLabel = labelForBoardTile(fullLabel);
+    const speech = result.speech.trim().replace(/\s+/g, ' ') || fullLabel || tileLabel;
+    const tileId = `custom_${tileLabel.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
+    const avatar = parseAvatar(result.picture);
+    const persistedTile: CustomBoardTile = {
+      id: tileId,
+      board: activeMode,
+      label: tileLabel,
+      speech,
+      color: result.backgroundColor,
+      wordType: 'custom',
+      mulberrySymbolId: avatar.kind === 'symbol' ? avatar.symbolId : undefined,
+      customImageUri: result.picture ?? undefined,
+      backgroundOpacity: result.backgroundOpacity,
+      outlineColor: result.outlineColor,
+      outlineOpacity: result.outlineOpacity,
+    };
+    const newTile = boardTileFromCustomTile(persistedTile);
+    addTileToCurrentBoard(newTile, persistedTile);
+    if (quickManageOpen) {
+      setQuickTaggedIds(prev => new Set(prev).add(tileId));
+      setManageCreatedTag(true);
+      AccessibilityInfo.announceForAccessibility?.(`${tileLabel} added and pinned to Quick`);
+    } else {
+      AccessibilityInfo.announceForAccessibility?.(`${tileLabel} added`);
+    }
+    hapticIfEnabled();
+  }, [activeMode, addTileToCurrentBoard, hapticIfEnabled, quickManageOpen]);
 
   // ── Add Folder confirm: insert folder tile ──────────────────────────
   const handleAddFolderConfirm = useCallback((result: { label: string; boardKey: string; color: string; mulberrySymbolId?: string }) => {
@@ -3093,6 +3259,7 @@ export default function TalkScreen() {
     setAddFlowExpanded(false);
     // Exiting resize-mode outline as well — Edit Control Bar entry starts calm.
     setEditMode(false);
+    setSelectedLayoutTileId(null);
   }, [hapticIfEnabled]);
 
   // Done closes everything: tool state, selection, resize outline, controls.
@@ -3102,6 +3269,7 @@ export default function TalkScreen() {
     setActiveEditTool('none');
     setSelectedTileIds(new Set());
     setEditMode(false);
+    setSelectedLayoutTileId(null);
     // Land back on the full default_control_bar rather than the collapsed ">".
     setHomeDockExpanded(true);
     setFolderDockExpanded(true);
@@ -3118,6 +3286,7 @@ export default function TalkScreen() {
     }
     setActiveEditTool('move');
     setEditMode(false);
+    setSelectedLayoutTileId(null);
     AccessibilityInfo.announceForAccessibility?.(
       'Choose a destination folder',
     );
@@ -3134,6 +3303,7 @@ export default function TalkScreen() {
     layoutSnapshotRef.current = current.map(p => ({ ...p }));
     setLayoutDirty(false);
     setEditMode(true);
+    setSelectedLayoutTileId(null);
     setSelectedTileIds(new Set());
   }, [activeMode, hapticIfEnabled, layouts]);
 
@@ -3145,11 +3315,13 @@ export default function TalkScreen() {
     const staticTiles = BOARD_TILES[activeMode] ?? [];
     const hit = staticTiles.find(tt => tt.id === tileId);
     if (hit) return hit;
+    const customTile = state.customBoardTiles.find(tt => tt.id === tileId);
+    if (customTile) return boardTileFromCustomTile(customTile);
     const userTile = userTilesRef.current.get(tileId);
     if (userTile) return userTile;
     // Cross-board fallback (tiles Moved / Grouped in from another board).
     return Object.values(BOARD_TILES).flat().find(tt => tt.id === tileId);
-  }, [activeMode]);
+  }, [activeMode, state.customBoardTiles]);
 
   // ── Undo (Phase 2) ──────────────────────────────────────────────────────
   // Snapshot BEFORE a mutating edit. Deep-copies each board's placement
@@ -3539,6 +3711,7 @@ export default function TalkScreen() {
     }
     setActiveEditTool(prev => (prev === 'select' ? 'none' : 'select'));
     setEditMode(false);
+    setSelectedLayoutTileId(null);
   }, [hapticIfEnabled, selectedTileIds.size]);
 
   // ── Save (Phase 2) ─────────────────────────────────────────────────────
@@ -3562,6 +3735,7 @@ export default function TalkScreen() {
     setActiveEditTool('none');
     setSelectedTileIds(new Set());
     setEditMode(false);
+    setSelectedLayoutTileId(null);
     setHomeDockExpanded(true);
     setFolderDockExpanded(true);
     AccessibilityInfo.announceForAccessibility?.('Changes saved');
@@ -3797,6 +3971,7 @@ export default function TalkScreen() {
     dRows: number = 0,
   ) => {
     hapticIfEnabled();
+    setSelectedLayoutTileId(tileId);
     setLayouts(prev => {
       const current: BoardLayout = prev[activeMode]
         ?? BOARD_TILES[activeMode].map((t, i) => ({
@@ -3837,6 +4012,12 @@ export default function TalkScreen() {
       return { ...prev, [activeMode]: next };
     });
   }, [activeMode, hapticIfEnabled]);
+
+  const handleLayoutSelect = useCallback((tileId: string) => {
+    hapticIfEnabled();
+    setSelectedLayoutTileId(tileId);
+    AccessibilityInfo.announceForAccessibility?.('Resize handles shown');
+  }, [hapticIfEnabled]);
 
   // Item 8 — error banner shake animation (principle 13 + 14).
   const bannerShakeX = useSharedValue(0);
@@ -3893,6 +4074,9 @@ export default function TalkScreen() {
   // Lookup map: tileId → BoardTile for the active mode (includes user-added tiles).
   const tileMapForMode = useMemo(() => {
     const map = new Map(BOARD_TILES[activeMode]?.map(t => [t.id, t]) ?? []);
+    state.customBoardTiles.forEach(tile => {
+      map.set(tile.id, boardTileFromCustomTile(tile));
+    });
     // Merge user-added tiles so they resolve in the board renderer
     for (const [id, tile] of userTilesRef.current) {
       if (!map.has(id)) map.set(id, tile);
@@ -3904,7 +4088,7 @@ export default function TalkScreen() {
       if (!map.has(t.id)) map.set(t.id, t);
     });
     return map;
-  }, [activeMode, layouts]);
+  }, [activeMode, layouts, state.customBoardTiles]);
 
   // ── Motor Access Mode: tap-based context menu (Priority 5, Rule 20/25) ──
   const handleMotorAccessMenu = useCallback((tileId: string) => {
@@ -3959,10 +4143,15 @@ export default function TalkScreen() {
   const activeLayout = useMemo<BoardLayout>(() => {
     const custom = layouts[activeMode];
     if (custom) return custom;
-    return BOARD_TILES[activeMode].map((t, i) => ({
+    const base = (BOARD_TILES[activeMode] ?? []).map((t, i) => ({
       id: t.id, slot: i, fw: 2, fh: 2,
     }));
-  }, [activeMode, layouts]);
+    const ids = new Set(base.map(p => p.id));
+    const additions = state.customBoardTiles
+      .filter(tile => tile.board === activeMode && !ids.has(tile.id))
+      .map((tile, i) => ({ id: tile.id, slot: base.length + i, fw: 2, fh: 2 }));
+    return [...base, ...additions];
+  }, [activeMode, layouts, state.customBoardTiles]);
 
   // ── Quick view derived layout ────────────────────────────────────────
   // While the Quick view (or the Manage bar) is active, Quick-tagged tiles
@@ -4172,33 +4361,15 @@ export default function TalkScreen() {
     setSortMenuVisible(false);
     setHideMenuVisible(false);
 
-    // NEWCOMER PATH: no Quick symbols tagged yet — subtle error shake +
-    // faint red tint on the Quick button, then surface the Manage pill
-    // above the dock with a one-shot green attention pulse.
+    // NEWCOMER PATH: no Quick symbols tagged yet — open Manage directly,
+    // calmly, so the user can pin symbols or create one.
     if (quickTaggedIds.size === 0) {
-      if (!reduceMotion) {
-        quickButtonShake.value = withSequence(
-          withTiming(-4, { duration: 50 }),
-          withTiming(4, { duration: 50 }),
-          withTiming(-3, { duration: 40 }),
-          withTiming(3, { duration: 40 }),
-          withTiming(0, { duration: 35 }),
-        );
-        quickButtonErrorTint.value = withSequence(
-          withTiming(1, { duration: 80 }),
-          withTiming(0, { duration: 400 }),
-        );
-      }
-      hapticError();
-      setQuickDockMode('manage');
-      if (!reduceMotion) {
-        manageAttentionPulse.value = withSequence(
-          withTiming(1, { duration: 150 }),
-          withTiming(0, { duration: 300 }),
-        );
-      }
+      setQuickDockMode('hidden');
+      setManageSelectedIds(new Set());
+      setManageCreatedTag(false);
+      setQuickManageOpen(true);
       AccessibilityInfo.announceForAccessibility?.(
-        'No Quick symbols yet. Tap Manage above the controls to pin symbols first.',
+        'Manage Quick. Tap symbols to pin them, or Create a new one.',
       );
       return;
     }
@@ -4225,7 +4396,7 @@ export default function TalkScreen() {
     AccessibilityInfo.announceForAccessibility?.(
       `Quick view on. ${quickTaggedIds.size} Quick symbol${quickTaggedIds.size !== 1 ? 's' : ''} at the top.`,
     );
-  }, [activeMode, hapticIfEnabled, manageAttentionPulse, quickButtonErrorTint, quickButtonShake, quickTaggedIds.size, quickViewActive, reduceMotion]);
+  }, [activeMode, hapticIfEnabled, quickTaggedIds.size, quickViewActive, reduceMotion]);
 
   // Manage pill → open the Manage Control Bar (replaces the dock row).
   const handleManagePress = useCallback(() => {
@@ -4275,12 +4446,11 @@ export default function TalkScreen() {
     AccessibilityInfo.announceForAccessibility?.('Tap symbols on the board to select them');
   }, [hapticIfEnabled, manageSelectedIds.size]);
 
-  // Create + — same AddSymbolModal; the confirm handler auto-tags the new
-  // tile as Quick while the Manage bar is open (tagged from birth).
+  // Create — shared custom symbol editor; the confirm handler auto-tags the
+  // new tile as Quick while the Manage bar is open.
   const handleQuickCreate = useCallback(() => {
-    hapticIfEnabled();
-    setAddSymbolModalVisible(true);
-  }, [hapticIfEnabled]);
+    handleOpenCustomSymbolEditor();
+  }, [handleOpenCustomSymbolEditor]);
 
   // Done — reconcile intents: selected non-Quick tiles become Quick,
   // selected Quick tiles are removed. Then jump straight into Quick view.
@@ -5016,8 +5186,10 @@ export default function TalkScreen() {
                           dragFingerAbsY={dragFingerAbsY}
                           jiggle={jiggle}
                           onEditTap={motorAccessEnabled ? handleMotorAccessMenu : undefined}
-                          selectable={editControlsOpen && activeEditTool === 'select'}
-                          isSelected={selectedTileIds.has(tile.id)}
+                          resizeHandlesVisible={selectedLayoutTileId === tile.id}
+                          onLayoutSelect={handleLayoutSelect}
+                          selectable={quickManageOpen || (editControlsOpen && activeEditTool === 'select')}
+                          isSelected={quickManageOpen ? manageSelectedIds.has(tile.id) : selectedTileIds.has(tile.id)}
                           moveDestinationMode={editControlsOpen && activeEditTool === 'move'}
                           isFavourite={favouriteIds.includes(tile.id)}
                         />
@@ -5354,17 +5526,23 @@ export default function TalkScreen() {
               ]}
             >
               {dockMode === 'homeCollapsed' ? (
-                <BoardDockAction
-                  icon="chevron-right" label="More"
-                  a11yLabel="More"
-                  a11yHint="Expand board controls"
-                  onPress={handleHomeDockExpand}
-                  isToggle
-                />
+                <View style={styles.collapsedDockMount}>
+                  <View style={styles.collapsedDockPeek}>
+                    <BoardDockAction
+                      icon="toggle-bar"
+                      iconOnly
+                      size={44}
+                      a11yLabel="Expand controls"
+                      a11yHint="Shows the board controls"
+                      onPress={handleHomeDockExpand}
+                      isToggle
+                    />
+                  </View>
+                </View>
               ) : dockMode === 'homeExpanded' ? (
                 <>
                   <BoardDockAction
-                    icon="add" label="Add"
+                    icon="dock-add" label="Add"
                     a11yLabel="Add"
                     a11yHint="Opens add options for the board"
                     onPress={handleDockAddPlus}
@@ -5413,6 +5591,18 @@ export default function TalkScreen() {
                       isActive={hideMenuVisible || navHidden}
                     />
                   </View>
+                  <BoardDockAction
+                    icon="untoggle-bar"
+                    iconOnly
+                    size={44}
+                    a11yLabel="Collapse controls"
+                    a11yHint="Leaves a small expand control on the left edge"
+                    onPress={() => {
+                      hapticIfEnabled();
+                      setHomeDockExpanded(false);
+                    }}
+                    kind="neutral"
+                  />
                 </>
               ) : dockMode === 'quickManage' ? (
                 <>
@@ -5435,17 +5625,17 @@ export default function TalkScreen() {
                         : 'Tap symbols on the board to add or remove them from Quick'}
                       onPress={handleQuickSelectToggle}
                       kind="neutral"
-                      tint={manageSelectedIds.size > 0 ? '#FF3B30' : undefined}
+                      tint={manageSelectedIds.size > 0 ? t.colors.danger : undefined}
                       isToggle
+                      isActive
                     />
                   </Reanimated.View>
                   <BoardDockAction
-                    icon="add" label="Create +"
+                    icon="symbol-add" label="Create"
                     a11yLabel="Create a new Quick symbol"
-                    a11yHint="Opens the add symbol form. The new symbol is pinned to Quick automatically"
+                    a11yHint="Opens the custom symbol editor. The new symbol is pinned to Quick automatically"
                     onPress={handleQuickCreate}
                     kind="neutral"
-                    wide
                   />
                   {manageDoneVisible ? (
                     <Reanimated.View style={manageDoneStyle}>
@@ -5467,11 +5657,11 @@ export default function TalkScreen() {
                     onPress={handleAddFlowClose} kind="neutral"
                   />
                   <BoardDockAction
-                    label="Symbol" a11yLabel="Add symbol"
+                    icon="symbol-add" label="Symbol" a11yLabel="Add symbol"
                     onPress={handleDockSymbol} kind="neutral"
                   />
                   <BoardDockAction
-                    label="Folder" a11yLabel="Add folder"
+                    icon="folder-add" label="Folder" a11yLabel="Add folder"
                     onPress={handleDockAddFolder} kind="neutral"
                   />
                 </>
@@ -5484,7 +5674,7 @@ export default function TalkScreen() {
                     onPress={handleDockBack} kind="neutral"
                   />
                   <BoardDockAction
-                    icon="add" label="Add"
+                    icon="dock-add" label="Add"
                     a11yLabel="Add item"
                     a11yHint="Opens add options"
                     onPress={handleDockAddToggle}
@@ -5533,12 +5723,19 @@ export default function TalkScreen() {
                   </View>
                 </>
               ) : dockMode === 'folderCollapsed' ? (
-                <BoardDockAction
-                  icon="chevron-right" label="More"
-                  a11yLabel="More"
-                  a11yHint="Expand board controls"
-                  onPress={handleFolderExpand} isToggle
-                />
+                <View style={styles.collapsedDockMount}>
+                  <View style={styles.collapsedDockPeek}>
+                    <BoardDockAction
+                      icon="toggle-bar"
+                      iconOnly
+                      size={44}
+                      a11yLabel="Expand controls"
+                      a11yHint="Shows the board controls"
+                      onPress={handleFolderExpand}
+                      isToggle
+                    />
+                  </View>
+                </View>
               ) : dockMode === 'editControls' ? (
                 <>
                   {/* Undo — safest recovery action, always first (left). */}
@@ -5614,7 +5811,7 @@ export default function TalkScreen() {
                     />
                   ) : null}
                   <BoardDockAction
-                    icon="add" label="Add"
+                    icon="dock-add" label="Add"
                     a11yLabel="Add item" a11yHint="Opens add options"
                     onPress={handleDockAddPlus} kind="neutral"
                   />
@@ -5693,6 +5890,14 @@ export default function TalkScreen() {
         visible={addSymbolModalVisible}
         onDismiss={() => setAddSymbolModalVisible(false)}
         onAdd={handleAddSymbolConfirm}
+        onCreateCustom={handleOpenCustomSymbolEditor}
+      />
+      <CustomSymbolEditor
+        visible={customSymbolEditorVisible}
+        onDismiss={() => setCustomSymbolEditorVisible(false)}
+        onDone={handleCustomSymbolDone}
+        canAddToFolder={activeMode !== 'home'}
+        onAddToFolder={handleCustomSymbolDone}
       />
       <AddFolderModal
         visible={addFolderModalVisible}
@@ -5872,19 +6077,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 5,
   },
-  // ── Select Mode: circular indicator centered on the tile. Draws a
-  // soft outlined circle when unselected and a filled primary-blue
-  // circle with a large tick when selected. Sizing keeps the label
-  // and symbol readable while the state is obvious at a glance.
+  // ── Select Mode: circular indicator on the tile corner. Draws a soft
+  // outlined circle when unselected and a filled primary-blue circle with
+  // a tick when selected, without covering the symbol and label.
   selectIndicator: {
     position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: 44,
-    height: 44,
-    marginLeft: -22,
-    marginTop: -22,
-    borderRadius: 22,
+    bottom: 4,
+    right: 4,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 2.5,
     alignItems: 'center',
     justifyContent: 'center',
@@ -5906,6 +6108,11 @@ const styles = StyleSheet.create({
   },
   tileShell: {
     position: 'relative',
+  },
+  customTilePicture: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   folderTab: {
     position: 'absolute',
@@ -5958,6 +6165,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderStyle: 'dashed',
   },
+  wordTileCustomOutline: {
+    borderRadius: TILE_CORNER_RADIUS,
+    borderWidth: 2,
+  },
   wordTileFill: {
     position: 'absolute',
     left: 0,
@@ -6000,6 +6211,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'nowrap',
     gap: DOCK_GAP,
+  },
+  collapsedDockMount: {
+    width: 44,
+    height: 44,
+    overflow: 'visible',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  collapsedDockPeek: {
+    transform: [{ translateX: -34 }],
   },
   // ── DockPopover (Sort / Hide options) ───────────────────────────────────
   // Sits just above the control bar, aligned with its anchor button.

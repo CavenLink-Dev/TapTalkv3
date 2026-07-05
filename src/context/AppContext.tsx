@@ -68,6 +68,7 @@ export const initialState: AppState = {
   keyboardText: '',
   boardLayouts: {},
   boardPlacements: {},
+  customBoardTiles: [],
   hiddenTileIds: [],
   tasks: [],
   lists: [],
@@ -119,6 +120,7 @@ function mergeStoredState(storedState: Partial<AppState>): AppState {
       ...initialState.boardPlacements,
       ...(storedState.boardPlacements ?? {}),
     },
+    customBoardTiles: storedState.customBoardTiles ?? initialState.customBoardTiles,
     hiddenTileIds: storedState.hiddenTileIds ?? initialState.hiddenTileIds,
     firstThen: {
       ...initialState.firstThen,
@@ -242,6 +244,16 @@ export function appReducer(state: AppState, action: Action): AppState {
           [action.payload.board]: action.payload.placements,
         },
       };
+    case 'UPSERT_CUSTOM_BOARD_TILE': {
+      const nextTile = action.payload;
+      const exists = state.customBoardTiles.some(tile => tile.id === nextTile.id);
+      return {
+        ...state,
+        customBoardTiles: exists
+          ? state.customBoardTiles.map(tile => tile.id === nextTile.id ? nextTile : tile)
+          : [...state.customBoardTiles, nextTile],
+      };
+    }
     case 'HIDE_TILE':
       return state.hiddenTileIds.includes(action.payload)
         ? state

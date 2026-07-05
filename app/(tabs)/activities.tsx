@@ -504,7 +504,7 @@ function ActivityCard({
               >
                 <Ionicons
                   name="play"
-                  size={44}
+                  size={32}
                   color={t.colors.textOnDark}
                   style={styles.playIcon}
                 />
@@ -765,14 +765,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF0B3'},
 
   playButton: {
-    width:          64,
-    height:         64,
-    borderRadius:   18,
+    width:          52,
+    height:         52,
+    borderRadius:   15,
     alignItems:     'center',
     justifyContent: 'center'},
 
   // Play triangles read left-heavy; a small optical nudge centres them
   // (scaled up with the larger 2× glyph).
   playIcon: {
-    marginLeft: 4},
+    marginLeft: 3},
 });

@@ -10,10 +10,12 @@ const MASCOT = require('../../../assets/mascot_library/png_mascot/mascot_happy_l
 interface AvatarViewProps {
   /** The stored `state.profilePhotoUri` value. */
   value: string | null | undefined;
-  /** Diameter of the circle in points. */
+  /** Diameter of the circle, or edge length when a custom border radius is used. */
   size: number;
   /** Uppercase initial shown when there is no symbol/colour/photo. */
   initial: string;
+  /** Optional radius for square tile-style uses. Defaults to a circle. */
+  borderRadius?: number;
 }
 
 /**
@@ -21,10 +23,10 @@ interface AvatarViewProps {
  * `parseAvatar` so the Me card and the Account page always look identical.
  * Purely presentational — no press handling here.
  */
-export function AvatarView({ value, size, initial }: AvatarViewProps) {
+export function AvatarView({ value, size, initial, borderRadius }: AvatarViewProps) {
   const t = useTheme();
   const avatar = parseAvatar(value);
-  const radius = size / 2;
+  const radius = borderRadius ?? size / 2;
   const base = { width: size, height: size, borderRadius: radius };
   const symbolSize = Math.round(size * 0.62);
   const initialSize = Math.round(size * 0.42);

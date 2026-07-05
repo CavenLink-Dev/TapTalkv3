@@ -31,6 +31,7 @@ import { SymbolPackBrowser } from './SymbolPackBrowser';
 import { SymbolPackSymbol } from '../../data/symbolPacks';
 import { ThemedText } from '../native/ThemedText';
 import { ColorPickerSheet } from '../native/ColorPickerSheet';
+import { Icon } from '../native/Icon';
 import { useTheme } from '../../theme/useTheme';
 import { radii, spacing, typography } from '../../theme/tokens';
 import { fonts } from '../../theme/fonts';
@@ -48,6 +49,7 @@ interface Props {
   visible: boolean;
   onDismiss: () => void;
   onAdd: (result: AddSymbolResult) => void;
+  onCreateCustom?: () => void;
 }
 
 // ── Fitzgerald word-type → colour mapping (Rule 9 — picker sets both) ──
@@ -79,7 +81,7 @@ function wordTypeFor(partOfSpeech: string | undefined): WordTypeOption {
   return match ?? WORD_TYPES[2]!; // default: Thing / noun
 }
 
-export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
+export function AddSymbolModal({ visible, onDismiss, onAdd, onCreateCustom }: Props) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
   const [step, setStep] = useState<'find' | 'customise'>('find');
@@ -345,8 +347,42 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.browseContent}
+          bounces
           alwaysBounceVertical
+          overScrollMode="always"
         >
+          {onCreateCustom ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Create custom symbol"
+              onPress={() => {
+                hapticSelection();
+                onCreateCustom();
+              }}
+              style={({ pressed }) => [
+                styles.customSymbolCard,
+                {
+                  backgroundColor: pressed ? t.colors.inputBg : t.colors.surface,
+                  borderColor: t.colors.border,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+            >
+              <View style={[styles.customSymbolIcon, { backgroundColor: t.colors.selectionBg }]}>
+                <Icon name="symbol-add" size={26} color={t.colors.primary} strokeWidth={3} />
+              </View>
+              <View style={styles.customSymbolText}>
+                <ThemedText variant="callout" color={t.colors.text} style={styles.customSymbolTitle}>
+                  Custom Symbol
+                </ThemedText>
+                <ThemedText variant="caption" color={t.colors.textMuted} numberOfLines={1}>
+                  Photo, symbol, colour, and outline
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
+            </Pressable>
+          ) : null}
+
           {recents.length > 0 && (
             <>
               <ThemedText variant="eyebrow" color={t.colors.textTertiary} style={styles.sectionEyebrow}>
@@ -390,7 +426,9 @@ export function AddSymbolModal({ visible, onDismiss, onAdd }: Props) {
     <ScrollView
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.customiseContent}
+      bounces
       alwaysBounceVertical
+      overScrollMode="always"
     >
       {/* Live tile preview (what will land on the board) */}
       <View
@@ -631,6 +669,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: 40,
+  },
+  customSymbolCard: {
+    minHeight: 72,
+    borderRadius: radii.button,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  customSymbolIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customSymbolText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  customSymbolTitle: {
+    fontFamily: fonts.displayBold,
   },
   sectionEyebrow: {
     marginBottom: spacing.sm,

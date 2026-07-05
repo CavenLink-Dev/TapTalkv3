@@ -21,6 +21,7 @@ export type HotPersistedState = Pick<
   | 'talkStats'
   | 'boardLayouts'
   | 'boardPlacements'
+  | 'customBoardTiles'
   | 'hiddenTileIds'
   | 'sentenceHistory'
   | 'tileTapCounts'
@@ -63,6 +64,7 @@ export function splitAppState(state: AppState): {
       talkStats: state.talkStats,
       boardLayouts: state.boardLayouts,
       boardPlacements: state.boardPlacements,
+      customBoardTiles: state.customBoardTiles,
       hiddenTileIds: state.hiddenTileIds,
       sentenceHistory: state.sentenceHistory,
       tileTapCounts: state.tileTapCounts,
@@ -109,6 +111,7 @@ export function persistenceTargetForAction(type: Action['type']): PersistenceTar
     case 'SET_BOARD':
     case 'SET_BOARD_ORDER':
     case 'SET_BOARD_PLACEMENTS':
+    case 'UPSERT_CUSTOM_BOARD_TILE':
     case 'HIDE_TILE':
     case 'RESTORE_TILE':
     case 'SET_KEYBOARD_TEXT':
