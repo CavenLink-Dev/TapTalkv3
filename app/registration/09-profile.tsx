@@ -15,6 +15,8 @@ import { radii, spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection, hapticSuccess } from '../../src/utils/haptics';
+import { supabase } from '../../src/lib/supabase';
+import { syncProfileSnapshot } from '../../src/features/cloud/sync';
 
 const talkRoute = '/(tabs)/talk' as Href;
 
@@ -29,9 +31,34 @@ export default function RegStep9Profile() {
   const initial =
     (data.displayName.trim() || data.firstName.trim() || 'T').charAt(0).toUpperCase();
 
-  const commit = () => {
+  const commit = async () => {
     setSubmitting(true);
     const payload = toUserPayload(data);
+
+    if (supabase && data.secureMethod === 'password') {
+      const { error } = await supabase.auth.signUp({
+        email: payload.email,
+        password: data.password,
+        options: {
+          data: {
+            display_name: payload.displayName,
+            legal_name: payload.legalName,
+            role: payload.role,
+          },
+        },
+      });
+      if (error) {
+        setSubmitting(false);
+        Alert.alert('Could not create account', error.message, [{ text: 'OK', style: 'cancel' }]);
+        return;
+      }
+    } else if (supabase && data.secureMethod === 'passkey') {
+      Alert.alert(
+        'Passkey cloud sign up is not ready yet',
+        'Your TapTalk profile will be saved on this device. Choose password setup if you want Supabase email sign in in this build.',
+      );
+    }
+
     dispatch({ type: 'SET_USER', payload });
     dispatch({
       type: 'SET_SECURE_METHOD',
@@ -51,6 +78,7 @@ export default function RegStep9Profile() {
         rememberLogin: true,
       },
     });
+    syncProfileSnapshot({ ...payload, username: '', phone: '', useCases: payload.useCases }).catch(() => {});
     hapticSuccess();
     setTimeout(() => router.replace(talkRoute), 80);
   };

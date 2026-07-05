@@ -41,7 +41,9 @@ import { radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection } from '../../src/utils/haptics';
 import {
+  FIRST_THEN_TEMPLATES,
   FirstThenItem,
+  applyFirstThenTemplate,
   clearFirstThen,
   moveFirstThen,
   positionLabel,
@@ -497,6 +499,7 @@ export default function StepByStepScreen() {
 
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [runnerOpen, setRunnerOpen] = useState(false);
   const { refreshing, onRefresh } = usePullRefresh();
 
@@ -541,6 +544,35 @@ export default function StepByStepScreen() {
     );
   }, []);
 
+  // Templates seed the board in one tap. When steps already exist, confirm
+  // before replacing so nobody loses a routine by accident.
+  const onApplyTemplate = useCallback(
+    (templateId: string, templateName: string) => {
+      hapticSelection();
+      if (items.length === 0) {
+        applyFirstThenTemplate(templateId);
+        setExpandedRow(null);
+        return;
+      }
+      Alert.alert(
+        `Use “${templateName}”?`,
+        'This replaces the steps currently on the board.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Use Template',
+            onPress: () => {
+              applyFirstThenTemplate(templateId);
+              setExpandedRow(null);
+            },
+          },
+        ],
+        { cancelable: true },
+      );
+    },
+    [items.length],
+  );
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.background }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -579,15 +611,55 @@ export default function StepByStepScreen() {
         </Text>
 
         {isEmpty ? (
-          <Card style={styles.emptyCard}>
-            <View style={styles.emptyBadge}>
-              <Ionicons name="git-compare-outline" size={44} color={t.colors.primary} />
+          <>
+            <Card style={styles.emptyCard}>
+              <View style={styles.emptyBadge}>
+                <Ionicons name="git-compare-outline" size={44} color={t.colors.primary} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: t.colors.text }]}>No steps yet</Text>
+              <Text style={[styles.emptyBody, { color: t.colors.textMuted }]}>
+                Tap the + below to add your first step — like “First, brush teeth”.
+              </Text>
+            </Card>
+
+            {/* Contextual suggestions — seed a whole routine in one tap. */}
+            <View>
+              <Text
+                accessibilityRole="header"
+                style={[styles.templatesTitle, { color: t.colors.textTertiary }]}
+              >
+                OR START FROM A TEMPLATE
+              </Text>
+              <View style={styles.templatesGrid}>
+                {FIRST_THEN_TEMPLATES.map((template) => (
+                  <Pressable
+                    key={template.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use the ${template.name} template. ${template.steps.length} steps.`}
+                    accessibilityHint="Fills the board with this routine. You can edit every step afterwards."
+                    onPress={() => onApplyTemplate(template.id, template.name)}
+                    style={({ pressed }) => [
+                      styles.templateChip,
+                      { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Ionicons
+                      name={template.icon as React.ComponentProps<typeof Ionicons>['name']}
+                      size={22}
+                      color={t.colors.primary}
+                    />
+                    <Text style={[styles.templateName, { color: t.colors.text }]} numberOfLines={1}>
+                      {template.name}
+                    </Text>
+                    <Text style={[styles.templateMeta, { color: t.colors.textMuted }]}>
+                      {template.steps.length} steps
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
-            <Text style={[styles.emptyTitle, { color: t.colors.text }]}>No steps yet</Text>
-            <Text style={[styles.emptyBody, { color: t.colors.textMuted }]}>
-              Tap the + below to add your first step — like “First, brush teeth”.
-            </Text>
-          </Card>
+          </>
         ) : (
           <View style={styles.chain}>
             {items.map((item, i) => (
@@ -654,6 +726,45 @@ export default function StepByStepScreen() {
             <Ionicons name="play" size={22} color={t.colors.surface} />
             <Text style={[styles.startBtnText, { color: t.colors.surface }]}>Start</Text>
           </Pressable>
+        ) : null}
+
+        {!isEmpty ? (
+          <DisclosureRow
+            title="Templates"
+            subtitle="Swap in a common routine"
+            icon="albums-outline"
+            expanded={showTemplates}
+            onToggle={() => setShowTemplates(v => !v)}
+          >
+            <View style={styles.templatesGrid}>
+              {FIRST_THEN_TEMPLATES.map((template) => (
+                <Pressable
+                  key={template.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use the ${template.name} template. ${template.steps.length} steps.`}
+                  accessibilityHint="Replaces the current steps with this routine"
+                  onPress={() => onApplyTemplate(template.id, template.name)}
+                  style={({ pressed }) => [
+                    styles.templateChip,
+                    { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Ionicons
+                    name={template.icon as React.ComponentProps<typeof Ionicons>['name']}
+                    size={22}
+                    color={t.colors.primary}
+                  />
+                  <Text style={[styles.templateName, { color: t.colors.text }]} numberOfLines={1}>
+                    {template.name}
+                  </Text>
+                  <Text style={[styles.templateMeta, { color: t.colors.textMuted }]}>
+                    {template.steps.length} steps
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </DisclosureRow>
         ) : null}
 
         <DisclosureRow
@@ -761,6 +872,40 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     paddingHorizontal: spacing.lg,
+  },
+
+  // ── Templates ──
+  templatesTitle: {
+    fontFamily: fonts.bodyHeavy,
+    fontSize: typography.caption,
+    letterSpacing: 0.8,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  templatesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  templateChip: {
+    flexGrow: 1,
+    flexBasis: '47%',
+    minHeight: 60,
+    borderRadius: radii.card,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  templateName: {
+    fontFamily: fonts.displayBold,
+    fontSize: typography.callout,
+  },
+  templateMeta: {
+    fontFamily: fonts.body,
+    fontSize: typography.caption,
   },
 
   chain: { gap: 0 },

@@ -35,7 +35,7 @@ import {
 } from '../../src/components/activities/ActivityCompletionOverlay';
 import { Card } from '../../src/components/native/Card';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { colors, layout, radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticLight, hapticSelection } from '../../src/utils/haptics';
 import { playSound } from '../../src/utils/sounds';
 import { setActivitySfxEnabled, useActivitySfx } from '../../src/features/activities/sound-settings';
@@ -1047,7 +1047,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
     gap: spacing.md, backgroundColor: '#FFFFFF'},
   headerActions: { flexDirection: 'row', gap: 2 },
-  headerIconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerIconBtn: { width: layout.touchTarget.min, height: layout.touchTarget.min, alignItems: 'center', justifyContent: 'center' },
 
   body: {
     flex: 1, paddingHorizontal: spacing.lg, paddingTop: 6,

@@ -15,7 +15,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { spacing } from '../../theme/tokens';
+import { layout, spacing } from '../../theme/tokens';
 
 interface ActivityProgressBarProps {
   /** 1-based current level. */
@@ -33,7 +33,7 @@ interface ActivityProgressBarProps {
 const TRACK_HEIGHT = 25;
 const TRACK_COLOR  = '#D5E1E8';
 const FILL_COLOR   = '#199AEE';
-const BACK_SIZE    = 40;
+const BACK_SIZE    = layout.touchTarget.min;
 
 export function ActivityProgressBar({
   current,

@@ -1,5 +1,5 @@
-import React, { createContext, useReducer, useEffect, useCallback, useRef, useState, ReactNode } from 'react';
-import { AppState as RNAppState } from 'react-native';
+import React, { createContext, useReducer, useEffect, useCallback, useRef, useState, useMemo, ReactNode } from 'react';
+import { AppState as RNAppState, InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, Action } from './types';
 import {
@@ -7,12 +7,14 @@ import {
   HOT_STORAGE_KEY,
   LEGACY_STORAGE_KEY,
   mergePersistedSlices,
+  persistenceTargetForAction,
   splitAppState,
   type ColdPersistedState,
   type HotPersistedState,
+  type PersistenceTarget,
 } from './persistence';
 import { seedSymbolBrainDatabase } from '../data/sqlite/seedSymbolBrain';
-import { setHapticsEnabled } from '../utils/haptics';
+import { setHapticsEnabled, setHapticStrength } from '../utils/haptics';
 import { setPronunciations } from '../utils/speechRules';
 
 const MAX_SAVE_RETRIES = 2;
@@ -38,6 +40,8 @@ export const initialState: AppState = {
     speechRate: 0.9,
     speechPitch: 1.0,
     hapticsEnabled: true,
+    hapticStrength: 'standard',
+    reduceMotionOverride: false,
     motorAccessMode: false,
     reduceSensoryLoad: false,
   },
@@ -78,6 +82,14 @@ export const initialState: AppState = {
   showUsageHeatmap: false,
   ngramModel: {},
   pronunciations: [],
+  passport: {
+    howICommunicate: '',
+    whatHelps: '',
+    whatOverwhelms: '',
+    accessNeeds: '',
+    importantInfo: '',
+    trustedContacts: [],
+  },
 };
 
 function mergeStoredState(storedState: Partial<AppState>): AppState {
@@ -120,6 +132,11 @@ function mergeStoredState(storedState: Partial<AppState>): AppState {
       ...initialState.activityStats,
       ...storedState.activityStats,
     },
+    passport: {
+      ...initialState.passport,
+      ...storedState.passport,
+      trustedContacts: storedState.passport?.trustedContacts ?? [],
+    },
   };
 }
 
@@ -141,6 +158,17 @@ export const AppContext = createContext<{
   hydrationError: null,
   clearHydrationError: () => undefined,
 });
+
+export interface AppStore {
+  getState: () => AppState;
+  getHydrated: () => boolean;
+  getHydrationError: () => HydrationError | null;
+  subscribe: (listener: () => void) => () => void;
+  dispatch: React.Dispatch<Action>;
+  clearHydrationError: () => void;
+}
+
+export const AppStoreContext = createContext<AppStore | null>(null);
 
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -366,6 +394,8 @@ export function appReducer(state: AppState, action: Action): AppState {
         ...state,
         pronunciations: state.pronunciations.filter((p) => p.id !== action.payload),
       };
+    case 'SET_PASSPORT':
+      return { ...state, passport: { ...state.passport, ...action.payload } };
     case 'UPDATE_NGRAM_MODEL': {
       const words = action.payload.words;
       if (words.length < 2) return state;
@@ -428,22 +458,50 @@ async function loadPersistedState(): Promise<Partial<AppState>> {
   return {};
 }
 
+function mergePersistenceTargets(
+  current: PersistenceTarget,
+  incoming: PersistenceTarget,
+): PersistenceTarget {
+  if (current === 'both' || incoming === 'both') return 'both';
+  if (current === 'none') return incoming;
+  if (incoming === 'none') return current;
+  if (current === incoming) return current;
+  return 'both';
+}
+
+function persistenceDebounceMs(target: PersistenceTarget): number {
+  if (target === 'cold') return COLD_SAVE_DEBOUNCE_MS;
+  if (target === 'both') return COLD_SAVE_DEBOUNCE_MS;
+  return HOT_SAVE_DEBOUNCE_MS;
+}
+
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [state, dispatch] = useReducer(appReducer, initialState);
+  const [state, reducerDispatch] = useReducer(appReducer, initialState);
   const [hydrated, setHydrated] = useState(false);
   const [hydrationError, setHydrationError] = useState<HydrationError | null>(null);
   const saveRetries = useRef(0);
   const stateRef = useRef(state);
   const hydratedRef = useRef(false);
-  const hotSnapshotRef = useRef<HotPersistedState>(splitAppState(state).hot);
-  const coldSnapshotRef = useRef<ColdPersistedState>(splitAppState(state).cold);
+  const hydrationErrorRef = useRef<HydrationError | null>(null);
+  const pendingSaveTargetRef = useRef<PersistenceTarget>('none');
+  const storeListenersRef = useRef(new Set<() => void>());
   const saveInFlightRef = useRef(false);
   const pendingHotSaveRef = useRef(false);
   const pendingColdSaveRef = useRef(false);
-  const snapshotsSyncedRef = useRef(false);
   stateRef.current = state;
+  hydrationErrorRef.current = hydrationError;
 
   const clearHydrationError = useCallback(() => setHydrationError(null), []);
+
+  const dispatch = useCallback((action: Action) => {
+    if (hydratedRef.current) {
+      pendingSaveTargetRef.current = mergePersistenceTargets(
+        pendingSaveTargetRef.current,
+        persistenceTargetForAction(action.type),
+      );
+    }
+    reducerDispatch(action);
+  }, []);
 
   const flushSave = useCallback(async (target: 'hot' | 'cold' | 'all' = 'all') => {
     if (saveInFlightRef.current) {
@@ -457,11 +515,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const { hot, cold } = splitAppState(stateRef.current);
       const writes: Promise<void>[] = [];
       if (target === 'hot' || target === 'all') {
-        hotSnapshotRef.current = hot;
         writes.push(persistJson(HOT_STORAGE_KEY, hot));
       }
       if (target === 'cold' || target === 'all') {
-        coldSnapshotRef.current = cold;
         writes.push(persistJson(COLD_STORAGE_KEY, cold));
       }
       await Promise.all(writes);
@@ -511,43 +567,54 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     loadState();
   }, []);
 
-  // Warm the symbol DB while the splash plays so Talk never pays the seed
-  // cost on first tile resolve.
+  // Warm the symbol DB after first interactions so startup controls can settle
+  // before SQLite work begins. Symbol search still lazy-seeds as a fallback.
   useEffect(() => {
     if (!hydrated) return;
-    seedSymbolBrainDatabase().catch((e) => {
-      if (__DEV__) console.warn('Symbol brain pre-seed failed:', e);
-    });
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      InteractionManager.runAfterInteractions(() => {
+        if (cancelled) return;
+        seedSymbolBrainDatabase().catch((e) => {
+          if (__DEV__) console.warn('Symbol brain pre-seed failed:', e);
+        });
+      });
+    }, 1600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [hydrated]);
 
   useEffect(() => {
-    if (!hydrated || snapshotsSyncedRef.current) return;
-    const { hot, cold } = splitAppState(state);
-    hotSnapshotRef.current = hot;
-    coldSnapshotRef.current = cold;
-    snapshotsSyncedRef.current = true;
-  }, [hydrated, state]);
-
-  useEffect(() => {
     if (!hydrated) return;
 
-    const { hot, cold } = splitAppState(state);
-    const hotChanged = JSON.stringify(hot) !== JSON.stringify(hotSnapshotRef.current);
-    const coldChanged = JSON.stringify(cold) !== JSON.stringify(coldSnapshotRef.current);
-    if (!hotChanged && !coldChanged) return;
+    const target = pendingSaveTargetRef.current;
+    if (target === 'none') return;
+    pendingSaveTargetRef.current = 'none';
 
-    const hotTimer = hotChanged
-      ? setTimeout(() => { flushSave('hot'); }, HOT_SAVE_DEBOUNCE_MS)
-      : undefined;
-    const coldTimer = coldChanged
-      ? setTimeout(() => { flushSave('cold'); }, COLD_SAVE_DEBOUNCE_MS)
-      : undefined;
+    let cancelled = false;
+    let handedToFlush = false;
+    const timer = setTimeout(() => {
+      InteractionManager.runAfterInteractions(() => {
+        if (cancelled) return;
+        handedToFlush = true;
+        flushSave(target === 'both' ? 'all' : target);
+      });
+    }, persistenceDebounceMs(target));
 
     return () => {
-      if (hotTimer) clearTimeout(hotTimer);
-      if (coldTimer) clearTimeout(coldTimer);
+      cancelled = true;
+      clearTimeout(timer);
+      if (!handedToFlush) {
+        pendingSaveTargetRef.current = mergePersistenceTargets(pendingSaveTargetRef.current, target);
+      }
     };
   }, [state, hydrated, flushSave]);
+
+  useEffect(() => {
+    storeListenersRef.current.forEach(listener => listener());
+  }, [state, hydrated, hydrationError]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -580,6 +647,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setHapticsEnabled(state.accessibility.hapticsEnabled);
   }, [state.accessibility.hapticsEnabled]);
 
+  // Same for haptic strength — every helper maps its cue through the chosen
+  // strength so the setting applies instantly, app-wide.
+  useEffect(() => {
+    setHapticStrength(state.accessibility.hapticStrength);
+  }, [state.accessibility.hapticStrength]);
+
   // Keep the speech engine's pronunciation overrides in sync so every
   // spoken utterance (board + keyboard) applies the user's "say it like this"
   // list without each caller reading context.
@@ -587,9 +660,33 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setPronunciations(state.pronunciations);
   }, [state.pronunciations]);
 
+  const appContextValue = useMemo(() => ({
+    state,
+    dispatch,
+    hydrated,
+    hydrationError,
+    clearHydrationError,
+  }), [state, dispatch, hydrated, hydrationError, clearHydrationError]);
+
+  const store = useMemo<AppStore>(() => ({
+    getState: () => stateRef.current,
+    getHydrated: () => hydratedRef.current,
+    getHydrationError: () => hydrationErrorRef.current,
+    subscribe: (listener: () => void) => {
+      storeListenersRef.current.add(listener);
+      return () => {
+        storeListenersRef.current.delete(listener);
+      };
+    },
+    dispatch,
+    clearHydrationError,
+  }), [dispatch, clearHydrationError]);
+
   return (
-    <AppContext.Provider value={{ state, dispatch, hydrated, hydrationError, clearHydrationError }}>
-      {children}
-    </AppContext.Provider>
+    <AppStoreContext.Provider value={store}>
+      <AppContext.Provider value={appContextValue}>
+        {children}
+      </AppContext.Provider>
+    </AppStoreContext.Provider>
   );
 };

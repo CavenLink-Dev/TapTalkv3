@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,9 +16,10 @@ import { PrimaryButton } from '../../src/components/native/PrimaryButton';
 import { TextField } from '../../src/components/native/TextField';
 import { createAuthFormStyles } from '../../src/styles/authFormStyles';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
-import { spacing, typography } from '../../src/theme/tokens';
+import { layout, spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
+import { supabase } from '../../src/lib/supabase';
 
 export default function ForgotPassword() {
   const router = useRouter();
@@ -28,9 +30,15 @@ export default function ForgotPassword() {
 
   const canSend = EMAIL_PATTERN.test(email.trim());
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!canSend) return;
-    // TODO: Supabase password reset — auth.resetPasswordForEmail(email)
+    if (supabase) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+      if (error) {
+        Alert.alert('Could not send reset link', error.message, [{ text: 'OK', style: 'cancel' }]);
+        return;
+      }
+    }
     setSent(true);
   };
 
@@ -115,9 +123,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    minHeight: 40,
+    minHeight: layout.touchTarget.min,
   },
-  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: layout.touchTarget.min, height: layout.touchTarget.min, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   title: { fontFamily: fonts.displayBlack, fontSize: 30, letterSpacing: -0.5 },
   subtitle: {

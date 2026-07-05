@@ -5,13 +5,19 @@
  * via the `reduceMotionChanged` event, so components can branch their
  * Reanimated worklets without each implementing the same subscription.
  *
+ * Also honours TapTalk's own in-app override
+ * (Settings → Accessibility → Reduce Motion), so users can calm animations
+ * without leaving the app: effective value = system Reduce Motion OR override.
+ *
  * Falls back to `false` if the bridge is unavailable.
  */
 
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
+import { useAppSelector } from './useAppContext';
 
-export function useReduceMotion(): boolean {
+/** System-level Reduce Motion only (ignores the in-app override). */
+export function useSystemReduceMotion(): boolean {
   const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
@@ -30,4 +36,10 @@ export function useReduceMotion(): boolean {
   }, []);
 
   return reduceMotion;
+}
+
+export function useReduceMotion(): boolean {
+  const systemReduceMotion = useSystemReduceMotion();
+  const reduceMotionOverride = useAppSelector((state) => state.accessibility.reduceMotionOverride);
+  return systemReduceMotion || reduceMotionOverride;
 }

@@ -40,7 +40,7 @@ import { hapticLight, hapticSelection } from '../../src/utils/haptics';
 import { playSound, playSelectThenConfirm } from '../../src/utils/sounds';
 import { setActivitySfxEnabled, useActivitySfx } from '../../src/features/activities/sound-settings';
 import { recordActivitySession } from '../../src/features/activities/progress-store';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { colors, layout, radii, spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ export default function MemoryMatchScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
-  const { state, dispatch } = useAppContext();
+  const { state } = useAppContext();
   const { speak, stop: stopSpeech } = useSpeech();
 
   const [phase, setPhase] = useState<Phase>('select');
@@ -300,7 +300,10 @@ export default function MemoryMatchScreen() {
     setChosen(shapeIndex);
     setTimeout(() => {
       if (correct) {
-        dispatch({ type: 'INCREMENT_ACTIVITY_STATS', payload: { minutes: 1 } });
+        // NOTE: progress is recorded once per completed run via
+        // recordActivitySession (progress-store) — the single source of truth
+        // the Progress screens read. The old INCREMENT_ACTIVITY_STATS dispatch
+        // here inflated a per-correct-answer counter no screen displays.
         hapticLight(); // light impact for the outcome commit (Rule 19)
         playSound('correct', soundOn);
       } else {
@@ -316,7 +319,7 @@ export default function MemoryMatchScreen() {
       advanceTimer.current = null;
       nextRound();
     }, 1400);
-  }, [clearAdvanceTimer, dispatch, nextRound, round.target, roundPhase, showTryAgain, soundOn]);
+  }, [clearAdvanceTimer, nextRound, round.target, roundPhase, showTryAgain, soundOn]);
 
   // Footer nav — fresh start at the destination level (§2.4).
   const goLevel = useCallback((delta: 1 | -1) => {
@@ -621,7 +624,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: BG},
   headerActions: { flexDirection: 'row', gap: 4 },
-  headerIconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerIconBtn: { width: layout.touchTarget.min, height: layout.touchTarget.min, alignItems: 'center', justifyContent: 'center' },
 
   content: {
     padding: spacing.xl,

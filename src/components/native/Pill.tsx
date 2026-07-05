@@ -7,7 +7,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { animation, radii, typography } from '../../theme/tokens';
+import { animation, layout, radii, typography } from '../../theme/tokens';
 import { springPop, timingBase, timingFast } from '../../theme/motion';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { useTheme } from '../../theme/useTheme';
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   hit: {
-    minHeight: 34,
+    minHeight: layout.touchTarget.min,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 14,

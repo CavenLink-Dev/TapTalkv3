@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { Text, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -6,6 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { AppProvider } from '../src/context/AppContext';
+import { useAppContext } from '../src/hooks/useAppContext';
+import { useSession } from '../src/hooks/useSession';
 import { useTapTalkFonts } from '../src/theme/fonts';
 import { useTheme } from '../src/theme/useTheme';
 import { colorsLight, typography } from '../src/theme/tokens';
@@ -21,6 +23,21 @@ DefaultTextInput.defaultProps.style = [{ fontFamily: typography.fontFamily }, De
 
 function ThemeShell() {
   const t = useTheme();
+  const { state, dispatch } = useAppContext();
+  const { user } = useSession();
+
+  useEffect(() => {
+    if (!user) return;
+    if (state.signedIn && state.user.email === (user.email ?? '')) return;
+    dispatch({
+      type: 'SIGN_IN',
+      payload: {
+        email: user.email ?? state.user.email,
+        displayName: state.user.displayName || user.user_metadata?.display_name,
+        rememberLogin: state.rememberLogin,
+      },
+    });
+  }, [dispatch, state.rememberLogin, state.signedIn, state.user.displayName, state.user.email, user]);
 
   // Splash is the first route and already waits for hydration before
   // navigating — no need to block the stack on a blank frame here.

@@ -14,7 +14,7 @@
  * Header has a Back chevron and the day label (Sunday, Jun 25).
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -25,7 +25,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { spacing, typography } from '../../../src/theme/tokens';
+import { layout, spacing, typography } from '../../../src/theme/tokens';
 import { hapticSelection } from '../../../src/utils/haptics';
 import {
   PlanStep,
@@ -153,6 +153,71 @@ function StepCard({
   );
 }
 
+function hexAlpha(hex: string, a: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
+function SymbolStrip({
+  steps,
+  onSelectStep,
+}: {
+  steps: PositionedStep[];
+  onSelectStep: (step: PositionedStep) => void;
+}) {
+  const t = useTheme();
+  const ordered = useMemo(() => [...steps].sort((a, b) => a.startMin - b.startMin), [steps]);
+
+  return (
+    <View
+      style={[styles.stripWrap, { backgroundColor: t.colors.surface }]}
+      accessibilityRole="header"
+      accessibilityLabel={`Day symbols, ${ordered.length} item${ordered.length === 1 ? '' : 's'} in order`}
+    >
+      <Text style={[styles.stripTitle, { color: t.colors.textTertiary }]}>DAY IN ORDER</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.stripScroll}
+        bounces
+        alwaysBounceHorizontal
+      >
+        {ordered.map((step) => (
+          <Pressable
+            key={`${step.planId}-${step.id}`}
+            accessibilityRole="button"
+            accessibilityLabel={`${step.name}, ${fmtClock(step.startMin)}`}
+            accessibilityHint="Scrolls the timeline to this step"
+            onPress={() => onSelectStep(step)}
+            style={({ pressed }) => [
+              styles.stripItem,
+              { backgroundColor: hexAlpha(step.symbolColor, 0.18) },
+              pressed && { opacity: 0.75 },
+            ]}
+          >
+            <View style={[styles.stripIcon, { backgroundColor: step.symbolColor }]}>
+              <Ionicons
+                name={step.symbol as React.ComponentProps<typeof Ionicons>['name']}
+                size={24}
+                color="#FFFFFF"
+              />
+            </View>
+            <Text style={[styles.stripName, { color: t.colors.text }]} numberOfLines={1}>
+              {step.name}
+            </Text>
+            <Text style={[styles.stripTime, { color: t.colors.textMuted }]}>
+              {fmtClock(step.startMin)}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function DayTimelineScreen() {
   const t = useTheme();
   const router = useRouter();
@@ -200,6 +265,12 @@ export default function DayTimelineScreen() {
     toggleStepDone(planId, stepId);
   }, []);
 
+  const scrollToStep = useCallback((step: PositionedStep) => {
+    hapticSelection();
+    const offset = Math.max(0, step.startMin * (HOUR_HEIGHT / 60) - HOUR_HEIGHT);
+    scrollRef.current?.scrollTo({ y: offset, animated: true });
+  }, []);
+
   const dayLabel = `${DOW_LONG[dayDate.getDay()]}, ${MONTHS[dayDate.getMonth()]} ${dayDate.getDate()}`;
 
   return (
@@ -236,49 +307,52 @@ export default function DayTimelineScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={styles.timelineWrap}
-          showsVerticalScrollIndicator={false}
-          bounces
-          alwaysBounceVertical
-          overScrollMode="always"
-        >
-          <View style={styles.timeline}>
-            {/* Hour rail */}
-            <View style={styles.rail}>
-              {Array.from({ length: 24 }).map((_, h) => (
-                <View key={h} style={styles.railHour}>
-                  <Text style={[styles.railLabel, { color: t.colors.textMuted }]}>{fmtClock(h * 60).replace(' ', '\n')}</Text>
-                </View>
-              ))}
-            </View>
+        <>
+          <SymbolStrip steps={allSteps} onSelectStep={scrollToStep} />
+          <ScrollView
+            ref={scrollRef}
+            contentContainerStyle={styles.timelineWrap}
+            showsVerticalScrollIndicator={false}
+            bounces
+            alwaysBounceVertical
+            overScrollMode="always"
+          >
+            <View style={styles.timeline}>
+              {/* Hour rail */}
+              <View style={styles.rail}>
+                {Array.from({ length: 24 }).map((_, h) => (
+                  <View key={h} style={styles.railHour}>
+                    <Text style={[styles.railLabel, { color: t.colors.textMuted }]}>{fmtClock(h * 60).replace(' ', '\n')}</Text>
+                  </View>
+                ))}
+              </View>
 
-            {/* Body */}
-            <View
-              style={styles.body}
-              onLayout={e => setBodyWidth(e.nativeEvent.layout.width)}
-            >
-              {/* Hour + half-hour rules */}
-              {Array.from({ length: 24 }).map((_, h) => (
-                <React.Fragment key={`rule-${h}`}>
-                  <View style={[styles.rule, { top: h * HOUR_HEIGHT }]} />
-                  <View style={[styles.halfRule, { top: h * HOUR_HEIGHT + HOUR_HEIGHT / 2 }]} />
-                </React.Fragment>
-              ))}
+              {/* Body */}
+              <View
+                style={styles.body}
+                onLayout={e => setBodyWidth(e.nativeEvent.layout.width)}
+              >
+                {/* Hour + half-hour rules */}
+                {Array.from({ length: 24 }).map((_, h) => (
+                  <React.Fragment key={`rule-${h}`}>
+                    <View style={[styles.rule, { top: h * HOUR_HEIGHT }]} />
+                    <View style={[styles.halfRule, { top: h * HOUR_HEIGHT + HOUR_HEIGHT / 2 }]} />
+                  </React.Fragment>
+                ))}
 
-              {/* Step cards */}
-              {clusteredSteps.map(({ step, layout }) => (
-                <StepCard
-                  key={`${step.planId}-${step.id}`}
-                  step={step}
-                  layout={layout}
-                  onToggle={() => handleToggle(step.planId, step.id)}
-                />
-              ))}
+                {/* Step cards */}
+                {clusteredSteps.map(({ step, layout }) => (
+                  <StepCard
+                    key={`${step.planId}-${step.id}`}
+                    step={step}
+                    layout={layout}
+                    onToggle={() => handleToggle(step.planId, step.id)}
+                  />
+                ))}
+              </View>
             </View>
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </>
       )}
     </SafeAreaView>
   );
@@ -293,7 +367,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     gap: spacing.md},
-  headerIconBtn: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerIconBtn: { width: layout.touchTarget.min, height: layout.touchTarget.min, alignItems: 'center', justifyContent: 'center' },
   title: {
     fontSize: typography.heading,
     fontWeight: '900',
@@ -302,7 +376,45 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 2,
     fontSize: typography.caption},
-  headerSpacer: { width: 36 },
+  headerSpacer: { width: layout.touchTarget.min },
+
+  stripWrap: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    borderRadius: 16,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm},
+  stripTitle: {
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    fontSize: typography.eyebrow,
+    fontWeight: '800',
+    letterSpacing: 1.1},
+  stripScroll: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm},
+  stripItem: {
+    minWidth: 96,
+    minHeight: layout.touchTarget.primary,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3},
+  stripIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center'},
+  stripName: {
+    maxWidth: 82,
+    fontSize: typography.caption,
+    fontWeight: '800'},
+  stripTime: {
+    fontSize: 11,
+    fontWeight: '700'},
 
   emptyWrap: {
     flex: 1,

@@ -4,9 +4,8 @@
  * and non-essential animation. This layers on top of system Reduce Motion —
  * it does not replace it.
  */
-import { useAppContext } from './useAppContext';
+import { useAppSelector } from './useAppContext';
 
 export function useReduceSensoryLoad(): boolean {
-  const { state } = useAppContext();
-  return state.accessibility.reduceSensoryLoad;
+  return useAppSelector((state) => state.accessibility.reduceSensoryLoad);
 }

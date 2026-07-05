@@ -1,0 +1,46 @@
+/**
+ * src/lib/supabase.ts
+ *
+ * Single Supabase client for the entire app.
+ *
+ * Usage:
+ *   import { supabase } from '../lib/supabase';
+ *
+ * IMPORTANT: Only the publishable key lives here.
+ * Never import or use the service-role / secret key inside the app.
+ * Any admin operations must go through Supabase Edge Functions.
+ */
+
+import 'react-native-url-polyfill/auto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState, Platform } from 'react-native';
+import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey);
+
+export const supabase: SupabaseClient | null = isSupabaseConfigured
+  ? createClient(supabaseUrl!, supabasePublishableKey!, {
+      auth: {
+        ...(Platform.OS !== 'web' ? { storage: AsyncStorage } : {}),
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+      },
+    })
+  : null;
+
+// Keep the session alive while the app is in the foreground and
+// pause auto-refresh when it goes to the background (saves battery).
+if (supabase && Platform.OS !== 'web') {
+  AppState.addEventListener('change', (state) => {
+    if (state === 'active') {
+      supabase.auth.startAutoRefresh();
+    } else {
+      supabase.auth.stopAutoRefresh();
+    }
+  });
+}

@@ -1,4 +1,4 @@
-import { colors, radii, spacing, typography, shadows } from '../tokens';
+import { colors, layout, radii, spacing, typography, shadows } from '../tokens';
 
 describe('theme tokens', () => {
   describe('colors', () => {
@@ -50,6 +50,13 @@ describe('theme tokens', () => {
       for (let i = 1; i < keys.length; i++) {
         expect(spacing[keys[i]!]).toBeGreaterThan(spacing[keys[i - 1]!]);
       }
+    });
+  });
+
+  describe('layout', () => {
+    it('defines touch target sizes', () => {
+      expect(layout.touchTarget.min).toBe(44);
+      expect(layout.touchTarget.primary).toBe(60);
     });
   });
 

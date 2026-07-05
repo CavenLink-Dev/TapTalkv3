@@ -19,27 +19,53 @@
 
 import * as Haptics from 'expo-haptics';
 
+export type HapticStrength = 'gentle' | 'standard' | 'strong';
+
 let hapticsEnabled = true;
+let hapticStrength: HapticStrength = 'standard';
 
 export function setHapticsEnabled(enabled: boolean): void {
   hapticsEnabled = enabled;
 }
 
+/**
+ * Global strength preference (Settings → Accessibility → Motor).
+ * 'gentle' maps every impact down to Light; 'strong' maps impacts up one
+ * step so users who need clearer confirmation feel it. Selection cues stay
+ * as-is under 'standard'/'gentle' and become a light impact under 'strong'.
+ */
+export function setHapticStrength(strength: HapticStrength): void {
+  hapticStrength = strength;
+}
+
 const noop = Promise.resolve();
+
+function impactFor(base: Haptics.ImpactFeedbackStyle): Haptics.ImpactFeedbackStyle {
+  if (hapticStrength === 'gentle') return Haptics.ImpactFeedbackStyle.Light;
+  if (hapticStrength === 'strong') {
+    return base === Haptics.ImpactFeedbackStyle.Light
+      ? Haptics.ImpactFeedbackStyle.Medium
+      : Haptics.ImpactFeedbackStyle.Heavy;
+  }
+  return base;
+}
 
 export function hapticSelection(): Promise<void> {
   if (!hapticsEnabled) return noop;
+  if (hapticStrength === 'strong') {
+    return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined) as Promise<void>;
+  }
   return Haptics.selectionAsync().catch(() => undefined) as Promise<void>;
 }
 
 export function hapticLight(): Promise<void> {
   if (!hapticsEnabled) return noop;
-  return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined) as Promise<void>;
+  return Haptics.impactAsync(impactFor(Haptics.ImpactFeedbackStyle.Light)).catch(() => undefined) as Promise<void>;
 }
 
 export function hapticMedium(): Promise<void> {
   if (!hapticsEnabled) return noop;
-  return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined) as Promise<void>;
+  return Haptics.impactAsync(impactFor(Haptics.ImpactFeedbackStyle.Medium)).catch(() => undefined) as Promise<void>;
 }
 
 export function hapticSuccess(): Promise<void> {

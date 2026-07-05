@@ -1,4 +1,5 @@
 import { appReducer, initialState } from '../AppContext';
+import { persistenceTargetForAction } from '../persistence';
 import type { AppState, Action, AACWord, Task, TapTalkList, ListItem, Goal, GoalStep } from '../types';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -58,6 +59,26 @@ function makeGoal(overrides: Partial<Goal> = {}): Goal {
 }
 
 // ---- Tests ----
+
+describe('persistenceTargetForAction', () => {
+  it('does not mark HYDRATE dirty', () => {
+    expect(persistenceTargetForAction('HYDRATE')).toBe('none');
+  });
+
+  it('marks hot actions for the hot slice only', () => {
+    expect(persistenceTargetForAction('SET_ACCESSIBILITY')).toBe('hot');
+    expect(persistenceTargetForAction('APPEND_WORD')).toBe('hot');
+  });
+
+  it('marks cold actions for the cold slice only', () => {
+    expect(persistenceTargetForAction('SIGN_IN')).toBe('cold');
+    expect(persistenceTargetForAction('SET_PASSPORT')).toBe('cold');
+  });
+
+  it('marks unknown actions conservatively for both slices', () => {
+    expect(persistenceTargetForAction('UNKNOWN' as Action['type'])).toBe('both');
+  });
+});
 
 describe('appReducer', () => {
   let base: AppState;

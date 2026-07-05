@@ -41,7 +41,7 @@ import {
   ACTIVITY_THEMES,
 } from '../../src/components/activities/ActivityCompletionOverlay';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { colors, layout, radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticLight, hapticSelection } from '../../src/utils/haptics';
 import { playSound } from '../../src/utils/sounds';
 import { setActivitySfxEnabled, useActivitySfx } from '../../src/features/activities/sound-settings';
@@ -1178,7 +1178,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: BG},
   headerIconBtn: {
-    width: 40, height: 40,
+    width: layout.touchTarget.min, height: layout.touchTarget.min,
     alignItems: 'center', justifyContent: 'center'},
   headerActions: {
     flexDirection: 'row',

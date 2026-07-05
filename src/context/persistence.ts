@@ -1,4 +1,4 @@
-import type { AppState } from './types';
+import type { Action, AppState } from './types';
 
 /** Legacy monolithic blob — migrated on first load. */
 export const LEGACY_STORAGE_KEY = '@TapTalk_state';
@@ -8,6 +8,8 @@ export const HOT_STORAGE_KEY = '@TapTalk_state_hot';
 
 /** Profile, lists, habits, etc. — saved on a longer debounce. */
 export const COLD_STORAGE_KEY = '@TapTalk_state_cold';
+
+export type PersistenceTarget = 'hot' | 'cold' | 'both' | 'none';
 
 export type HotPersistedState = Pick<
   AppState,
@@ -44,6 +46,7 @@ export type ColdPersistedState = Pick<
   | 'habits'
   | 'showUsageHeatmap'
   | 'pronunciations'
+  | 'passport'
 >;
 
 export function splitAppState(state: AppState): {
@@ -83,6 +86,7 @@ export function splitAppState(state: AppState): {
       habits: state.habits,
       showUsageHeatmap: state.showUsageHeatmap,
       pronunciations: state.pronunciations,
+      passport: state.passport,
     },
   };
 }
@@ -94,8 +98,10 @@ export function mergePersistedSlices(
   return { ...cold, ...hot };
 }
 
-export function isHotAction(type: string): boolean {
+export function persistenceTargetForAction(type: Action['type']): PersistenceTarget {
   switch (type) {
+    case 'HYDRATE':
+      return 'none';
     case 'APPEND_WORD':
     case 'CLEAR_WORDS':
     case 'REMOVE_LAST_WORD':
@@ -113,8 +119,41 @@ export function isHotAction(type: string): boolean {
     case 'PUSH_SENTENCE_HISTORY':
     case 'INCREMENT_TILE_TAP':
     case 'UPDATE_NGRAM_MODEL':
-      return true;
+      return 'hot';
+    case 'SET_USER':
+    case 'SET_PARENT':
+    case 'COMPLETE_ONBOARDING':
+    case 'COMPLETE_SUBSCRIPTION':
+    case 'SIGN_IN':
+    case 'SIGN_OUT':
+    case 'SET_REMEMBER_LOGIN':
+    case 'SET_SECURE_METHOD':
+    case 'SET_PROFILE_PHOTO':
+    case 'ADD_TASK':
+    case 'TOGGLE_TASK':
+    case 'DELETE_TASK':
+    case 'ADD_LIST':
+    case 'ADD_LIST_ITEM':
+    case 'TOGGLE_LIST_ITEM':
+    case 'ADD_GOAL':
+    case 'UPDATE_GOAL':
+    case 'TOGGLE_STEP':
+    case 'ADD_STEP':
+    case 'INCREMENT_ACTIVITY_STATS':
+    case 'ADD_HABIT':
+    case 'TOGGLE_HABIT_TODAY':
+    case 'DELETE_HABIT':
+    case 'SET_SHOW_USAGE_HEATMAP':
+    case 'ADD_PRONUNCIATION':
+    case 'DELETE_PRONUNCIATION':
+    case 'SET_PASSPORT':
+      return 'cold';
     default:
-      return false;
+      return 'both';
   }
+}
+
+export function isHotAction(type: string): boolean {
+  const target = persistenceTargetForAction(type as Action['type']);
+  return target === 'hot' || target === 'both';
 }

@@ -15,7 +15,7 @@
 
 import { useMemo } from 'react';
 import { useColorScheme } from 'react-native';
-import { useAppContext } from '../hooks/useAppContext';
+import { useAppSelector } from '../hooks/useAppContext';
 import type { ColorTokens } from './tokens';
 import {
   colorsLight as lightColors,
@@ -113,9 +113,9 @@ export interface ThemeValues {
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
 export function useTheme(): ThemeValues {
-  const { state } = useAppContext();
+  const accessibility = useAppSelector((state) => state.accessibility);
   const systemScheme = useColorScheme();
-  const { textSize, buttonSize, theme, highContrast, colorScheme } = state.accessibility;
+  const { textSize, buttonSize, theme, highContrast, colorScheme } = accessibility;
 
   return useMemo(() => {
     // 1. Resolve effective colour scheme (explicit dark, or follow iOS when set to system)

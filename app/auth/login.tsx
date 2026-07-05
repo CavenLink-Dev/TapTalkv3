@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,9 +21,10 @@ import { useAppContext } from '../../src/hooks/useAppContext';
 import { createAuthFormStyles } from '../../src/styles/authFormStyles';
 import { hapticSelection } from '../../src/utils/haptics';
 import { EMAIL_PATTERN } from '../../src/utils/validation';
-import { spacing, typography } from '../../src/theme/tokens';
+import { layout, spacing, typography } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { fonts } from '../../src/theme/fonts';
+import { supabase } from '../../src/lib/supabase';
 
 const signUpRoute = '/registration/01-who' as Href;
 const forgotRoute = '/auth/forgot-password' as Href;
@@ -48,15 +50,29 @@ export default function LoginScreen() {
     router.replace(talkRoute);
   };
 
-  const login = () => {
+  const login = async () => {
     if (!canContinue || submitting) return;
     setSubmitting(true);
-    // TODO: replace with real auth (Supabase / Apple). For now we simulate a
-    // brief network hop so the loading state is visible in QA.
-    setTimeout(() => {
+    if (!supabase) {
       setSubmitting(false);
-      finish(email);
-    }, 600);
+      Alert.alert(
+        'Cloud sign in is not configured',
+        'Supabase keys are missing, so TapTalk will continue in local-only mode for now.',
+        [{ text: 'Continue locally', onPress: () => finish(email) }],
+      );
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    setSubmitting(false);
+    if (error) {
+      Alert.alert('Could not sign in', error.message, [{ text: 'OK', style: 'cancel' }]);
+      return;
+    }
+    finish(data.user.email ?? email, data.user.user_metadata?.display_name);
   };
 
   // Stubbed Apple flow — see SignInWithAppleButton for the production note.
@@ -196,11 +212,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    minHeight: 40,
+    minHeight: layout.touchTarget.min,
   },
   backBtn: {
-    width: 32,
-    height: 32,
+    width: layout.touchTarget.min,
+    height: layout.touchTarget.min,
     alignItems: 'center',
     justifyContent: 'center',
   },

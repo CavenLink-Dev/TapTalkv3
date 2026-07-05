@@ -248,6 +248,17 @@ export const spacing = {
   xxl: 32,
 } as const;
 
+// ─── Layout ──────────────────────────────────────────────────────────────────
+
+export const layout = {
+  touchTarget: {
+    /** Minimum interactive area for icon buttons, rows, chips, and controls. */
+    min: 44,
+    /** Preferred height for primary actions where the layout has room. */
+    primary: 60,
+  },
+} as const;
+
 /** Full-width chrome separator thickness (message strip, top nav, tab bar). */
 export const CHROME_SEPARATOR_WIDTH = 1.2 as const;
 

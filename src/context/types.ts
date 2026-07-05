@@ -30,6 +30,17 @@ export interface AppState {
     speechPitch: number;
     /** Whether haptic feedback fires on taps. Default true. */
     hapticsEnabled: boolean;
+    /**
+     * Strength of haptic feedback when enabled. 'gentle' softens every cue,
+     * 'strong' makes impacts firmer for users who need clearer confirmation.
+     */
+    hapticStrength: 'gentle' | 'standard' | 'strong';
+    /**
+     * In-app Reduce Motion override. When true, TapTalk reduces animation even
+     * if the iOS system Reduce Motion setting is off. The effective value is
+     * (system Reduce Motion OR this flag) via useReduceMotion.
+     */
+    reduceMotionOverride: boolean;
     /** Tap-based editing alternatives — no drag or pinch required (Rule 20/25). */
     motorAccessMode: boolean;
     /** Reduce non-essential animation/particles/sound beyond system Reduce Motion. */
@@ -108,6 +119,36 @@ export interface AppState {
 
   // Speech — user pronunciation overrides ("say it like this")
   pronunciations: PronunciationRule[];
+
+  // Profile — My Communication Passport (shown to support workers / staff)
+  passport: CommunicationPassport;
+}
+
+/** A trusted person listed on the Communication Passport. */
+export interface PassportContact {
+  id: string;
+  name: string;
+  relationship: string;
+  phone: string;
+}
+
+/**
+ * My Communication Passport — a plain-language profile a support worker,
+ * teacher, or hospital staff member can read to help the user faster.
+ * Every field is free text written by the user or a caregiver.
+ */
+export interface CommunicationPassport {
+  /** How I communicate (e.g. "I use this app to speak. Give me time."). */
+  howICommunicate: string;
+  /** Things that help me (e.g. "Short sentences. One question at a time."). */
+  whatHelps: string;
+  /** Things that overwhelm me (e.g. "Loud rooms, bright lights, rushing."). */
+  whatOverwhelms: string;
+  /** Access needs (e.g. "I need my iPad within reach at all times."). */
+  accessNeeds: string;
+  /** Anything else important (medical, routines, comfort items). */
+  importantInfo: string;
+  trustedContacts: PassportContact[];
 }
 
 /** A "say X as Y" override applied before text-to-speech. */
@@ -236,4 +277,5 @@ export type Action =
   | { type: 'SET_SHOW_USAGE_HEATMAP'; payload: boolean }
   | { type: 'UPDATE_NGRAM_MODEL'; payload: { words: string[] } }
   | { type: 'ADD_PRONUNCIATION'; payload: PronunciationRule }
-  | { type: 'DELETE_PRONUNCIATION'; payload: string };
+  | { type: 'DELETE_PRONUNCIATION'; payload: string }
+  | { type: 'SET_PASSPORT'; payload: Partial<CommunicationPassport> };

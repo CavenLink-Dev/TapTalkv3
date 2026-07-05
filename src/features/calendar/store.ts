@@ -6,12 +6,15 @@
  * Steps are completable (toggleable). Auto-numbering is presentational —
  * step.id is stable, step.position is implicit from index.
  *
- * In-memory only for now. AsyncStorage swap-in lives in the persistence
- * pass (Step 8). Sample data primes the store so the user can see real
- * content on first open.
+ * Persisted to AsyncStorage: hydration kicks off at module load and every
+ * mutation persists best-effort, so plans and ticked-off steps survive
+ * relaunch. Sample data primes the store on first open only (nothing stored
+ * yet); once the user changes anything, their own data wins.
  */
 
 import { useSyncExternalStore } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { enqueueCloudSync } from '../cloud/sync';
 
 export interface PlanStep {
   id: string;
@@ -98,30 +101,60 @@ let plans: Plan[] = [
   },
 ];
 
+const STORAGE_KEY = '@taptalk/calendar/plans/v1';
+
 const listeners = new Set<() => void>();
+let hydrated = false;
 
 function emit(): void {
   listeners.forEach(l => l());
 }
 
+function persist(): void {
+  AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(plans)).catch(() => {});
+  enqueueCloudSync({ kind: 'calendar-plans', plans });
+}
+
+async function hydrate(): Promise<void> {
+  if (hydrated) return;
+  hydrated = true;
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!raw) return; // First open — keep the sample data.
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      plans = parsed as Plan[];
+      emit();
+    }
+  } catch {
+    // Keep in-memory data; never block the UI on storage.
+  }
+}
+
+hydrate();
+
 export function addPlan(plan: Plan): void {
   plans = [...plans, plan];
   emit();
+  persist();
 }
 
 export function removePlan(id: string): void {
   plans = plans.filter(p => p.id !== id);
   emit();
+  persist();
 }
 
 export function updatePlan(id: string, patch: Partial<Plan>): void {
   plans = plans.map(p => (p.id === id ? { ...p, ...patch } : p));
   emit();
+  persist();
 }
 
 export function toggleFavoritePlan(id: string): void {
   plans = plans.map(p => (p.id === id ? { ...p, favorite: !p.favorite } : p));
   emit();
+  persist();
 }
 
 /**
@@ -142,6 +175,7 @@ export function movePlan(id: string, delta: -1 | 1): void {
   next[b] = target;
   plans = next;
   emit();
+  persist();
 }
 
 export function toggleStepDone(planId: string, stepId: string): void {
@@ -151,6 +185,7 @@ export function toggleStepDone(planId: string, stepId: string): void {
       : { ...p, steps: p.steps.map(s => (s.id === stepId ? { ...s, done: !s.done } : s)) },
   );
   emit();
+  persist();
 }
 
 function subscribe(listener: () => void): () => void {
