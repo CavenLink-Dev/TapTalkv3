@@ -73,7 +73,7 @@ export default function RegStep5Consent() {
         <SelectableCard
           entranceIndex={1}
           label="I agree to the Privacy Policy"
-          description="Covers what's stored on this device vs in the cloud, your data deletion rights and retention."
+          description="Covers what's stored on this device, what may sync to your account, deletion rights and retention."
           selected={data.consents.privacy}
           onPress={() => updateConsents({ privacy: !data.consents.privacy })}
           accessibilityLabel="Agree to the Privacy Policy"
@@ -101,11 +101,11 @@ export default function RegStep5Consent() {
 
         <SelectableCard
           entranceIndex={guardian ? 3 : 2}
-          label="I understand profile photos are stored securely"
-          description="Your photo is yours. You can delete it at any time from Settings."
+          label="I understand profile photos are optional"
+          description="Profile photos can identify the AAC user. You can remove the photo later from Settings."
           selected={data.consents.photo}
           onPress={() => updateConsents({ photo: !data.consents.photo })}
-          accessibilityLabel="Acknowledge profile photo storage and deletion rights"
+          accessibilityLabel="Acknowledge optional profile photo use and deletion rights"
         />
       </View>
     </RegistrationScaffold>
