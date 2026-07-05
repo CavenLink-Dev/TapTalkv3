@@ -34,6 +34,7 @@ import {
   ACTIVITY_THEMES,
 } from '../../src/components/activities/ActivityCompletionOverlay';
 import { Card } from '../../src/components/native/Card';
+import { useAppSelector } from '../../src/hooks/useAppContext';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { colors, layout, radii, spacing, typography } from '../../src/theme/tokens';
 import { hapticLight, hapticSelection } from '../../src/utils/haptics';
@@ -82,6 +83,22 @@ const COLOURS: ColourDef[] = [
   { key: 'blue',   label: 'Blue',   hex: '#1E88E5' },
   { key: 'purple', label: 'Purple', hex: '#8E24AA' },
   { key: 'pink',   label: 'Pink',   hex: '#D81B60' },
+];
+
+/**
+ * CVD-safe palette — used when accessibility.colorScheme === 'cvd_safe'.
+ * Hues come from the Okabe–Ito colour-blind-safe set (same source as
+ * `symbolColorsCVD` in the theme tokens). Red maps to vermillion and green
+ * to bluish-green so the classic red/green conflict pair never appears;
+ * pink is dropped because it collides with purple for most CVD types.
+ */
+const COLOURS_CVD: ColourDef[] = [
+  { key: 'red',    label: 'Red',    hex: '#D55E00' }, // vermillion
+  { key: 'orange', label: 'Orange', hex: '#E69F00' },
+  { key: 'yellow', label: 'Yellow', hex: '#F0E442' },
+  { key: 'green',  label: 'Green',  hex: '#009E73' }, // bluish green
+  { key: 'blue',   label: 'Blue',   hex: '#0072B2' },
+  { key: 'purple', label: 'Purple', hex: '#CC79A7' }, // reddish purple
 ];
 
 const SHAPES_BY_DIFFICULTY: Record<Difficulty, ShapeKind[]> = {
@@ -147,9 +164,9 @@ function shuffle<T>(arr: readonly T[]): T[] {
   return out;
 }
 
-function generateColourSequence(count: number): ColourDef[] {
+function generateColourSequence(count: number, palette: ColourDef[]): ColourDef[] {
   const result: ColourDef[] = [];
-  while (result.length < count) result.push(...shuffle(COLOURS));
+  while (result.length < count) result.push(...shuffle(palette));
   return result.slice(0, count);
 }
 
@@ -526,6 +543,12 @@ export default function ColourPopScreen() {
   const router       = useRouter();
   const insets       = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
+  // CVD-safe palette follows the app-wide accessibility colour scheme —
+  // colours are not hardcoded where this setting should apply.
+  const colorScheme  = useAppSelector(state => state.accessibility.colorScheme);
+  const palette      = colorScheme === 'cvd_safe' ? COLOURS_CVD : COLOURS;
+  const paletteRef   = useRef(palette);
+  paletteRef.current = palette;
 
   // Settings — chosen once on the start overlay (§1, no in-game panels)
   const [difficulty,      setDifficulty]      = useState<Difficulty>('easy');
@@ -537,7 +560,7 @@ export default function ColourPopScreen() {
   // Game state
   const [phase,        setPhase]        = useState<Phase>('select');
   const [colourIdx,    setColourIdx]    = useState(0);
-  const [target,       setTarget]       = useState<ColourDef>(COLOURS[0]!);
+  const [target,       setTarget]       = useState<ColourDef>(palette[0]!);
   const [correctCount, setCorrectCount] = useState(0);
   const [activeItems,  setActiveItems]  = useState<FlyingItem[]>([]);
   const [tappedIds,    setTappedIds]    = useState<Set<string>>(new Set());
@@ -574,7 +597,7 @@ export default function ColourPopScreen() {
   const goal        = GOAL[difficulty];
   const shapeSize   = SHAPE_SIZE[difficulty];
   const speedCfg    = SPEED_CONFIG[speed];
-  const distractors = useMemo(() => COLOURS.filter(c => c.key !== target.key), [target]);
+  const distractors = useMemo(() => palette.filter(c => c.key !== target.key), [palette, target]);
 
   // Glitch shake + red flashes removed — wrong answers and timeouts get a
   // calm fade instead (hard DON'Ts: no red flash, no shake-cam; §4).
@@ -760,7 +783,7 @@ export default function ColourPopScreen() {
 
   // ── Game control ──────────────────────────────────────────────────────
   const initGame = useCallback(() => {
-    colourSeqRef.current = generateColourSequence(TOTAL_COLOURS);
+    colourSeqRef.current = generateColourSequence(TOTAL_COLOURS, paletteRef.current);
     const first = colourSeqRef.current[0]!;
     setTarget(first);
     setColourIdx(0);

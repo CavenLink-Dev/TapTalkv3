@@ -155,7 +155,9 @@ export const colorsDark: ColorTokens = {
 
   // Progress bar
   progressFill:       '#199AEE',
-  progressTrack:      '#D5E1E8',
+  /** Dark-specific: muted slate track — visible against dark surfaces
+      without the glare of the light-mode pale blue. */
+  progressTrack:      '#454D55',
 
   // Strokes / borders
   border:             '#73787E',
@@ -166,12 +168,16 @@ export const colorsDark: ColorTokens = {
   danger:             '#F3312A',
   success:            '#30D158',
   warning:            '#FF9500',
-  disabled:           '#D5E1E8',
+  /** Dark-specific: calm slate that still reads as "off" against dark
+      surfaces (the light #D5E1E8 glared on dark backgrounds). Passes the
+      3:1 non-text contrast guide against #111112. */
+  disabled:           '#4A525A',
 
-  // Folder cells
-  folderBg:           '#EDE070',
-  folderFlap:         'rgba(255,255,255,0.81)',
-  folderFlapSecondary:'#FFFED7',
+  // Folder cells — desaturated gold instead of the light-mode bright yellow
+  // (glare / sensory load on a dark board), still clearly "folder".
+  folderBg:           '#A89B45',
+  folderFlap:         'rgba(255,255,255,0.32)',
+  folderFlapSecondary:'#57532E',
 
   // Selection states
   selectionBg:        '#1A3A5F',

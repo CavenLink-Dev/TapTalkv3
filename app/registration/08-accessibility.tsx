@@ -280,7 +280,7 @@ export default function RegStep8Accessibility() {
               accessibilityLabel="Colour-vision-deficiency safe scheme"
             />
           </View>
-          <Text style={[styles.schemeNote, { color: colors.textTertiary }]}>
+          <Text style={[styles.schemeNote, { color: t.colors.textTertiary }]}>
             CVD-safe remaps the categories for protanopia, deuteranopia, and
             tritanopia.
           </Text>
@@ -301,10 +301,14 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
+// Uses the ACTIVE theme text colour (not the static light token) so section
+// headings like "Theme" and "Symbol Colour Scheme" stay readable when the
+// user has just switched this screen into dark mode.
 function StaticSection({ label, children }: { label: string; children: React.ReactNode }) {
+  const t = useTheme();
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: colors.text }]}>{label}</Text>
+      <Text style={[styles.sectionLabel, { color: t.colors.text }]}>{label}</Text>
       {children}
     </View>
   );

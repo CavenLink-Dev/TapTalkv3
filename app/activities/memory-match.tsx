@@ -60,12 +60,17 @@ const SHOW_DURATION: Record<Difficulty, number> = { easy: 2000, medium: 1400, ha
 const TOTAL_LEVELS: Record<Difficulty, number> = { easy: 8, medium: 12, hard: 16 };
 const DIFF_LABEL: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 
-const SHAPES: { color: string; radius: number; label: string }[] = [
-  { color: '#199AEE', radius: 50,  label: 'Blue circle'    },
-  { color: '#5CD65C', radius: 8,   label: 'Green square'   },
-  { color: '#BD73FF', radius: 28,  label: 'Purple rounded' },
-  { color: '#F58625', radius: 50,  label: 'Orange circle'  },
-  { color: '#FA838E', radius: 8,   label: 'Pink square'    },
+// Every shape is geometrically unique — colour is never the only difference
+// (two circles / two squares previously differed by colour alone, which
+// failed users with colour-vision deficiency). Shapes stay simple and 2D.
+type ShapeKind = 'circle' | 'square' | 'diamond' | 'triangle' | 'pill';
+
+const SHAPES: { color: string; kind: ShapeKind; label: string }[] = [
+  { color: '#199AEE', kind: 'circle',   label: 'Blue circle'     },
+  { color: '#5CD65C', kind: 'square',   label: 'Green square'    },
+  { color: '#BD73FF', kind: 'diamond',  label: 'Purple diamond'  },
+  { color: '#F58625', kind: 'triangle', label: 'Orange triangle' },
+  { color: '#FA838E', kind: 'pill',     label: 'Pink bar'        },
 ];
 
 function randomRound(): Round {
@@ -80,12 +85,80 @@ function randomRound(): Round {
 
 function Shape({ index, size = 64 }: { index: number; size?: number }) {
   const s = SHAPES[index]!;
-  return (
-    <View
-      style={{ width: size, height: size, borderRadius: s.radius, backgroundColor: s.color }}
-      accessibilityLabel={s.label}
-    />
-  );
+  switch (s.kind) {
+    case 'circle':
+      return (
+        <View
+          style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: s.color }}
+          accessibilityLabel={s.label}
+        />
+      );
+    case 'square':
+      return (
+        <View
+          style={{ width: size, height: size, borderRadius: Math.round(size * 0.12), backgroundColor: s.color }}
+          accessibilityLabel={s.label}
+        />
+      );
+    case 'diamond': {
+      // Square rotated 45° and scaled to stay inside the same footprint.
+      const edge = Math.round(size * 0.72);
+      return (
+        <View
+          style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}
+          accessibilityLabel={s.label}
+        >
+          <View
+            style={{
+              width: edge,
+              height: edge,
+              borderRadius: Math.round(edge * 0.1),
+              backgroundColor: s.color,
+              transform: [{ rotate: '45deg' }],
+            }}
+          />
+        </View>
+      );
+    }
+    case 'triangle':
+      // Border-trick triangle — flat 2D, no decoration.
+      return (
+        <View
+          style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}
+          accessibilityLabel={s.label}
+        >
+          <View
+            style={{
+              width: 0,
+              height: 0,
+              borderLeftWidth: size / 2,
+              borderRightWidth: size / 2,
+              borderBottomWidth: size * 0.88,
+              borderLeftColor: 'transparent',
+              borderRightColor: 'transparent',
+              borderBottomColor: s.color,
+            }}
+          />
+        </View>
+      );
+    case 'pill':
+      // Wide rounded bar — clearly distinct from circle and square.
+      return (
+        <View
+          style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}
+          accessibilityLabel={s.label}
+        >
+          <View
+            style={{
+              width: size,
+              height: Math.round(size * 0.44),
+              borderRadius: size / 2,
+              backgroundColor: s.color,
+            }}
+          />
+        </View>
+      );
+  }
 }
 
 // ─── StartOverlay ────────────────────────────────────────────────────────────
@@ -399,11 +472,11 @@ export default function MemoryMatchScreen() {
   const isCorrect = chosen !== null && chosen === round.target;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.surface }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* ── Header — always visible ─────────────────────────────────── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: t.colors.surface }]}>
         <ActivityProgressBar
           current={phase === 'play' ? level : 1}
           total={totalLevels}
@@ -513,7 +586,7 @@ export default function MemoryMatchScreen() {
                     accessibilityLabel={`Choose ${SHAPES[shapeIndex]!.label}`}
                     style={({ pressed }) => [
                       styles.choiceCard,
-                      { backgroundColor: '#FFFFFF', borderColor },
+                      { backgroundColor: t.colors.surface, borderColor },
                       pressed && styles.choicePressed,
                     ]}
                   >

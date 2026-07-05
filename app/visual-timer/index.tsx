@@ -45,6 +45,7 @@ import { DisclosureRow } from '../../src/components/native/DisclosureRow';
 import { WheelPicker } from '../../src/components/native/WheelPicker';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { radii, spacing, typography } from '../../src/theme/tokens';
+import { fonts } from '../../src/theme/fonts';
 import { hapticSelection, hapticSuccess } from '../../src/utils/haptics';
 import { useTheme } from '../../src/theme/useTheme';
 
@@ -177,7 +178,8 @@ function ModernFace({ remainingSec }: { remainingSec: number }) {
               fontSize,
               fontWeight: '800',
               fontVariant: ['tabular-nums'],
-              fontFamily: Platform.select({ ios: undefined, android: 'sans-serif-medium' }),
+              // App font system — no platform-specific raw font literals.
+              fontFamily: fonts.bodyHeavy,
             }}
           >
             {value}
@@ -240,10 +242,9 @@ function OldSchoolFace({ remainingSec }: { remainingSec: number }) {
               fontSize,
               fontWeight: '700',
               fontVariant: ['tabular-nums'],
-              fontFamily: Platform.select({
-                ios: 'Courier New',
-                android: 'monospace',
-              }),
+              // App font system (tabular numerals keep the digital feel) —
+              // replaces the unsupported 'Courier New' / 'monospace' literals.
+              fontFamily: fonts.bodyHeavy,
             }}
           >
             {value}
@@ -1305,6 +1306,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl},
   digitalText: {
     color: '#FFFFFF',
+    fontFamily: fonts.displayHeavy,
     fontSize: 72,
     fontWeight: '900',
     letterSpacing: 2,
