@@ -33,6 +33,8 @@ import Reanimated, {
   SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Svg, { Path as SvgPath } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../src/components/native/Icon';
@@ -509,7 +511,8 @@ type DockMode =
   | 'folderCollapsed' // > / Add
   | 'editControls'    // Back / Select / Move / Delete / Resize / Done
   | 'editClean'       // Delete? / Add + / Done (resize-mode dock)
-  | 'editDirty';      // Cancel / Save
+  | 'editDirty'       // Cancel / Save
+  | 'quickManage';    // Back / Select–Unselect / Create + / Done? (Quick manage)
 
 /**
  * Edit tools inside the new Edit Control Bar. Only one tool is active
@@ -536,9 +539,8 @@ type BoardUndoEntry = {
   restoreTileIds?: string[];
 };
 
-// How much of the hidden control bar keeps peeking in from the left edge
-// so the user always has a visible, tappable way back (item 4 — Hide).
-const DOCK_PEEK = 30;
+// The hidden control bar slides fully offscreen; the DockPeekPill on the
+// left edge is the persistent, visible way back (item 4 v2 — Hide).
 
 const BoardDockAction = React.memo(function BoardDockAction({
   label,
@@ -554,6 +556,7 @@ const BoardDockAction = React.memo(function BoardDockAction({
   isToggle = false,
   isActive = false,
   wide = false,
+  tint,
 }: {
   label?: string;
   icon?: string;
@@ -571,6 +574,8 @@ const BoardDockAction = React.memo(function BoardDockAction({
   isActive?: boolean;
   /** Auto-width for readable multi-word labels (e.g. Board Settings). */
   wide?: boolean;
+  /** Optional border + content colour override (e.g. red Unselect). */
+  tint?: string;
 }) {
   const t = useTheme();
   const dim = size;
@@ -617,8 +622,8 @@ const BoardDockAction = React.memo(function BoardDockAction({
             paddingVertical: DOCK_ACTION_PADDING,
             backgroundColor: bg,
             borderColor: pressed && effectiveKind !== 'primary'
-              ? t.colors.text
-              : t.colors.symbolOutline,
+              ? (tint ?? t.colors.text)
+              : (tint ?? t.colors.symbolOutline),
             borderWidth: effectiveKind === 'primary' ? 0 : 1.6,
           },
           disabled && { opacity: 0.4 },
@@ -628,12 +633,14 @@ const BoardDockAction = React.memo(function BoardDockAction({
       {({ pressed }) => {
         const contentColor =
           pressed && effectiveKind !== 'primary'
-            ? t.colors.text
+            ? (tint ?? t.colors.text)
             : effectiveKind === 'primary'
               ? '#FFFFFF'
-              : effectiveKind === 'muted'
-                ? t.colors.textMuted
-                : t.colors.text;
+              : tint
+                ? tint
+                : effectiveKind === 'muted'
+                  ? t.colors.textMuted
+                  : t.colors.text;
 
         if (iconOnly && icon) {
           return (
@@ -834,6 +841,100 @@ function DockPopover({
     </RNAnimated.View>
   );
 }
+
+// ── Quick tag badge ──────────────────────────────────────────────────────
+// Small circular lightning badge overlaid on Quick-tagged symbols
+// (assets/symbol/quick_tag_for_quick_control_bar_selected.svg, inlined so
+// it renders through react-native-svg like every other glyph). Rendered
+// at 0.4 opacity while the Manage bar is open ("already tagged, editable").
+const QuickTagBadge = React.memo(function QuickTagBadge({
+  size = 16,
+  dimmed = false,
+}: { size?: number; dimmed?: boolean }) {
+  return (
+    <View style={[styles.quickBadge, dimmed && { opacity: 0.4 }]} pointerEvents="none">
+      <Svg width={size} height={size} viewBox="0 0 16.1328 15.7715">
+        <SvgPath fill="#FFFFFF" d="M7.88086 14.2773C4.3457 14.2773 1.49414 11.416 1.49414 7.88086C1.49414 4.3457 4.3457 1.48438 7.88086 1.48438C11.416 1.48438 14.2773 4.3457 14.2773 7.88086C14.2773 11.416 11.416 14.2773 7.88086 14.2773Z" />
+        <SvgPath fill="#0A84FF" d="M7.88086 15.7617C12.2363 15.7617 15.7715 12.2363 15.7715 7.88086C15.7715 3.52539 12.2363 0 7.88086 0C3.53516 0 0 3.52539 0 7.88086C0 12.2363 3.53516 15.7617 7.88086 15.7617ZM7.88086 14.2773C4.3457 14.2773 1.49414 11.416 1.49414 7.88086C1.49414 4.3457 4.3457 1.48438 7.88086 1.48438C11.416 1.48438 14.2773 4.3457 14.2773 7.88086C14.2773 11.416 11.416 14.2773 7.88086 14.2773Z" />
+        <SvgPath fill="#0A84FF" d="M4.55078 8.37891C4.55078 8.58398 4.7168 8.74023 4.93164 8.74023L7.4707 8.74023L6.12305 12.373C5.92773 12.9004 6.48438 13.1836 6.83594 12.7637L10.957 7.58789C11.0449 7.49023 11.0938 7.37305 11.0938 7.26562C11.0938 7.06055 10.918 6.9043 10.7129 6.9043L8.16406 6.9043L9.51172 3.28125C9.7168 2.75391 9.15039 2.46094 8.80859 2.89062L4.67773 8.05664C4.59961 8.1543 4.55078 8.27148 4.55078 8.37891Z" />
+      </Svg>
+    </View>
+  );
+});
+
+// ── DockPeekPill ─────────────────────────────────────────────────────────
+// Persistent "way back" while the control bar is hidden. A soft blob pill
+// hugging the left edge, vertically centred where the dock used to sit,
+// with a vertical grip (three stacked bars) so it reads as a floating
+// handle above the board. Tap restores the controls; long-press opens a
+// small popover with partial-hide toggles (Nav Bar / Control Bar). Springs
+// in from the left edge when the dock hides; instant under Reduce Motion.
+function DockPeekPill({
+  onPress,
+  onLongPress,
+}: {
+  onPress: () => void;
+  onLongPress: () => void;
+}) {
+  const t = useTheme();
+  const reduceMotion = useReduceMotion();
+  const anim = useRef(new RNAnimated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduceMotion) { anim.setValue(1); return; }
+    anim.setValue(0);
+    RNAnimated.spring(anim, {
+      toValue: 1,
+      friction: 7,
+      tension: 64,
+      useNativeDriver: true,
+    }).start();
+  }, [anim, reduceMotion]);
+
+  return (
+    <RNAnimated.View
+      style={[
+        styles.dockPeekPillMount,
+        {
+          opacity: anim,
+          transform: [{
+            translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [-64, 0] }),
+          }],
+        },
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Show controls"
+        accessibilityHint="Double tap to bring back the control bar and navigation bar. Long press for partial options."
+        onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        hitSlop={{ top: 10, bottom: 10, left: 0, right: 10 }}
+        style={({ pressed }) => [
+          styles.dockPeekPill,
+          {
+            backgroundColor: t.isDark ? t.colors.navBackground : '#FFFFFF',
+            borderColor: t.colors.symbolOutline,
+            // Brief dim on press — opacity feedback, no colour switch.
+            opacity: pressed ? 0.7 : 1,
+          },
+        ]}
+      >
+        {/* Vertical "burger" grip — three short stacked bars. */}
+        <View style={styles.dockPeekGrip}>
+          <View style={[styles.dockPeekGripBar, { backgroundColor: t.colors.textMuted }]} />
+          <View style={[styles.dockPeekGripBar, { backgroundColor: t.colors.textMuted }]} />
+          <View style={[styles.dockPeekGripBar, { backgroundColor: t.colors.textMuted }]} />
+        </View>
+      </Pressable>
+    </RNAnimated.View>
+  );
+}
+
+// Persisted Quick-tag storage key — the user's pinned Quick symbols
+// survive app restarts (session-independent, all boards share one list).
+const QUICK_TAGS_STORAGE_KEY = 'taptalk.quickTaggedIds.v1';
 
 // Mulberry pictograms render inside the `symbolMount` region at ~52% of
 // the tile size, which keeps them comfortably below the label without
@@ -2619,12 +2720,59 @@ export default function TalkScreen() {
   // ── Hide / Fullscreen state (item 4) ────────────────────────────────────
   // hideMenuVisible: vertical popover above Hide (Nav Bar / Control Bar / All).
   // navHidden: bottom tab bar collapsed. dockHidden: control bar slid left
-  // with a DOCK_PEEK sliver still visible as the way back.
+  // fully offscreen, with the DockPeekPill as the visible way back.
   const [hideMenuVisible, setHideMenuVisible] = useState(false);
   const [navHidden, setNavHidden] = useState(false);
   const [dockHidden, setDockHidden] = useState(false);
   const [hideAnchor, setHideAnchor] = useState({ x: 0, width: 0 });
   const dockSlide = useRef(new RNAnimated.Value(0)).current;
+  // Peek-pill long-press popover (partial hide toggles) while dock hidden.
+  const [peekMenuVisible, setPeekMenuVisible] = useState(false);
+  // ── Quick feature state ─────────────────────────────────────────────────
+  // quickTaggedIds: persisted set of tile IDs the user pinned as "Quick".
+  // Empty set ⇒ Quick newcomer (Quick press nudges towards Manage).
+  const [quickTaggedIds, setQuickTaggedIds] = useState<Set<string>>(new Set());
+  // quickViewActive: the Quick view overlay (reorder + highlight + dim).
+  const [quickViewActive, setQuickViewActive] = useState(false);
+  // quickDockMode: 'manage' shows the green Manage pill above the dock.
+  type QuickDockMode = 'hidden' | 'manage';
+  const [quickDockMode, setQuickDockMode] = useState<QuickDockMode>('hidden');
+  // quickManageOpen: the Manage Control Bar replaces the default dock row.
+  const [quickManageOpen, setQuickManageOpen] = useState(false);
+  // Ephemeral selection intents while managing (session only).
+  const [manageSelectedIds, setManageSelectedIds] = useState<Set<string>>(new Set());
+  // A symbol was just created via Create + (auto-tagged) — makes Done appear.
+  const [manageCreatedTag, setManageCreatedTag] = useState(false);
+  // Accidental-selection guard: taps that land while (or right after) a
+  // scroll gesture is moving must not toggle selection.
+  const isScrollingRef = useRef(false);
+  // One auto-scroll-to-top per Quick activation.
+  const hasAutoScrolledRef = useRef(false);
+  const [quickAnchor, setQuickAnchor] = useState({ x: 0, width: 0 });
+  // Reanimated shared values for the Quick button feedback + Manage pill.
+  const quickButtonShake = useSharedValue(0);
+  const quickButtonErrorTint = useSharedValue(0);
+  const manageAttentionPulse = useSharedValue(0);
+  const manageEntrance = useSharedValue(0);
+  const manageDoneEntrance = useSharedValue(0);
+  const unselectBlink = useSharedValue(1);
+
+  // Hydrate the persisted Quick list once on mount.
+  useEffect(() => {
+    AsyncStorage.getItem(QUICK_TAGS_STORAGE_KEY)
+      .then(raw => {
+        if (!raw) return;
+        const ids = JSON.parse(raw);
+        if (Array.isArray(ids)) setQuickTaggedIds(new Set(ids.filter(id => typeof id === 'string')));
+      })
+      .catch(() => {});
+  }, []);
+  // Persist on every change (cheap: a handful of IDs).
+  const quickHydratedRef = useRef(false);
+  useEffect(() => {
+    if (!quickHydratedRef.current) { quickHydratedRef.current = true; return; }
+    AsyncStorage.setItem(QUICK_TAGS_STORAGE_KEY, JSON.stringify(Array.from(quickTaggedIds))).catch(() => {});
+  }, [quickTaggedIds]);
   // ── Edit undo stack (Phase 2) ───────────────────────────────────────────
   // Every board edit (delete / duplicate / move / group / favourite) pushes
   // a snapshot BEFORE mutating. Undo pops one and restores the layouts map
@@ -2873,8 +3021,15 @@ export default function TalkScreen() {
     };
     userTilesRef.current.set(tileId, newTile);
     setLayoutDirty(true);
+    // Created from the Quick Manage bar → Quick-tagged from birth, and
+    // Done becomes visible (a pending change now exists).
+    if (quickManageOpen) {
+      setQuickTaggedIds(prev => new Set(prev).add(tileId));
+      setManageCreatedTag(true);
+      AccessibilityInfo.announceForAccessibility?.(`${result.label} added and pinned to Quick`);
+    }
     hapticIfEnabled();
-  }, [activeMode, hapticIfEnabled]);
+  }, [activeMode, hapticIfEnabled, quickManageOpen]);
 
   // ── Add Folder confirm: insert folder tile ──────────────────────────
   const handleAddFolderConfirm = useCallback((result: { label: string; boardKey: string; color: string; mulberrySymbolId?: string }) => {
@@ -3447,12 +3602,14 @@ export default function TalkScreen() {
     // Edit Control Bar wins over the folder/home docks (but not over the
     // dirty edit-mode dock, which is a stronger commitment gate).
     if (editControlsOpen) return 'editControls';
+    // Quick Manage replaces the default dock row until Back/Done.
+    if (quickManageOpen) return 'quickManage';
     if (addFlowExpanded) return 'addExpanded';
     if (activeMode === 'home') {
       return homeDockExpanded ? 'homeExpanded' : 'homeCollapsed';
     }
     return folderDockExpanded ? 'folderExpanded' : 'folderCollapsed';
-  }, [activeMode, addFlowExpanded, editControlsOpen, editMode, folderDockExpanded, homeDockExpanded, layoutDirty]);
+  }, [activeMode, addFlowExpanded, editControlsOpen, editMode, folderDockExpanded, homeDockExpanded, layoutDirty, quickManageOpen]);
 
   // On board change: reset add flow and popovers; the default_control_bar
   // (Add + | Sort | Fullscreen | Hide) is always expanded now, so home and
@@ -3465,6 +3622,12 @@ export default function TalkScreen() {
     setActiveSort(null);
     sortSnapshotRef.current = null;
     setUndoStack([]); // undo history is per board
+    // Quick Manage is per-visit — leaving the board discards pending
+    // selection intents. The Quick view itself (and tags) carry across.
+    setQuickManageOpen(false);
+    setManageSelectedIds(new Set());
+    setManageCreatedTag(false);
+    setQuickDockMode('hidden');
     if (activeMode === 'home') {
       setFolderDockExpanded(false);
       clearFolderTimer();
@@ -3801,6 +3964,26 @@ export default function TalkScreen() {
     }));
   }, [activeMode, layouts]);
 
+  // ── Quick view derived layout ────────────────────────────────────────
+  // While the Quick view (or the Manage bar) is active, Quick-tagged tiles
+  // float to the top of the grid. DERIVED-ONLY: a render-time reorder in
+  // the style of rebuildWithFavourites — it never calls setLayouts and
+  // never touches the persisted board layout. Suspended during editing so
+  // drag/resize slot math always matches what's on screen.
+  const quickOrderActive =
+    (quickViewActive || quickManageOpen) &&
+    quickTaggedIds.size > 0 &&
+    !editMode &&
+    !editControlsOpen;
+  const displayLayout = useMemo<BoardLayout>(() => {
+    if (!quickOrderActive) return activeLayout;
+    const ordered = [...activeLayout].sort((a, b) => a.slot - b.slot);
+    const quick = ordered.filter(p => quickTaggedIds.has(p.id));
+    if (quick.length === 0) return activeLayout;
+    const rest = ordered.filter(p => !quickTaggedIds.has(p.id));
+    return [...quick, ...rest].map((p, i) => ({ ...p, slot: i }));
+  }, [activeLayout, quickOrderActive, quickTaggedIds]);
+
   // Fast lookup: slot index → placement (for collision checks + swap).
   const layoutBySlot = useMemo(() => {
     const m = new Map<number, TilePlacement>();
@@ -3926,14 +4109,14 @@ export default function TalkScreen() {
   }, [hapticIfEnabled, navHidden, reduceMotion]);
 
   // Control Bar option — slides the dock right-to-left until only a
-  // DOCK_PEEK sliver stays on the left edge (tap it to bring it back).
+  // the peek pill takes over on the left edge (tap it to bring it back).
   const handleHideDock = useCallback(() => {
     hapticIfEnabled();
     setHideMenuVisible(false);
     setSortMenuVisible(false);
     setDockHidden(true);
     AccessibilityInfo.announceForAccessibility?.(
-      'Controls hidden. Tap the lower left edge of the screen to bring them back.',
+      'Controls hidden, tap left edge to restore',
     );
   }, [hapticIfEnabled]);
 
@@ -3947,19 +4130,247 @@ export default function TalkScreen() {
     setTabBarHidden(true);
     setDockHidden(true);
     AccessibilityInfo.announceForAccessibility?.(
-      'All controls hidden. Tap the lower left edge of the screen to bring them back.',
+      'Controls hidden, tap left edge to restore',
     );
   }, [hapticIfEnabled, reduceMotion]);
 
-  // Tap on the peeking sliver restores everything at once.
+  // Tap on the peek pill restores everything at once.
   const handleChromeRestore = useCallback(() => {
     hapticIfEnabled();
     if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setPeekMenuVisible(false);
     setNavHidden(false);
     setTabBarHidden(false);
     setDockHidden(false);
     AccessibilityInfo.announceForAccessibility?.('Controls shown');
   }, [hapticIfEnabled, reduceMotion]);
+
+  // Long-press on the peek pill — small popover with partial hide toggles
+  // ("Hide control bar" / "Hide nav bar") so users can choose partial vs
+  // full hiding instead of always restoring both at once.
+  const handlePeekLongPress = useCallback(() => {
+    hapticIfEnabled();
+    setPeekMenuVisible(v => !v);
+  }, [hapticIfEnabled]);
+
+  // Peek popover: toggle just the control bar back (nav stays as-is).
+  const handlePeekToggleDock = useCallback(() => {
+    hapticIfEnabled();
+    setPeekMenuVisible(false);
+    setDockHidden(false);
+    AccessibilityInfo.announceForAccessibility?.('Control bar shown');
+  }, [hapticIfEnabled]);
+
+  // ── Quick feature handlers ──────────────────────────────────────────────
+  const handleQuickAnchorLayout = useCallback((e: LayoutChangeEvent) => {
+    const { x, width: w } = e.nativeEvent.layout;
+    setQuickAnchor({ x, width: w });
+  }, []);
+
+  const handleQuickPress = useCallback(() => {
+    hapticIfEnabled();
+    setSortMenuVisible(false);
+    setHideMenuVisible(false);
+
+    // NEWCOMER PATH: no Quick symbols tagged yet — subtle error shake +
+    // faint red tint on the Quick button, then surface the Manage pill
+    // above the dock with a one-shot green attention pulse.
+    if (quickTaggedIds.size === 0) {
+      if (!reduceMotion) {
+        quickButtonShake.value = withSequence(
+          withTiming(-4, { duration: 50 }),
+          withTiming(4, { duration: 50 }),
+          withTiming(-3, { duration: 40 }),
+          withTiming(3, { duration: 40 }),
+          withTiming(0, { duration: 35 }),
+        );
+        quickButtonErrorTint.value = withSequence(
+          withTiming(1, { duration: 80 }),
+          withTiming(0, { duration: 400 }),
+        );
+      }
+      hapticError();
+      setQuickDockMode('manage');
+      if (!reduceMotion) {
+        manageAttentionPulse.value = withSequence(
+          withTiming(1, { duration: 150 }),
+          withTiming(0, { duration: 300 }),
+        );
+      }
+      AccessibilityInfo.announceForAccessibility?.(
+        'No Quick symbols yet. Tap Manage above the controls to pin symbols first.',
+      );
+      return;
+    }
+
+    // EXPERIENCED USER PATH — toggle the Quick view.
+    if (quickViewActive) {
+      if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setQuickViewActive(false);
+      setQuickDockMode('hidden');
+      hasAutoScrolledRef.current = false;
+      AccessibilityInfo.announceForAccessibility?.('Quick view off');
+      return;
+    }
+
+    if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setQuickViewActive(true);
+    // Auto-scroll to top — one-time per activation; skipped if already there.
+    if (!hasAutoScrolledRef.current) {
+      if ((scrollPositions.current[activeMode] ?? 0) > 1) {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      }
+      hasAutoScrolledRef.current = true;
+    }
+    AccessibilityInfo.announceForAccessibility?.(
+      `Quick view on. ${quickTaggedIds.size} Quick symbol${quickTaggedIds.size !== 1 ? 's' : ''} at the top.`,
+    );
+  }, [activeMode, hapticIfEnabled, manageAttentionPulse, quickButtonErrorTint, quickButtonShake, quickTaggedIds.size, quickViewActive, reduceMotion]);
+
+  // Manage pill → open the Manage Control Bar (replaces the dock row).
+  const handleManagePress = useCallback(() => {
+    hapticIfEnabled();
+    setSortMenuVisible(false);
+    setHideMenuVisible(false);
+    setQuickDockMode('hidden');
+    setManageSelectedIds(new Set());
+    setManageCreatedTag(false);
+    setQuickManageOpen(true);
+    AccessibilityInfo.announceForAccessibility?.(
+      quickTaggedIds.size > 0
+        ? 'Manage Quick. Tap symbols to add or remove them, then Done.'
+        : 'Manage Quick. Tap symbols to pin them, or Create a new one, then Done.',
+    );
+  }, [hapticIfEnabled, quickTaggedIds.size]);
+
+  const closeQuickManage = useCallback(() => {
+    setManageSelectedIds(new Set());
+    setManageCreatedTag(false);
+    setQuickManageOpen(false);
+    setQuickDockMode('hidden');
+  }, []);
+
+  // Back — prompt when there are unsaved selection changes.
+  const handleQuickManageBack = useCallback(() => {
+    hapticIfEnabled();
+    if (manageSelectedIds.size > 0 || manageCreatedTag) {
+      Alert.alert('Discard changes?', undefined, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: closeQuickManage },
+      ]);
+      return;
+    }
+    closeQuickManage();
+  }, [closeQuickManage, hapticIfEnabled, manageCreatedTag, manageSelectedIds.size]);
+
+  // Select / Unselect — with a selection: clears it (button reads
+  // "Unselect", red). Without one: reminds how selection works.
+  const handleQuickSelectToggle = useCallback(() => {
+    hapticIfEnabled();
+    if (manageSelectedIds.size > 0) {
+      setManageSelectedIds(new Set());
+      AccessibilityInfo.announceForAccessibility?.('Selection cleared');
+      return;
+    }
+    AccessibilityInfo.announceForAccessibility?.('Tap symbols on the board to select them');
+  }, [hapticIfEnabled, manageSelectedIds.size]);
+
+  // Create + — same AddSymbolModal; the confirm handler auto-tags the new
+  // tile as Quick while the Manage bar is open (tagged from birth).
+  const handleQuickCreate = useCallback(() => {
+    hapticIfEnabled();
+    setAddSymbolModalVisible(true);
+  }, [hapticIfEnabled]);
+
+  // Done — reconcile intents: selected non-Quick tiles become Quick,
+  // selected Quick tiles are removed. Then jump straight into Quick view.
+  const handleQuickManageDone = useCallback(() => {
+    hapticIfEnabled();
+    const next = new Set(quickTaggedIds);
+    manageSelectedIds.forEach(id => {
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+    });
+    setQuickTaggedIds(next);
+    closeQuickManage();
+    if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (next.size > 0) {
+      setQuickViewActive(true);
+      hasAutoScrolledRef.current = true; // Done already lands you at the list
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      AccessibilityInfo.announceForAccessibility?.(
+        `Quick updated. ${next.size} Quick symbol${next.size !== 1 ? 's' : ''}.`,
+      );
+    } else {
+      setQuickViewActive(false);
+      AccessibilityInfo.announceForAccessibility?.('All Quick symbols removed');
+    }
+  }, [closeQuickManage, hapticIfEnabled, manageSelectedIds, quickTaggedIds, reduceMotion]);
+
+  // Done is conditional — only when there are pending changes to save
+  // (selection intents, or a symbol just created via Create +). This is
+  // the same dirty-state gating pattern as editDirty vs editClean.
+  const manageDoneVisible = quickManageOpen && (manageSelectedIds.size > 0 || manageCreatedTag);
+
+  // The green Manage pill floats above the dock while the Quick view is
+  // active (experienced users' path into editing) or right after the
+  // newcomer nudge — never while the Manage bar itself is open.
+  const manageVisible =
+    !quickManageOpen &&
+    (quickDockMode === 'manage' || quickViewActive) &&
+    (dockMode === 'homeExpanded' || dockMode === 'folderExpanded');
+
+  // ── Quick animated styles + entrance effects ────────────────────────────
+  const quickShakeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: quickButtonShake.value }],
+  }));
+  // Faint red overlay only (opacity 0 → 0.25) — never a hard colour switch.
+  const quickTintStyle = useAnimatedStyle(() => ({
+    opacity: quickButtonErrorTint.value * 0.25,
+  }));
+  const manageAnimStyle = useAnimatedStyle(() => ({
+    opacity: manageEntrance.value,
+    transform: [
+      { translateY: (1 - manageEntrance.value) * 14 },
+      { scale: 1 + manageAttentionPulse.value * 0.06 },
+    ],
+  }));
+  const manageDoneStyle = useAnimatedStyle(() => ({
+    opacity: manageDoneEntrance.value,
+    transform: [{ scale: 0.7 + manageDoneEntrance.value * 0.3 }],
+  }));
+  const unselectBlinkStyle = useAnimatedStyle(() => ({
+    opacity: unselectBlink.value,
+  }));
+
+  // Manage pill springs in from below and settles gently.
+  useEffect(() => {
+    if (manageVisible) {
+      manageEntrance.value = reduceMotion
+        ? 1
+        : withSpring(1, { damping: 16, stiffness: 190 });
+    } else {
+      manageEntrance.value = 0;
+    }
+  }, [manageEntrance, manageVisible, reduceMotion]);
+
+  // Done springs in when it first appears; disappears instantly.
+  useEffect(() => {
+    manageDoneEntrance.value = manageDoneVisible
+      ? (reduceMotion ? 1 : withSpring(1, { damping: 14, stiffness: 240 }))
+      : 0;
+  }, [manageDoneEntrance, manageDoneVisible, reduceMotion]);
+
+  // Select ↔ Unselect switch — a brief 150ms blink stands in for the
+  // colour tween (BoardDockAction handles the blue → red tint itself).
+  const hasManageSelection = manageSelectedIds.size > 0;
+  useEffect(() => {
+    if (!quickManageOpen || reduceMotion) return;
+    unselectBlink.value = withSequence(
+      withTiming(0.55, { duration: 75 }),
+      withTiming(1, { duration: 75 }),
+    );
+  }, [hasManageSelection, quickManageOpen, reduceMotion, unselectBlink]);
 
   // Dock slide animation — right-to-left "cuddle" leaving a half-visible
   // sliver. Native-driver transform; instant under Reduce Motion.
@@ -4278,6 +4689,35 @@ export default function TalkScreen() {
   }, [activeMode, dispatch]);
 
   const handleTilePress = useCallback((tile: BoardTile, rect: WindowRect | null) => {
+    // ── Quick Manage gate ─────────────────────────────────────────────────
+    // While the Manage bar is open, taps toggle a tile's Quick intent
+    // instead of speaking / opening folders. Nav tiles (back/home) still
+    // work. Accidental-selection guard: a tap that lands while a scroll
+    // gesture is in flight is a scroll, not a choice — skip it.
+    if (quickManageOpen) {
+      if (tile.id === 'back' || tile.id === 'home') {
+        // Fall through to normal nav — allows leaving a folder mid-manage.
+      } else {
+        if (isScrollingRef.current) return;
+        hapticIfEnabled();
+        const wasSelected = manageSelectedIds.has(tile.id);
+        setManageSelectedIds(prev => {
+          const next = new Set(prev);
+          if (next.has(tile.id)) next.delete(tile.id);
+          else next.add(tile.id);
+          return next;
+        });
+        const isTagged = quickTaggedIds.has(tile.id);
+        AccessibilityInfo.announceForAccessibility?.(
+          wasSelected
+            ? `${tile.label} deselected`
+            : isTagged
+              ? `${tile.label} will be removed from Quick`
+              : `${tile.label} will be added to Quick`,
+        );
+        return;
+      }
+    }
     // ── Edit tool gates (Select / Move) ───────────────────────────────────
     // In Select Mode, taps toggle selection instead of speaking / opening
     // folders. In Move Mode, tapping a folder chooses it as the destination
@@ -4343,7 +4783,7 @@ export default function TalkScreen() {
       return;
     }
     startGhostToMessage(tile, rect);
-  }, [activeEditTool, announce, clearMessage, dispatch, editControlsOpen, handleMoveToDestination, hapticIfEnabled, navigateTo, previousMode, repeatMessage, startGhostToMessage, toggleTileSelection]);
+  }, [activeEditTool, announce, clearMessage, dispatch, editControlsOpen, handleMoveToDestination, hapticIfEnabled, manageSelectedIds, navigateTo, previousMode, quickManageOpen, quickTaggedIds, repeatMessage, startGhostToMessage, toggleTileSelection]);
 
   // Folder dock Back reuses the tile-press navigation logic.
   const handleDockBack = useCallback(() => handleTilePress(BACK_TILE, null), [handleTilePress]);
@@ -4481,6 +4921,11 @@ export default function TalkScreen() {
           showsVerticalScrollIndicator={false}
           onScroll={handleScroll}
           scrollEventThrottle={50}
+          // Accidental-selection guard for Quick Manage: while a scroll
+          // gesture is moving, tile taps must not toggle selection.
+          onScrollBeginDrag={() => { isScrollingRef.current = true; }}
+          onScrollEndDrag={() => { isScrollingRef.current = false; }}
+          onMomentumScrollEnd={() => { isScrollingRef.current = false; }}
           bounces
           alwaysBounceVertical
         >
@@ -4492,7 +4937,7 @@ export default function TalkScreen() {
               // coarse height), not just anchor slots — otherwise growing a
               // bottom-row tile taller doesn't extend the grid and the
               // background never refreshes under it.
-              const tileRows = activeLayout.reduce(
+              const tileRows = displayLayout.reduce(
                 (m, p) =>
                   Math.max(m, Math.floor(p.slot / BOARD_COLUMNS) + coarseRows(p.fh)),
                 0,
@@ -4519,13 +4964,22 @@ export default function TalkScreen() {
                     rowGap={TILE_V_GAP}
                     opacity={gridOverlayOpacity}
                   />
-                  {activeLayout.map((placement) => {
+                  {displayLayout.map((placement) => {
                     const tile = tileMapForMode.get(placement.id);
                     if (!tile) return null;
                     const col = placement.slot % BOARD_COLUMNS;
                     const row = Math.floor(placement.slot / BOARD_COLUMNS);
                     const w = placement.fw * fineUnit;
                     const h = placement.fh * fineUnit;
+                    // ── Quick view / Manage visual treatment ────────────
+                    const isQuick = quickTaggedIds.has(tile.id);
+                    const manageSel = quickManageOpen && manageSelectedIds.has(tile.id);
+                    const removalIntent = manageSel && isQuick;
+                    const additionIntent = manageSel && !isQuick;
+                    // Quick view chrome only outside Manage/editing.
+                    const quickChrome =
+                      quickViewActive && !quickManageOpen && !editMode && !editControlsOpen;
+                    const dimmed = quickChrome && quickTaggedIds.size > 0 && !isQuick;
                     return (
                       <View
                         key={tile.id}
@@ -4535,6 +4989,8 @@ export default function TalkScreen() {
                           top: row * rowStep,
                           width: w,
                           height: h,
+                          // Clear-but-not-harsh dimming of non-Quick tiles.
+                          opacity: dimmed ? 0.38 : 1,
                         }}
                       >
                         <BoardTileCell
@@ -4588,6 +5044,60 @@ export default function TalkScreen() {
                             </Text>
                           </View>
                         )}
+                        {/* Quick view — dashed blue outline + light tint on
+                            each Quick tile (per tile, not a group box). */}
+                        {quickChrome && isQuick ? (
+                          <View
+                            pointerEvents="none"
+                            style={[styles.quickTileOverlay, {
+                              borderStyle: 'dashed',
+                              borderWidth: 2,
+                              borderColor: 'rgba(10, 132, 255, 0.75)',
+                              backgroundColor: 'rgba(10, 132, 255, 0.10)',
+                            }]}
+                          />
+                        ) : null}
+                        {/* Manage — already-tagged tiles wear a calm solid
+                            border ("selected for Quick, editable"). */}
+                        {quickManageOpen && isQuick && !manageSel ? (
+                          <View
+                            pointerEvents="none"
+                            style={[styles.quickTileOverlay, {
+                              borderStyle: 'solid',
+                              borderWidth: 1.5,
+                              borderColor: 'rgba(10, 132, 255, 0.9)',
+                            }]}
+                          />
+                        ) : null}
+                        {/* Manage — removal intent: red tint + strike. */}
+                        {removalIntent ? (
+                          <View
+                            pointerEvents="none"
+                            style={[styles.quickTileOverlay, {
+                              borderStyle: 'dashed',
+                              borderWidth: 2,
+                              borderColor: '#FF3B30',
+                              backgroundColor: 'rgba(255, 59, 48, 0.12)',
+                            }]}
+                          >
+                            <View style={styles.quickRemoveStrike} />
+                          </View>
+                        ) : null}
+                        {/* Manage — addition intent: blue selection tint. */}
+                        {additionIntent ? (
+                          <View
+                            pointerEvents="none"
+                            style={[styles.quickTileOverlay, {
+                              borderStyle: 'solid',
+                              borderWidth: 2,
+                              borderColor: '#0A84FF',
+                              backgroundColor: 'rgba(10, 132, 255, 0.14)',
+                            }]}
+                          />
+                        ) : null}
+                        {/* Quick tag badge — visible at ALL times on tagged
+                            tiles; 0.4 opacity while Manage is editing. */}
+                        {isQuick ? <QuickTagBadge dimmed={quickManageOpen} /> : null}
                       </View>
                     );
                   })}
@@ -4672,10 +5182,11 @@ export default function TalkScreen() {
                         : 0,
                   },
                   {
-                    // "Hide" slide — right-to-left until only DOCK_PEEK peeks in.
+                    // "Hide" slide — fully offscreen; the DockPeekPill takes
+                    // over as the persistent, visible way back (item 4 v2).
                     translateX: dockSlide.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [0, -(width - DOCK_PEEK)],
+                      outputRange: [0, -(width + spacing.lg)],
                     }),
                   },
                 ],
@@ -4801,6 +5312,41 @@ export default function TalkScreen() {
                 },
               ]}
             />
+            {/* Quick "Manage" sub-option — green pill floating directly
+                above the Quick button. Springs in from below; pulses once
+                (scale 1 → 1.06) on the newcomer nudge to draw the eye. */}
+            {manageVisible ? (
+              <Reanimated.View
+                style={[
+                  styles.manageSubOption,
+                  {
+                    left: Math.min(
+                      Math.max(quickAnchor.x + quickAnchor.width / 2 - 50, spacing.sm),
+                      width - 100 - spacing.sm,
+                    ),
+                  },
+                  manageAnimStyle,
+                ]}
+              >
+                <Pressable
+                  onPress={handleManagePress}
+                  accessibilityRole="button"
+                  accessibilityLabel="Manage Quick symbols"
+                  accessibilityHint="Choose which symbols appear in Quick"
+                  style={({ pressed }) => [
+                    styles.managePill,
+                    {
+                      backgroundColor: pressed ? '#27AE60' : '#2ECC71',
+                      opacity: pressed ? 0.9 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={styles.managePillLabel} maxFontSizeMultiplier={1.4}>
+                    Manage
+                  </Text>
+                </Pressable>
+              </Reanimated.View>
+            ) : null}
             <View
               style={[
                 styles.dockRow,
@@ -4835,13 +5381,27 @@ export default function TalkScreen() {
                       isActive={sortMenuVisible}
                     />
                   </View>
-                  <BoardDockAction
-                    icon="fullscreen" label="Fullscreen"
-                    a11yLabel="Fullscreen"
-                    a11yHint="Hides the navigation bar and controls so the board fills the screen"
-                    onPress={handleHideAll}
-                    kind="neutral"
-                  />
+                  <View onLayout={handleQuickAnchorLayout}>
+                    <Reanimated.View style={quickShakeStyle}>
+                      <BoardDockAction
+                        icon="quick" label="Quick"
+                        a11yLabel="Quick — jump to your pinned symbols"
+                        a11yHint={quickTaggedIds.size === 0
+                          ? 'Tap Manage to pin symbols first'
+                          : 'Scrolls to top and highlights your Quick symbols'}
+                        onPress={handleQuickPress}
+                        kind="neutral"
+                        isToggle
+                        isActive={quickViewActive}
+                      />
+                      {/* Faint red error tint (newcomer nudge) — an overlay
+                          blend, never a hard switch to red. */}
+                      <Reanimated.View
+                        pointerEvents="none"
+                        style={[styles.quickErrorTint, quickTintStyle]}
+                      />
+                    </Reanimated.View>
+                  </View>
                   <View onLayout={handleHideAnchorLayout}>
                     <BoardDockAction
                       icon="hide" label="Hide"
@@ -4853,6 +5413,51 @@ export default function TalkScreen() {
                       isActive={hideMenuVisible || navHidden}
                     />
                   </View>
+                </>
+              ) : dockMode === 'quickManage' ? (
+                <>
+                  <BoardDockAction
+                    icon="back-out" label="Back"
+                    a11yLabel="Back"
+                    a11yHint="Close Quick manage"
+                    onPress={handleQuickManageBack}
+                    kind="neutral"
+                  />
+                  <Reanimated.View style={unselectBlinkStyle}>
+                    <BoardDockAction
+                      icon="select"
+                      label={manageSelectedIds.size > 0 ? 'Unselect' : 'Select'}
+                      a11yLabel={manageSelectedIds.size > 0
+                        ? `Unselect ${manageSelectedIds.size} selected symbols`
+                        : 'Select symbols'}
+                      a11yHint={manageSelectedIds.size > 0
+                        ? 'Clears the current selection'
+                        : 'Tap symbols on the board to add or remove them from Quick'}
+                      onPress={handleQuickSelectToggle}
+                      kind="neutral"
+                      tint={manageSelectedIds.size > 0 ? '#FF3B30' : undefined}
+                      isToggle
+                    />
+                  </Reanimated.View>
+                  <BoardDockAction
+                    icon="add" label="Create +"
+                    a11yLabel="Create a new Quick symbol"
+                    a11yHint="Opens the add symbol form. The new symbol is pinned to Quick automatically"
+                    onPress={handleQuickCreate}
+                    kind="neutral"
+                    wide
+                  />
+                  {manageDoneVisible ? (
+                    <Reanimated.View style={manageDoneStyle}>
+                      <BoardDockAction
+                        icon="checkmark" label="Done"
+                        a11yLabel="Done — save Quick changes"
+                        a11yHint="Saves your Quick symbols and shows the Quick view"
+                        onPress={handleQuickManageDone}
+                        kind="primary"
+                      />
+                    </Reanimated.View>
+                  ) : null}
                 </>
               ) : dockMode === 'addExpanded' ? (
                 <>
@@ -4896,13 +5501,25 @@ export default function TalkScreen() {
                       isActive={sortMenuVisible}
                     />
                   </View>
-                  <BoardDockAction
-                    icon="fullscreen" label="Fullscreen"
-                    a11yLabel="Fullscreen"
-                    a11yHint="Hides the navigation bar and controls so the board fills the screen"
-                    onPress={handleHideAll}
-                    kind="neutral"
-                  />
+                  <View onLayout={handleQuickAnchorLayout}>
+                    <Reanimated.View style={quickShakeStyle}>
+                      <BoardDockAction
+                        icon="quick" label="Quick"
+                        a11yLabel="Quick — jump to your pinned symbols"
+                        a11yHint={quickTaggedIds.size === 0
+                          ? 'Tap Manage to pin symbols first'
+                          : 'Scrolls to top and highlights your Quick symbols'}
+                        onPress={handleQuickPress}
+                        kind="neutral"
+                        isToggle
+                        isActive={quickViewActive}
+                      />
+                      <Reanimated.View
+                        pointerEvents="none"
+                        style={[styles.quickErrorTint, quickTintStyle]}
+                      />
+                    </Reanimated.View>
+                  </View>
                   <View onLayout={handleHideAnchorLayout}>
                     <BoardDockAction
                       icon="hide" label="Hide"
@@ -5011,23 +5628,40 @@ export default function TalkScreen() {
             </View>
           </RNAnimated.View>
 
-          {/* ── Hidden-dock restore handle ────────────────────────────────
-              While the control bar is slid away, this generous invisible
-              target sits over the peeking sliver on the lower-left edge.
-              One tap brings the nav bar and control bar back — no fine
-              motor precision needed (hitSlop widens it further). */}
+          {/* ── Hidden-dock peek pill (item 4 v2) ─────────────────────────
+              While the control bar is slid away, a soft visible pill hugs
+              the lower-left edge so the user always has an obvious way
+              back — no fine motor precision needed (hitSlop widens it).
+              Tap restores everything; long-press offers partial toggles. */}
           {dockHidden ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Show board controls"
-              accessibilityHint="Brings back the control bar and navigation bar"
-              onPress={handleChromeRestore}
-              hitSlop={{ top: 12, bottom: 12, left: 0, right: 16 }}
-              style={({ pressed }) => [
-                styles.dockRestoreHandle,
-                pressed && { opacity: 0.7 },
-              ]}
-            />
+            <>
+              <DockPeekPill
+                onPress={peekMenuVisible ? () => setPeekMenuVisible(false) : handleChromeRestore}
+                onLongPress={handlePeekLongPress}
+              />
+              <DockPopover
+                visible={peekMenuVisible}
+                anchorX={0}
+                anchorWidth={120}
+                a11yLabel="Hide options"
+                options={[
+                  {
+                    key: 'dock',
+                    label: 'Control Bar',
+                    a11yLabel: 'Show control bar',
+                    selected: dockHidden,
+                    onPress: handlePeekToggleDock,
+                  },
+                  {
+                    key: 'nav',
+                    label: 'Nav Bar',
+                    a11yLabel: navHidden ? 'Show navigation bar' : 'Hide navigation bar',
+                    selected: navHidden,
+                    onPress: handleHideNavBar,
+                  },
+                ]}
+              />
+            </>
           ) : null}
         </View>
 
@@ -5430,13 +6064,98 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  // Invisible tap target over the peeking sliver of a hidden control bar.
-  dockRestoreHandle: {
+  // ── DockPeekPill (item 4 v2) ─────────────────────────────────────────
+  // Soft blob hugging the left edge, vertically centred in the dock's
+  // former position. Flat left side (flush with the edge), 20pt rounded
+  // right side, subtle floating shadow. 44×56pt ≥ minimum touch target.
+  dockPeekPillMount: {
     position: 'absolute',
     left: 0,
-    bottom: 0,
-    width: DOCK_PEEK + 18,
-    height: DOCK_ACTION_SIZE + DOCK_BOTTOM_GAP + spacing.sm,
+    bottom: DOCK_BOTTOM_GAP + Math.max(0, (DOCK_ACTION_SIZE - 56) / 2),
+  },
+  dockPeekPill: {
+    width: 44,
+    height: 56,
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+    borderWidth: 1.6,
+    borderLeftWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Subtle drop shadow so it reads as floating above the board.
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  dockPeekGrip: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  dockPeekGripBar: {
+    width: 14,
+    height: 2.5,
+    borderRadius: 1.25,
+  },
+  // ── Quick feature ────────────────────────────────────────────────────
+  // Lightning badge — top-right of Quick-tagged tiles, always visible.
+  quickBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 16,
+    height: 16,
+    zIndex: 10,
+  },
+  // Per-tile Quick view highlight (absolute fill, above tile content but
+  // pointerEvents:none so interaction is untouched).
+  quickTileOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: TILE_CORNER_RADIUS,
+    zIndex: 8,
+  },
+  quickRemoveStrike: {
+    position: 'absolute',
+    left: '6%',
+    right: '6%',
+    top: '50%',
+    height: 2.5,
+    borderRadius: 1.25,
+    backgroundColor: '#FF3B30',
+    opacity: 0.8,
+    transform: [{ rotate: '-24deg' }],
+  },
+  // Green Manage pill — floats directly above the Quick button's slot.
+  manageSubOption: {
+    position: 'absolute',
+    bottom: DOCK_BOTTOM_GAP + DOCK_ACTION_SIZE + spacing.sm,
+  },
+  managePill: {
+    minHeight: 44,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  managePillLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  // Faint red blend over the Quick button on the newcomer error shake
+  // (animated opacity 0 → 0.25 — never a hard colour switch).
+  quickErrorTint: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 14,
+    backgroundColor: '#FF3B30',
   },
   dockAction: {
     borderRadius: 14,
