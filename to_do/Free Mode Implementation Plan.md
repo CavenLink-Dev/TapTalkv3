@@ -222,6 +222,78 @@ Tasks:
 
 ---
 
+# IMPLEMENTATION / BOARD_TOP_NAV_PRESS_SELECTED_ANIMATION
+
+The TopNavBar tabs currently have minimal press and selected-state feedback.
+
+Current issues to inspect:
+
+* `topTabPressed` only applies a 0.95 opacity dip — effectively invisible
+* the active indicator is only a colour crossfade on the text and a 1.03 scale lift
+* the icon colour is read from a static value rather than wired into the running animation
+* there is no background pill, underline, or filled indicator behind the active tab
+* there is no press-in spring feedback that makes the tap feel physical and responsive
+* the tint colour transition can feel slow or flat
+
+Tasks:
+
+* add a press-in animation — scale the tab content down slightly (e.g. 0.94) on `onPressIn` and spring back on `onPressOut`, so the tap feels immediate and responsive
+* add a visible selected-state indicator behind the active tab — use a rounded pill or a bottom edge bar tinted with the primary colour
+* animate the indicator in/out using a short spring when the active tab changes
+* wire the Ionicons colour into the running `activeAnim` interpolation so icon and label tint crossfade together
+* keep the animation durations short (120–180ms) and use cubic-out or spring easing
+* respect Reduce Motion — zero duration and no scale on reduced motion, only a plain colour switch
+* use `t.colors.primary` for the active tint and indicator; use `t.colors.textMuted` for the idle state
+* do not introduce new shadow, glow, or elevation
+* keep touch targets at least 50 × 50 px
+
+Acceptance checks:
+
+* tapping any tab produces a visible, satisfying press-in and spring-back
+* the active tab has a clear indicator that is visually distinct from the idle tabs
+* switching tabs animates the indicator and tint smoothly
+* Reduce Motion suppresses all scale/spring, leaving only a colour change
+* typecheck passes
+
+---
+
+# IMPLEMENTATION / BOARD_EDIT_MODE_SELECT_ALL
+
+The edit mode Select tool currently has no way to select every tile at once, and selection requires tapping each tile individually.
+
+Current issues to inspect:
+
+* no "Select All" or "Deselect All" button exists in the edit controls bar
+* the only way to multi-select is to tap tiles one at a time
+* the existing `handleEditToolSelectToggle` only clears the selection when items are already selected — there is no "select everything" path
+* tap-and-drag to sweep-select multiple tiles is not implemented
+
+Tasks:
+
+* add a "Select All" / "Deselect All" toggle action to the edit controls bar when `activeEditTool === 'select'` is active
+* "Select All" selects every non-protected tile on the current board view
+* when all tiles are already selected, the same button becomes "Deselect All" and clears the set
+* use `AccessibilityInfo.announceForAccessibility` to announce the count when selecting all (e.g. "14 items selected") and "Selection cleared" when deselecting all
+* implement tap-and-drag multi-select: while Select mode is active, a slow-drag gesture that starts on a tile and moves across others should toggle each tile as the finger passes through it
+* the drag gesture must not conflict with the existing board scroll — activate only when Select mode is active and the drag begins on a tile (not in empty space)
+* use a `PanResponder` or Reanimated gesture that captures the raw pointer position and hit-tests against visible tile rects each frame
+* provide clear visual feedback during a drag-select sweep (tiles tick into or out of the selection as the finger crosses them)
+* respect Reduce Motion — remove scale/bounce feedback from the sweep, keep the selection state change visible
+* use haptic feedback on each tile toggled during the sweep (light selection haptic) if haptics are enabled
+* do not break normal scroll behaviour when Select mode is inactive
+
+Acceptance checks:
+
+* "Select All" button appears in the dock when Select mode is active and no tiles are selected, or when a partial selection exists
+* tapping "Select All" selects every non-protected tile on the current board
+* tapping "Deselect All" (same button, all selected) clears the whole selection
+* dragging a finger across tiles in Select mode toggles each tile as it is entered
+* normal board scroll is unaffected when Select mode is inactive
+* VoiceOver announces the count on Select All and "Selection cleared" on Deselect All
+* typecheck passes
+
+---
+
 # IMPLEMENTATION / BOARD_QUICK_MANAGE_SELECTED_STATE
 
 Quick Manage currently does not show existing quick-tagged symbols as selected.
@@ -290,6 +362,119 @@ Acceptance checks:
 * places vocabulary lives under `places`
 * no animals key remains incorrectly holding places content
 * folder navigation still works
+
+---
+
+# IMPLEMENTATION — SYMBOL PACK SYSTEM EXPANSION
+
+## Context
+
+Expand the existing symbol pack system. This is a focused addition, not a full redesign.
+
+Use the existing `SymbolPackFolder` / `SymbolPackSymbol` structure in `src/data/symbolPacks.ts` and the existing Add Symbol browse flow. Do not create a new library system, do not replace Mulberry, do not duplicate symbol assets.
+
+## A generation script has already been prepared
+
+**Run this first:**
+
+```
+npx ts-node --skip-project scripts/buildSymbolPacks.ts
+```
+
+This script:
+- Has 155 verified Mulberry symbol IDs (all confirmed against `to_do/mulberry_categories.json`)
+- Generates a complete new `src/data/symbolPacks.ts` with 10 nested packs
+- Validates every ID before writing — prints `MISSING:` for any that fail
+- Only touches `src/data/symbolPacks.ts` — no user data, no board state, no other files
+
+**Reference file for all available symbol IDs:**
+`to_do/mulberry_categories.json` — 3,436 symbols across 117 categories, grouped by Mulberry category name. Use this to look up any symbol ID you need.
+
+---
+
+## What the script already generates
+
+These 10 packs are done and verified:
+
+- **Answers** → Yes & No → Core → Questions
+- **Numbers** → 0–10 → 11–20 → Tens (20–100)
+- **Letters** → A–M → N–Z → a–m → n–z
+- **Feelings** → Positive → Negative → Neutral
+- **Food** → Fruit → Meals → Drinks
+- **Transport** → Road → Rail → Air → Water
+- **Activities** → Creative → Sport
+- **Health** → Hygiene → Pain → Care
+- **Places** → Everyday
+- **Technology** → Devices
+
+---
+
+## Your task — expand the script further
+
+Add more packs to `scripts/buildSymbolPacks.ts` using the same structure. Then re-run it to regenerate `src/data/symbolPacks.ts`.
+
+**Rules:**
+- Use only symbol IDs that exist in `to_do/mulberry_categories.json`
+- Confirm every ID before adding it — no fake IDs, no placeholders
+- Keep folders nested: top-level pack → sub-folder → symbols
+- Each pack should aim for 50+ symbols total across its sub-folders
+- Include communication functions, not only nouns (verbs, questions, feelings, requests)
+- Keep wording mature, calm, and respectful — not childish
+- Keep Australian users in mind where relevant
+- Do not overwrite custom user symbols or break existing board data
+
+---
+
+## Suggested new starter pack areas to add
+
+Each is a top-level folder. Folders branch into sub-folders. Sub-folders branch again where needed, then into individual symbols. Every pack targets 50+ symbols total.
+
+- **Emergency** — medical emergency, fire and hazard, mental health crisis, lost or missing, allergy alert, general safety
+- **Quick Answers** — yes and no, agreement, disagreement, I need time, I don't understand, quick reactions, quick social phrases
+- **Drinks** — hot drinks, cold drinks, caffeinated, dietary options, café orders
+- **Feelings (expanded)** — basic emotions, positive feelings, negative feelings, physical feelings, social feelings, complex feelings, emotional needs
+- **Body and Health (expanded)** — body parts, pain and discomfort, medical appointments, medication, procedures, sleep, exercise, mental health
+- **Home and Daily Life** — rooms, household tasks, appliances, daily morning and night routines, home safety
+- **People and Relationships** — immediate family, extended family, friends, support workers, professionals, community people, pronouns
+- **School and Learning** — core subjects, specialist subjects, school routine, school places, learning tasks, tools, social at school
+- **Work and Employment** — office, trades, retail, care and support work, work actions, communication at work, rights and breaks
+- **Therapy and Allied Health** — speech therapy, OT, physiotherapy, psychology, session vocabulary, goals and progress
+- **Community and Places** — shopping, leisure, parks, beach, library, café, health services, government services, finance
+- **Transport (expanded)** — vehicles (cars, bikes, trucks, motorbikes, special), public transport (bus, train, tram, ferry, taxi), air travel (airport, on the plane), walking and accessibility, directions and navigation
+- **Time and Scheduling** — parts of day, clock times, days of the week, months, calendar events, morning and evening routines
+- **Questions and Conversation** — question words, conversation starters, asking for help, clarification, confirming, ending conversations
+- **Sensory and Needs** — sensory overload, comfort seeking, sensory preferences, physical needs, emotional regulation
+- **Social and Community Life** — greetings, making plans, events, talking about yourself, compliments, disagreements
+- **Privacy and Consent** — consent, personal space, privacy, boundaries, safety
+- **Activities and Hobbies** — sports, creative activities, games, relaxation, social activities
+- **Pain and Body** — pain location, pain type, pain scale, describing discomfort, asking for care
+- **Toilet and Hygiene** — toilet needs, washing, grooming, dental care, personal care routine
+- **Support Worker** — greetings, daily tasks, requests, preferences, feedback, end of visit
+
+---
+
+## Acceptance checks
+
+- Symbol Pack Browser still opens correctly
+- Existing packs still work
+- New packs appear in the Add Symbol browse flow
+- Every added symbol resolves to a real Mulberry symbol (no missing IDs in the validation output)
+- No duplicate assets are created
+- No custom user data is overwritten
+- Typecheck passes: `npx tsc --noEmit`
+
+---
+
+## Final report required
+
+1. What packs were added
+2. Files touched
+3. Why these packs were chosen
+4. AAC usefulness
+5. Accessibility impact
+6. Any symbol IDs that could not be safely found
+7. Typecheck result
+8. Recommended next pack batch
 
 ---
 
