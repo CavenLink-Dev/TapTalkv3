@@ -268,6 +268,46 @@ export const layout = {
   },
 } as const;
 
+// ─── Board sizing system ─────────────────────────────────────────────────────
+// Single source of truth for AAC board chrome density. Rules:
+//   • absolute minimum touch target anywhere: 50×50 (never below 44)
+//   • top navigation + bottom control bar items: 50–56pt range
+//   • sub-options above the control bar: ≥50pt high
+//   • decorative icons may render smaller, but their touch parent stays ≥50pt
+// Icons and text scale proportionally with their parent container — no
+// oversized glyphs inside shrunken containers.
+
+export const boardSizes = {
+  /** Preferred minimum touch target on the board (50×50). */
+  touchTargetMin: 50,
+  /** Absolute floor — never go below this under any circumstance. */
+  touchTargetFloor: 44,
+  /** Message strip (input bar) height — was 104, trimmed while keeping chips readable. */
+  messageStripHeight: 96,
+  /** Top navigation bar height — was 76. */
+  topNavHeight: 64,
+  /** Top navigation tab width. */
+  topNavItemWidth: 68,
+  /** Top navigation tab height (50–56 range). */
+  topNavItemHeight: 52,
+  /** Top navigation icon size (proportional to the 52pt tab). */
+  topNavIcon: 26,
+  /** Bottom control bar item edge (50–56 range; was 68). */
+  controlBarItem: 56,
+  /** Bottom control bar action icon (proportional to the 56pt item). */
+  controlBarIcon: 20,
+  /** Bottom control bar collapse/expand toggle glyph (was 39 — calmer now). */
+  controlBarToggleIcon: 28,
+  /** Bottom control bar label size (proportional to the 56pt item). */
+  controlBarLabel: 12,
+  /** Sub-option rows stacked above a control bar item. */
+  subOptionMinHeight: 50,
+  /** Board tile floor — tiles never render smaller than this. */
+  tileMin: 64,
+  /** Board tile ceiling — keeps tablets from ballooning tiles (was 132). */
+  tileMax: 112,
+} as const;
+
 /** Full-width chrome separator thickness (message strip, top nav, tab bar). */
 export const CHROME_SEPARATOR_WIDTH = 1.2 as const;
 

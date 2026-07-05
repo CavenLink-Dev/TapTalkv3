@@ -53,7 +53,7 @@ import { parseAvatar } from '../../src/features/profile/avatar';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
 import { buildMessageUtterances } from '../../src/utils/speechRules';
-import { animation, CHROME_SEPARATOR_WIDTH, colors, radii, spacing } from '../../src/theme/tokens';
+import { animation, boardSizes, CHROME_SEPARATOR_WIDTH, colors, radii, spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
@@ -65,7 +65,10 @@ import {
 import { setTabBarHidden } from '../../src/features/board/chromeVisibility';
 
 type TileKind = 'folder' | 'word' | 'action';
-type BoardMode = 'home' | 'foods' | 'animals' | 'tools' | 'quick' | 'settings' | 'emergency' | 'feelings';
+// `places` was previously (incorrectly) named `animals` while holding
+// places vocabulary — renamed so the key matches the content and the
+// `animals` key stays free for real animal vocabulary later.
+type BoardMode = 'home' | 'foods' | 'places' | 'tools' | 'quick' | 'settings' | 'emergency' | 'feelings';
 // Top-nav vocabulary (board_control_bar restructure): EDIT opens the Edit
 // Control Bar (moved up from the bottom dock), LAYOUT is the old Resize
 // tool (grid + handles), SAVED opens saved sentences (old Quick — the
@@ -152,8 +155,11 @@ type GhostTile = {
 };
 
 const FIGMA_WIDTH = 393;
-const MESSAGE_HEIGHT = 104;
-const TOP_NAV_HEIGHT = 76;
+// Chrome sizes come from the shared board sizing system (src/theme/tokens.ts)
+// so the message strip, top nav, and control bar stay in one predictable
+// density scale instead of one-off values.
+const MESSAGE_HEIGHT = boardSizes.messageStripHeight;
+const TOP_NAV_HEIGHT = boardSizes.topNavHeight;
 const BOARD_COLUMNS = 4;
 // Target number of tile rows visible in the board viewport. Tiles are sized so
 // roughly this many rows fit vertically (big, readable symbols/folders).
@@ -167,20 +173,21 @@ const TILE_LEFT_PADDING = 4;
 const BOARD_TOP_GAP = 32;
 // Absolute max tile edge (pt). Actual size is the lesser of this, what fits the
 // width in 3 columns, and what lets VISIBLE_ROWS rows fit the viewport height.
-const TILE_SIZE = 132;
+const TILE_SIZE = boardSizes.tileMax;
 const MAX_FW = 8;
 // Bottom dock spacing: 16px gap between dock and bottom tab bar edge.
 const DOCK_BOTTOM_GAP = spacing.lg; // 16
-// Contextual dock control sizes (pt) — fixed, not tied to tileSize.
-const DOCK_ACTION_SIZE = 68;
-const DOCK_TOGGLE_SIZE = 68;
+// Contextual dock control sizes (pt) — from the shared board sizing system.
+// Items sit in the 50–56 range; icons/labels scale with their container.
+const DOCK_ACTION_SIZE = boardSizes.controlBarItem;
+const DOCK_TOGGLE_SIZE = boardSizes.controlBarItem;
 const DOCK_GAP = 8;
-const DOCK_ACTION_PADDING = 10;
+const DOCK_ACTION_PADDING = 8;
 const DOCK_ICON_STROKE = 4;
-const DOCK_ICON_TOGGLE = 39;
-const DOCK_ICON_ACTION = 22;
-const DOCK_ICON_ROW = 18;
-const DOCK_ROW_LABEL = 15;
+const DOCK_ICON_TOGGLE = boardSizes.controlBarToggleIcon;
+const DOCK_ICON_ACTION = boardSizes.controlBarIcon;
+const DOCK_ICON_ROW = 17;
+const DOCK_ROW_LABEL = 14;
 // Coarse tile-cell footprint of a placement — used for collision math
 // and multi-cell highlights. fw=2 → 1 col, fw=3 or 4 → 2 cols, fw=5 or 6 → 3.
 const coarseCols = (fw: number) => Math.ceil(fw / 2);
@@ -316,7 +323,7 @@ const HOME_TILES: BoardTile[] = [
   // Category folders + 50 home-grid words (56 tiles — scrolls on the default screen).
   { id: 'people', label: 'People', kind: 'folder', target: 'quick',   color: '#1DCDFF', mulberrySymbolId: 'mulberry_family_excv0f' },
   { id: 'foods',  label: 'Foods',  kind: 'folder', target: 'foods',   color: '#1DCDFF', mulberrySymbolId: 'mulberry_food_atkyaz' },
-  { id: 'places', label: 'Places', kind: 'folder', target: 'animals', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
+  { id: 'places', label: 'Places', kind: 'folder', target: 'places', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
   { id: 'actions',label: 'Actions',kind: 'folder', target: 'tools',   color: '#1DCDFF', mulberrySymbolId: 'mulberry_run_1l6fpg7' },
   { id: 'feelings-folder', label: 'Feelings', kind: 'folder', target: 'feelings', color: '#1DCDFF', mulberrySymbolId: 'mulberry_happy_man_d75g78' },
   { id: 'emergency-folder', label: 'Help', kind: 'folder', target: 'emergency', color: '#1DCDFF', isProtected: true, mulberrySymbolId: 'mulberry_help_1g1ppr' },
@@ -405,7 +412,7 @@ export const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
     { id: 'chicken',label: 'Chicken',kind: 'word', color: SYMBOL_YELLOW, speech: 'chicken',mulberrySymbolId: 'mulberry_chicken_live_2os875', wordType: 'noun' },
     { id: 'back-foods', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
   ],
-  animals: [
+  places: [
     { id: 'school', label: 'School', kind: 'word', color: SYMBOL_BLUE,   speech: 'school', mulberrySymbolId: 'mulberry_school_7v1fml',  wordType: 'noun' },
     { id: 'shop',   label: 'Shop',   kind: 'word', color: SYMBOL_GREEN,  speech: 'shop',   mulberrySymbolId: 'mulberry_shop_8euq19',    wordType: 'noun' },
     { id: 'park',   label: 'Park',   kind: 'word', color: SYMBOL_GREEN,  speech: 'park',   mulberrySymbolId: 'mulberry_park_18ux2ty',   wordType: 'noun' },
@@ -420,7 +427,7 @@ export const BOARD_TILES: Record<BoardMode, BoardTile[]> = {
     { id: 'church', label: 'Church', kind: 'word', color: SYMBOL_PURPLE, speech: 'church', mulberrySymbolId: 'mulberry_church_1t13yb2', wordType: 'noun' },
     { id: 'swim-place', label: 'Swim', kind: 'word', color: SYMBOL_BLUE, speech: 'swim', mulberrySymbolId: 'mulberry_swimming_class_fnsmmt', wordType: 'noun' },
     { id: 'horse',  label: 'Horse',  kind: 'word', color: SYMBOL_ORANGE, speech: 'horse', mulberrySymbolId: 'mulberry_horse_c0o22y',  wordType: 'noun' },
-    { id: 'back-animals', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
+    { id: 'back-places', label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
   ],
   tools: [
     { id: 'run',        label: 'Run',        kind: 'word', color: SYMBOL_GREEN,  speech: 'run',         mulberrySymbolId: 'mulberry_run_1l6fpg7',        wordType: 'verb' },
@@ -809,7 +816,10 @@ function DockPopover({
 
   if (!mounted) return null;
 
-  const POP_WIDTH = 172;
+  // Sub-options visually match their parent control's width so they read
+  // as connected to it (stacked squares above the button). A small floor
+  // keeps multi-word labels legible when the anchor is narrow.
+  const POP_WIDTH = Math.max(anchorWidth, 96);
   // Centre over the anchor, clamped to the screen with an 8pt margin.
   const left = Math.min(
     Math.max(anchorX + anchorWidth / 2 - POP_WIDTH / 2, spacing.sm),
@@ -855,6 +865,8 @@ function DockPopover({
           <Text
             style={[styles.dockPopoverItemLabel, { color: t.colors.text }]}
             numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
             maxFontSizeMultiplier={1.4}
           >
             {opt.label}
@@ -2612,45 +2624,74 @@ const BoardTileCell = React.memo(function BoardTileCell({
   );
 });
 
-function TopNavTab({
+// Animated Ionicons wrapper so the glyph colour rides the SAME running
+// animation as the label — icon and text tint crossfade together instead
+// of the icon snapping between two static colours.
+const AnimatedIonicons = RNAnimated.createAnimatedComponent(Ionicons);
+
+const TopNavTab = React.memo(function TopNavTab({
   tab,
   active,
   onPress,
 }: {
   tab: TopTab;
   active: boolean;
-  onPress: () => void;
+  onPress: (tab: TopTab) => void;
 }) {
   const meta = TOP_TAB_META[tab];
-  // Items 3 & 4 — RM: zero duration + no scale lift (principle 18).
+  // RM: zero duration, no scale/spring — colour switch only (principle 18).
   const reduceMotion = useReduceMotion();
   const t = useTheme();
   const idleColor = t.colors.textMuted;
-  const activeColor = t.colors.text;
+  const activeColor = t.colors.primary;
 
-  // Single shared value drives both colour and scale so the active tab
-  // brightens and lifts together. JS-driver because of the colour
-  // interpolation; only 1–4 tabs animate at a time so this is fine.
+  // activeAnim drives tint (icon + label together) and the selected-state
+  // pill. JS driver because of colour interpolation; only one tab animates
+  // per switch so this stays cheap.
   const activeAnim = useRef(new RNAnimated.Value(active ? 1 : 0)).current;
+  // pressScale is transform-only → native driver, so the press-in feels
+  // immediate even if the JS thread is busy.
+  const pressScale = useRef(new RNAnimated.Value(1)).current;
 
   useEffect(() => {
     RNAnimated.timing(activeAnim, {
       toValue: active ? 1 : 0,
-      duration: reduceMotion ? 0 : 180,
+      duration: reduceMotion ? 0 : 160,
       easing: RNEasing.out(RNEasing.cubic),
       useNativeDriver: false,
     }).start();
   }, [active, activeAnim, reduceMotion]);
 
+  const handlePressIn = useCallback(() => {
+    if (reduceMotion) return;
+    RNAnimated.timing(pressScale, {
+      toValue: 0.94,
+      duration: animation.durFast,
+      easing: RNEasing.out(RNEasing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [pressScale, reduceMotion]);
+
+  const handlePressOut = useCallback(() => {
+    if (reduceMotion) return;
+    RNAnimated.spring(pressScale, {
+      toValue: 1,
+      speed: 26,
+      bounciness: 7,
+      useNativeDriver: true,
+    }).start();
+  }, [pressScale, reduceMotion]);
+
+  const handlePress = useCallback(() => onPress(tab), [onPress, tab]);
+
   const tintColor = activeAnim.interpolate({
     inputRange:  [0, 1],
     outputRange: [idleColor, activeColor],
   });
-  const scale = activeAnim.interpolate({
+  const pillOpacity = activeAnim;
+  const pillScale = activeAnim.interpolate({
     inputRange:  [0, 1],
-    // 1.03 (down from 1.05) — less optical jump when the active tint
-    // crossfades in, so the icon doesn't read as "hovering".
-    outputRange: [1, reduceMotion ? 1 : 1.03],
+    outputRange: [reduceMotion ? 1 : 0.85, 1],
   });
 
   return (
@@ -2658,20 +2699,30 @@ function TopNavTab({
       accessibilityRole="button"
       accessibilityLabel={`${meta.label} top tab`}
       accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.topTab,
-        // Subtle press-in dip — uses Pressable's own state so it doesn't
-        // need its own Animated value.
-        pressed && styles.topTabPressed,
-      ]}
+      onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={styles.topTab}
     >
-      <RNAnimated.View style={[styles.topTabContent, { transform: [{ scale }] }]}>
+      <RNAnimated.View style={[styles.topTabContent, { transform: [{ scale: pressScale }] }]}>
+        {/* Selected-state pill — soft rounded fill behind the active tab.
+            No shadow/glow/elevation; the tint + fill carry the state. */}
+        <RNAnimated.View
+          pointerEvents="none"
+          style={[
+            styles.topTabPill,
+            {
+              backgroundColor: t.colors.selectionBg,
+              opacity: pillOpacity,
+              transform: [{ scale: pillScale }],
+            },
+          ]}
+        />
         <View style={styles.topTabIconMount}>
-          <Ionicons
+          <AnimatedIonicons
             name={meta.icon}
-            size={30}
-            color={active ? activeColor : idleColor}
+            size={boardSizes.topNavIcon}
+            style={{ color: tintColor }}
           />
         </View>
         <RNAnimated.Text style={[styles.topTabLabel, { color: tintColor }]}>
@@ -2680,9 +2731,18 @@ function TopNavTab({
       </RNAnimated.View>
     </Pressable>
   );
-}
+});
 
-function TopNav({
+const TOP_TABS: TopTab[] = ['edit', 'layout', 'saved', 'settings'];
+
+// TopNav no longer animates its height frame-by-frame. The old
+// RNAnimated.timing on `height` ran on the JS thread and re-laid-out the
+// whole board (grid, dock, scroll view) on EVERY frame of the 220ms
+// toggle — the source of the top-nav lag. The parent now wraps the state
+// change in a single LayoutAnimation transition (one native layout pass),
+// and this component just renders open/closed. React.memo keeps board
+// re-renders from touching it.
+const TopNav = React.memo(function TopNav({
   visible,
   activeTab,
   onTabPress,
@@ -2691,65 +2751,41 @@ function TopNav({
   activeTab: TopTab | null;
   onTabPress: (tab: TopTab) => void;
 }) {
-  // Item 3 — RM: collapse/expand at duration 0 (principle 18).
-  const reduceMotion = useReduceMotion();
   const t = useTheme();
-  const anim = useRef(new RNAnimated.Value(visible ? 1 : 0)).current;
-
-  useEffect(() => {
-    RNAnimated.timing(anim, {
-      toValue: visible ? 1 : 0,
-      duration: reduceMotion ? 0 : 220,
-      easing: RNEasing.out(RNEasing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [anim, reduceMotion, visible]);
-
-  const slotHeight = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, TOP_NAV_HEIGHT],
-  });
-  const panelOpacity = anim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, 0, 1],
-  });
 
   return (
-    <RNAnimated.View
+    <View
       style={[
         styles.topNavSlot,
-        { height: slotHeight, backgroundColor: t.colors.surface },
+        { height: visible ? TOP_NAV_HEIGHT : 0, backgroundColor: t.colors.surface },
       ]}
     >
-      <RNAnimated.View
+      <View
         pointerEvents={visible ? 'auto' : 'none'}
         style={[
           styles.topNavPanel,
-          {
-            opacity: panelOpacity,
-            backgroundColor: t.isDark ? t.colors.navBackground : '#FFFFFF',
-          },
+          { backgroundColor: t.isDark ? t.colors.navBackground : '#FFFFFF' },
         ]}
       >
-        {(['edit', 'layout', 'saved', 'settings'] as TopTab[]).map(tab => (
+        {TOP_TABS.map(tab => (
           <TopNavTab
             key={tab}
             tab={tab}
             active={activeTab === tab}
-            onPress={() => onTabPress(tab)}
+            onPress={onTabPress}
           />
         ))}
-      </RNAnimated.View>
-      <RNAnimated.View
+      </View>
+      <View
         pointerEvents="none"
         style={[
           styles.topNavBottomBorder,
-          { backgroundColor: t.colors.border, opacity: panelOpacity },
+          { backgroundColor: t.colors.border },
         ]}
       />
-    </RNAnimated.View>
+    </View>
   );
-}
+});
 
 export default function TalkScreen() {
   const { width, height: screenHeight } = useWindowDimensions();
@@ -2960,17 +2996,23 @@ export default function TalkScreen() {
     const persisted = state.boardPlacements;
     if (!persisted || Object.keys(persisted).length === 0) return;
     const seeded: Partial<Record<BoardMode, BoardLayout>> = {};
-    for (const key of Object.keys(persisted) as BoardMode[]) {
-      const stored = persisted[key];
+    for (const rawKey of Object.keys(persisted)) {
+      // Migration: the Places board was internally (incorrectly) keyed
+      // `animals` in earlier builds. Re-home stored placements to `places`.
+      const key = (rawKey === 'animals' ? 'places' : rawKey) as BoardMode;
+      const stored = persisted[rawKey];
       if (!stored || stored.length === 0) continue;
       const boardTiles = BOARD_TILES[key];
       if (!boardTiles) continue;
-      // Start from stored placements
+      // Start from stored placements (id migration: back-animals → back-places)
       const layout: BoardLayout = reflowLayoutSlots(
-        stored.map(p => ({ id: p.id, slot: p.slot, fw: p.fw, fh: p.fh })),
+        stored.map(p => ({
+          id: p.id === 'back-animals' ? 'back-places' : p.id,
+          slot: p.slot, fw: p.fw, fh: p.fh,
+        })),
       );
       // Append any new tiles from code that aren't in stored placements
-      const storedIds = new Set(stored.map(p => p.id));
+      const storedIds = new Set(layout.map(p => p.id));
       const maxSlot = stored.reduce((max, p) => Math.max(max, p.slot + coarseCols(p.fw)), 0);
       let nextSlot = maxSlot;
       for (const tile of boardTiles) {
@@ -3172,9 +3214,11 @@ export default function TalkScreen() {
     const newTile = boardTileFromCustomTile(persistedTile);
     addTileToCurrentBoard(newTile, persistedTile);
     // Created from the Quick Manage bar → Quick-tagged from birth, and
-    // Done becomes visible (a pending change now exists).
+    // Done becomes visible (a pending change now exists). Also selected in
+    // the Manage view so it isn't marked for removal on Done.
     if (quickManageOpen) {
       setQuickTaggedIds(prev => new Set(prev).add(tileId));
+      setManageSelectedIds(prev => new Set(prev).add(tileId));
       setManageCreatedTag(true);
       AccessibilityInfo.announceForAccessibility?.(`${tileLabel} added and pinned to Quick`);
     }
@@ -3212,6 +3256,7 @@ export default function TalkScreen() {
     addTileToCurrentBoard(newTile, persistedTile);
     if (quickManageOpen) {
       setQuickTaggedIds(prev => new Set(prev).add(tileId));
+      setManageSelectedIds(prev => new Set(prev).add(tileId));
       setManageCreatedTag(true);
       AccessibilityInfo.announceForAccessibility?.(`${tileLabel} added and pinned to Quick`);
     } else {
@@ -4097,8 +4142,10 @@ export default function TalkScreen() {
     (boardViewportH - TILE_V_GAP * (VISIBLE_ROWS - 1)) / VISIBLE_ROWS,
   );
   // Use the smaller so both constraints hold: the columns never overflow the
-  // width, and ~VISIBLE_ROWS rows fit the height. Clamped to a sane range.
-  const tileSize = Math.max(72, Math.min(TILE_SIZE, widthTile, heightTile));
+  // width, and ~VISIBLE_ROWS rows fit the height. Clamped to a sane range —
+  // the floor keeps symbols comfortably above the 50pt touch minimum while
+  // letting the board sit closer to the 64pt density target on small screens.
+  const tileSize = Math.max(boardSizes.tileMin, Math.min(TILE_SIZE, widthTile, heightTile));
   // Dock actions are fixed 60pt squares; toggles (< >) are 50pt.
   const dockPadLeft = insets.left + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2);
   const dockPadRight = insets.right + TILE_LEFT_PADDING + Math.max(0, (availableWidth - boardWidth) / 2);
@@ -4201,9 +4248,14 @@ export default function TalkScreen() {
     const ordered = [...activeLayout].sort((a, b) => a.slot - b.slot);
     const quick = ordered.filter(p => quickTaggedIds.has(p.id));
     if (quick.length === 0) return activeLayout;
+    // Within the Quick section: symbols first, folders below (stable
+    // within each group so the user's slot order is preserved).
+    const isFolder = (id: string) => tileMapForMode.get(id)?.kind === 'folder';
+    const quickSymbols = quick.filter(p => !isFolder(p.id));
+    const quickFolders = quick.filter(p => isFolder(p.id));
     const rest = ordered.filter(p => !quickTaggedIds.has(p.id));
-    return [...quick, ...rest].map((p, i) => ({ ...p, slot: i }));
-  }, [activeLayout, quickOrderActive, quickTaggedIds]);
+    return [...quickSymbols, ...quickFolders, ...rest].map((p, i) => ({ ...p, slot: i }));
+  }, [activeLayout, quickOrderActive, quickTaggedIds, tileMapForMode]);
 
   // Fast lookup: slot index → placement (for collision checks + swap).
   const layoutBySlot = useMemo(() => {
@@ -4211,6 +4263,98 @@ export default function TalkScreen() {
     activeLayout.forEach(p => m.set(p.slot, p));
     return m;
   }, [activeLayout]);
+
+  // ── Select All / Deselect All (edit Select tool) ────────────────────────
+  // Every non-protected, non-nav tile on the current board view.
+  const selectableTileIds = useMemo(
+    () =>
+      displayLayout
+        .map(p => tileMapForMode.get(p.id))
+        .filter(
+          (tile): tile is BoardTile =>
+            Boolean(tile) &&
+            !tile!.isProtected &&
+            tile!.id !== 'back' &&
+            tile!.id !== 'home',
+        )
+        .map(tile => tile.id),
+    [displayLayout, tileMapForMode],
+  );
+
+  const allTilesSelected =
+    selectableTileIds.length > 0 &&
+    selectableTileIds.every(id => selectedTileIds.has(id));
+
+  const handleSelectAllToggle = useCallback(() => {
+    hapticIfEnabled();
+    if (allTilesSelected) {
+      setSelectedTileIds(new Set());
+      AccessibilityInfo.announceForAccessibility?.('Selection cleared');
+      return;
+    }
+    setSelectedTileIds(new Set(selectableTileIds));
+    AccessibilityInfo.announceForAccessibility?.(
+      `${selectableTileIds.length} item${selectableTileIds.length === 1 ? '' : 's'} selected`,
+    );
+  }, [allTilesSelected, hapticIfEnabled, selectableTileIds]);
+
+  // ── Tap-and-drag sweep select (edit Select tool) ────────────────────────
+  // A slow drag (hold ~220ms, then move) that starts on a tile toggles each
+  // tile the finger crosses. Quick drags still scroll the board; the guard
+  // set ensures one toggle per tile per sweep so multi-cell tiles don't
+  // flicker while the finger crosses their footprint.
+  const sweepActive = editControlsOpen && activeEditTool === 'select';
+  const sweepLastSlot = useSharedValue(-1);
+  const sweepToggledRef = useRef<Set<string>>(new Set());
+
+  const handleSweepBegin = useCallback(() => {
+    sweepToggledRef.current = new Set();
+  }, []);
+
+  const handleSweepCell = useCallback((col: number, row: number) => {
+    if (col < 0 || row < 0 || col >= BOARD_COLUMNS) return;
+    const placement = displayLayout.find(p => {
+      const fp = footprintAt(p.slot, p.fw, p.fh);
+      return col >= fp.startCol && col <= fp.endCol && row >= fp.startRow && row <= fp.endRow;
+    });
+    if (!placement) return;
+    if (sweepToggledRef.current.has(placement.id)) return;
+    const tile = tileMapForMode.get(placement.id);
+    if (!tile || tile.isProtected || tile.id === 'back' || tile.id === 'home') return;
+    sweepToggledRef.current.add(placement.id);
+    hapticIfEnabled();
+    setSelectedTileIds(prev => {
+      const next = new Set(prev);
+      if (next.has(placement.id)) next.delete(placement.id);
+      else next.add(placement.id);
+      return next;
+    });
+  }, [displayLayout, hapticIfEnabled, tileMapForMode]);
+
+  const sweepPan = useMemo(() => Gesture.Pan()
+    .enabled(sweepActive)
+    // Hold-then-drag: normal swipes fall through to the ScrollView so board
+    // scrolling is unaffected while Select mode is active.
+    .activateAfterLongPress(220)
+    .onStart(e => {
+      const col = Math.floor(e.x / (tileSize + TILE_GAP));
+      const row = Math.floor(e.y / (tileSize + TILE_V_GAP));
+      sweepLastSlot.value = row * BOARD_COLUMNS + col;
+      runOnJS(handleSweepBegin)();
+      runOnJS(handleSweepCell)(col, row);
+    })
+    .onUpdate(e => {
+      const col = Math.floor(e.x / (tileSize + TILE_GAP));
+      const row = Math.floor(e.y / (tileSize + TILE_V_GAP));
+      const slot = row * BOARD_COLUMNS + col;
+      if (slot !== sweepLastSlot.value) {
+        sweepLastSlot.value = slot;
+        runOnJS(handleSweepCell)(col, row);
+      }
+    })
+    .onEnd(() => {
+      sweepLastSlot.value = -1;
+    }), [handleSweepBegin, handleSweepCell, sweepActive, sweepLastSlot, tileSize]);
 
   // ── Sort mode ────────────────────────────────────────────────────────────
   // Reorders the current board's tiles by Type (word type), Name (label), or
@@ -4397,7 +4541,9 @@ export default function TalkScreen() {
     // calmly, so the user can pin symbols or create one.
     if (quickTaggedIds.size === 0) {
       setQuickDockMode('hidden');
-      setManageSelectedIds(new Set());
+      // Selection reflects the desired final Quick set — preseeded with
+      // what's already tagged (empty for newcomers).
+      setManageSelectedIds(new Set(quickTaggedIds));
       setManageCreatedTag(false);
       setQuickManageOpen(true);
       AccessibilityInfo.announceForAccessibility?.(
@@ -4431,20 +4577,23 @@ export default function TalkScreen() {
   }, [activeMode, hapticIfEnabled, quickTaggedIds.size, quickViewActive, reduceMotion]);
 
   // Manage pill → open the Manage Control Bar (replaces the dock row).
+  // Symbols already tagged with Quick enter Manage PRESELECTED so it's
+  // obvious which symbols are already part of Quick; unselecting one
+  // marks it for removal.
   const handleManagePress = useCallback(() => {
     hapticIfEnabled();
     setSortMenuVisible(false);
     setHideMenuVisible(false);
     setQuickDockMode('hidden');
-    setManageSelectedIds(new Set());
+    setManageSelectedIds(new Set(quickTaggedIds));
     setManageCreatedTag(false);
     setQuickManageOpen(true);
     AccessibilityInfo.announceForAccessibility?.(
       quickTaggedIds.size > 0
-        ? 'Manage Quick. Tap symbols to add or remove them, then Done.'
+        ? `Manage Quick. ${quickTaggedIds.size} symbol${quickTaggedIds.size === 1 ? ' is' : 's are'} already selected. Tap symbols to add or remove them, then Done.`
         : 'Manage Quick. Tap symbols to pin them, or Create a new one, then Done.',
     );
-  }, [hapticIfEnabled, quickTaggedIds.size]);
+  }, [hapticIfEnabled, quickTaggedIds]);
 
   const closeQuickManage = useCallback(() => {
     setManageSelectedIds(new Set());
@@ -4453,10 +4602,21 @@ export default function TalkScreen() {
     setQuickDockMode('hidden');
   }, []);
 
+  // Dirty when the desired final set differs from what's currently tagged
+  // (or a symbol was just created via Create +).
+  const manageDirty = useMemo(() => {
+    if (manageCreatedTag) return true;
+    if (manageSelectedIds.size !== quickTaggedIds.size) return true;
+    for (const id of manageSelectedIds) {
+      if (!quickTaggedIds.has(id)) return true;
+    }
+    return false;
+  }, [manageCreatedTag, manageSelectedIds, quickTaggedIds]);
+
   // Back — prompt when there are unsaved selection changes.
   const handleQuickManageBack = useCallback(() => {
     hapticIfEnabled();
-    if (manageSelectedIds.size > 0 || manageCreatedTag) {
+    if (manageDirty) {
       Alert.alert('Discard changes?', undefined, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Discard', style: 'destructive', onPress: closeQuickManage },
@@ -4464,19 +4624,21 @@ export default function TalkScreen() {
       return;
     }
     closeQuickManage();
-  }, [closeQuickManage, hapticIfEnabled, manageCreatedTag, manageSelectedIds.size]);
+  }, [closeQuickManage, hapticIfEnabled, manageDirty]);
 
-  // Select / Unselect — with a selection: clears it (button reads
-  // "Unselect", red). Without one: reminds how selection works.
+  // Select / Unselect — with pending changes: reverts the selection to the
+  // symbols already tagged (button reads "Unselect", red). Without pending
+  // changes: reminds how selection works.
   const handleQuickSelectToggle = useCallback(() => {
     hapticIfEnabled();
-    if (manageSelectedIds.size > 0) {
-      setManageSelectedIds(new Set());
-      AccessibilityInfo.announceForAccessibility?.('Selection cleared');
+    if (manageDirty) {
+      setManageSelectedIds(new Set(quickTaggedIds));
+      setManageCreatedTag(false);
+      AccessibilityInfo.announceForAccessibility?.('Selection reset to your current Quick symbols');
       return;
     }
     AccessibilityInfo.announceForAccessibility?.('Tap symbols on the board to select them');
-  }, [hapticIfEnabled, manageSelectedIds.size]);
+  }, [hapticIfEnabled, manageDirty, quickTaggedIds]);
 
   // Create — shared custom symbol editor; the confirm handler auto-tags the
   // new tile as Quick while the Manage bar is open.
@@ -4484,15 +4646,11 @@ export default function TalkScreen() {
     handleOpenCustomSymbolEditor();
   }, [handleOpenCustomSymbolEditor]);
 
-  // Done — reconcile intents: selected non-Quick tiles become Quick,
-  // selected Quick tiles are removed. Then jump straight into Quick view.
+  // Done — the selection IS the desired final Quick set (tagged symbols
+  // enter Manage preselected). Then jump straight into Quick view.
   const handleQuickManageDone = useCallback(() => {
     hapticIfEnabled();
-    const next = new Set(quickTaggedIds);
-    manageSelectedIds.forEach(id => {
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-    });
+    const next = new Set(manageSelectedIds);
     setQuickTaggedIds(next);
     closeQuickManage();
     if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -4510,9 +4668,9 @@ export default function TalkScreen() {
   }, [closeQuickManage, hapticIfEnabled, manageSelectedIds, quickTaggedIds, reduceMotion]);
 
   // Done is conditional — only when there are pending changes to save
-  // (selection intents, or a symbol just created via Create +). This is
-  // the same dirty-state gating pattern as editDirty vs editClean.
-  const manageDoneVisible = quickManageOpen && (manageSelectedIds.size > 0 || manageCreatedTag);
+  // (selection differs from the tagged set, or a symbol was just created
+  // via Create +). Same dirty-state gating pattern as editDirty/editClean.
+  const manageDoneVisible = quickManageOpen && manageDirty;
 
   // The green Manage pill floats above the dock while the Quick view is
   // active (experienced users' path into editing) or right after the
@@ -4565,14 +4723,13 @@ export default function TalkScreen() {
 
   // Select ↔ Unselect switch — a brief 150ms blink stands in for the
   // colour tween (BoardDockAction handles the blue → red tint itself).
-  const hasManageSelection = manageSelectedIds.size > 0;
   useEffect(() => {
     if (!quickManageOpen || reduceMotion) return;
     unselectBlink.value = withSequence(
       withTiming(0.55, { duration: 75 }),
       withTiming(1, { duration: 75 }),
     );
-  }, [hasManageSelection, quickManageOpen, reduceMotion, unselectBlink]);
+  }, [manageDirty, quickManageOpen, reduceMotion, unselectBlink]);
 
   // Dock slide animation — right-to-left "cuddle" leaving a half-visible
   // sliver. Native-driver transform; instant under Reduce Motion.
@@ -4902,6 +5059,9 @@ export default function TalkScreen() {
       } else {
         if (isScrollingRef.current) return;
         hapticIfEnabled();
+        // Selection = desired final Quick set (tagged symbols enter
+        // Manage preselected). Toggling off a tagged symbol marks it
+        // for removal; toggling on an untagged one marks it to add.
         const wasSelected = manageSelectedIds.has(tile.id);
         setManageSelectedIds(prev => {
           const next = new Set(prev);
@@ -4912,9 +5072,11 @@ export default function TalkScreen() {
         const isTagged = quickTaggedIds.has(tile.id);
         AccessibilityInfo.announceForAccessibility?.(
           wasSelected
-            ? `${tile.label} deselected`
-            : isTagged
+            ? isTagged
               ? `${tile.label} will be removed from Quick`
+              : `${tile.label} deselected`
+            : isTagged
+              ? `${tile.label} kept in Quick`
               : `${tile.label} will be added to Quick`,
         );
         return;
@@ -5082,6 +5244,12 @@ export default function TalkScreen() {
           navVisible={showTopNav}
           onToggleNav={() => {
             hapticIfEnabled();
+            // One native layout transition instead of a JS-driven height
+            // animation — fixes the top-nav toggle lag (whole-board
+            // re-layout no longer happens on every frame).
+            if (!reduceMotion) {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            }
             setShowTopNav(value => !value);
           }}
         />
@@ -5157,6 +5325,7 @@ export default function TalkScreen() {
               const totalGridSlots = gridRows * BOARD_COLUMNS;
               const gridH = gridRows * rowStep - TILE_V_GAP;
               return (
+                <GestureDetector gesture={sweepPan}>
                 <View style={{ width: boardWidth - TILE_LEFT_PADDING * 2, height: gridH, position: 'relative' }}>
                   <GridOverlay
                     cols={BOARD_COLUMNS}
@@ -5174,9 +5343,12 @@ export default function TalkScreen() {
                     const w = placement.fw * fineUnit;
                     const h = placement.fh * fineUnit;
                     // ── Quick view / Manage visual treatment ────────────
+                    // In Manage, the selection is the desired FINAL Quick
+                    // set: tagged symbols start selected. Removal intent =
+                    // tagged but deselected; addition = untagged but selected.
                     const isQuick = quickTaggedIds.has(tile.id);
                     const manageSel = quickManageOpen && manageSelectedIds.has(tile.id);
-                    const removalIntent = manageSel && isQuick;
+                    const removalIntent = quickManageOpen && isQuick && !manageSel;
                     const additionIntent = manageSel && !isQuick;
                     // Quick view chrome only outside Manage/editing.
                     const quickChrome =
@@ -5261,9 +5433,9 @@ export default function TalkScreen() {
                             }]}
                           />
                         ) : null}
-                        {/* Manage — already-tagged tiles wear a calm solid
-                            border ("selected for Quick, editable"). */}
-                        {quickManageOpen && isQuick && !manageSel ? (
+                        {/* Manage — already-tagged tiles that STAY selected
+                            wear a calm solid border ("part of Quick"). */}
+                        {quickManageOpen && isQuick && manageSel ? (
                           <View
                             pointerEvents="none"
                             style={[styles.quickTileOverlay, {
@@ -5326,6 +5498,7 @@ export default function TalkScreen() {
                     </>
                   ) : null}
                 </View>
+                </GestureDetector>
               );
             })()}
           </ScrollView>
@@ -5524,10 +5697,10 @@ export default function TalkScreen() {
                 style={[
                   styles.manageSubOption,
                   {
-                    left: Math.min(
-                      Math.max(quickAnchor.x + quickAnchor.width / 2 - 50, spacing.sm),
-                      width - 100 - spacing.sm,
-                    ),
+                    // Sub-option sits directly above its parent control and
+                    // matches the parent's visual width (Manage above Quick).
+                    left: quickAnchor.x,
+                    width: Math.max(quickAnchor.width, DOCK_ACTION_SIZE),
                   },
                   manageAnimStyle,
                 ]}
@@ -5563,7 +5736,7 @@ export default function TalkScreen() {
                     <BoardDockAction
                       icon="toggle-bar"
                       iconOnly
-                      size={44}
+                      size={DOCK_TOGGLE_SIZE}
                       a11yLabel="Expand controls"
                       a11yHint="Shows the board controls"
                       onPress={handleHomeDockExpand}
@@ -5626,7 +5799,7 @@ export default function TalkScreen() {
                   <BoardDockAction
                     icon="untoggle-bar"
                     iconOnly
-                    size={44}
+                    size={boardSizes.touchTargetMin}
                     a11yLabel="Collapse controls"
                     a11yHint="Leaves a small expand control on the left edge"
                     onPress={() => {
@@ -5648,16 +5821,16 @@ export default function TalkScreen() {
                   <Reanimated.View style={unselectBlinkStyle}>
                     <BoardDockAction
                       icon="select"
-                      label={manageSelectedIds.size > 0 ? 'Unselect' : 'Select'}
-                      a11yLabel={manageSelectedIds.size > 0
-                        ? `Unselect ${manageSelectedIds.size} selected symbols`
+                      label={manageDirty ? 'Unselect' : 'Select'}
+                      a11yLabel={manageDirty
+                        ? 'Unselect — reset pending Quick changes'
                         : 'Select symbols'}
-                      a11yHint={manageSelectedIds.size > 0
-                        ? 'Clears the current selection'
+                      a11yHint={manageDirty
+                        ? 'Resets the selection to your current Quick symbols'
                         : 'Tap symbols on the board to add or remove them from Quick'}
                       onPress={handleQuickSelectToggle}
                       kind="neutral"
-                      tint={manageSelectedIds.size > 0 ? t.colors.danger : undefined}
+                      tint={manageDirty ? t.colors.danger : undefined}
                       isToggle
                       isActive
                     />
@@ -5760,7 +5933,7 @@ export default function TalkScreen() {
                     <BoardDockAction
                       icon="toggle-bar"
                       iconOnly
-                      size={44}
+                      size={DOCK_TOGGLE_SIZE}
                       a11yLabel="Expand controls"
                       a11yHint="Shows the board controls"
                       onPress={handleFolderExpand}
@@ -5770,7 +5943,18 @@ export default function TalkScreen() {
                 </View>
               ) : dockMode === 'editControls' ? (
                 <>
-                  {/* Undo — safest recovery action, always first (left). */}
+                  {/* Back — far left, only inside a folder. Returns to the
+                      previous board level WITHOUT exiting edit mode. */}
+                  {activeMode !== 'home' ? (
+                    <BoardDockAction
+                      icon="back-out" label="Back"
+                      a11yLabel="Back"
+                      a11yHint="Goes back one board without leaving edit mode"
+                      onPress={handleDockBack}
+                      kind="neutral"
+                    />
+                  ) : null}
+                  {/* Undo — safest recovery action, next (left). */}
                   <BoardDockAction
                     icon="undo" label="Undo"
                     a11yLabel="Undo"
@@ -5800,6 +5984,24 @@ export default function TalkScreen() {
                       isActive={activeEditTool === 'select'}
                     />
                   </View>
+                  {/* All / None — one tap to select or clear every tile on
+                      this board view. Only offered while Select is active. */}
+                  {activeEditTool === 'select' ? (
+                    <BoardDockAction
+                      icon="select"
+                      label={allTilesSelected ? 'None' : 'All'}
+                      a11yLabel={allTilesSelected ? 'Deselect all' : 'Select all'}
+                      a11yHint={
+                        allTilesSelected
+                          ? 'Clears the whole selection'
+                          : 'Selects every tile on this board'
+                      }
+                      onPress={handleSelectAllToggle}
+                      kind="neutral"
+                      isToggle
+                      isActive={allTilesSelected}
+                    />
+                  ) : null}
                   {/* Move — acts on the selection, after Select. */}
                   <View onLayout={handleMoveAnchorLayout}>
                     <BoardDockAction
@@ -5813,12 +6015,23 @@ export default function TalkScreen() {
                       isActive={activeEditTool === 'move'}
                     />
                   </View>
-                  <BoardDockAction
-                    icon="checkmark" label="Save"
-                    a11yLabel="Save changes"
-                    a11yHint="Saves the board and closes editing"
-                    onPress={handleEditControlsSave} kind="primary"
-                  />
+                  {/* State-aware commit: Save only when there is something
+                      to save; otherwise a calm Cancel that just closes. */}
+                  {undoStack.length > 0 || layoutDirty ? (
+                    <BoardDockAction
+                      icon="checkmark" label="Save"
+                      a11yLabel="Save changes"
+                      a11yHint="Saves the board and closes editing"
+                      onPress={handleEditControlsSave} kind="primary"
+                    />
+                  ) : (
+                    <BoardDockAction
+                      icon="close" label="Cancel"
+                      a11yLabel="Close editing"
+                      a11yHint="Closes editing. No changes were made"
+                      onPress={handleEditControlsDone} kind="muted"
+                    />
+                  )}
                 </>
               ) : dockMode === 'editDirty' ? (
                 <>
@@ -5847,10 +6060,13 @@ export default function TalkScreen() {
                     a11yLabel="Add item" a11yHint="Opens add options"
                     onPress={handleDockAddPlus} kind="neutral"
                   />
+                  {/* No changes yet in this resize session → Cancel, not
+                      Done/Save (state-aware commit labels). */}
                   <BoardDockAction
-                    icon="checkmark" label="Done"
-                    a11yLabel="Finish editing"
-                    onPress={handleDockDone} kind="primary"
+                    icon="close" label="Cancel"
+                    a11yLabel="Close layout editing"
+                    a11yHint="Closes layout editing. No changes were made"
+                    onPress={handleDockDone} kind="muted"
                   />
                 </>
               ) : null}
@@ -6040,9 +6256,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 32,
-    paddingTop: 12,
-    paddingBottom: 9,
+    gap: 24,
+    paddingTop: 6,
+    paddingBottom: 6,
     paddingHorizontal: 20,
   },
   // Full-width bottom border of the top nav. Rendered as a view rather than
@@ -6054,26 +6270,33 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: CHROME_SEPARATOR_WIDTH,
   },
+  // 68×52 sits inside the 50–56 target range while trimming the previous
+  // 72×57 footprint. Press feedback is the animated scale, not opacity.
   topTab: {
-    width: 72,
-    height: 57,
+    width: boardSizes.topNavItemWidth,
+    height: boardSizes.topNavItemHeight,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  // Very subtle opacity dip — colour + scale animation already handles the active state.
-  topTabPressed: {
-    opacity: 0.95,
   },
   topTabContent: {
     alignItems: 'center',
     justifyContent: 'space-between',
     height: '100%',
     width: '100%',
-    paddingTop: 2,
-    paddingBottom: 1,
+    paddingTop: 4,
+    paddingBottom: 3,
+  },
+  // Selected-state pill — rounded fill behind the active tab's icon+label.
+  topTabPill: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 12,
   },
   topTabIconMount: {
-    height: 30,
+    height: boardSizes.topNavIcon,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'flex-start',
@@ -6246,9 +6469,11 @@ const styles = StyleSheet.create({
     flexWrap: 'nowrap',
     gap: DOCK_GAP,
   },
+  // Collapsed control bar: the hugging/peeking toggle matches the control
+  // bar item height so the way back is as easy to hit as the bar itself.
   collapsedDockMount: {
-    width: 44,
-    height: 44,
+    width: DOCK_TOGGLE_SIZE,
+    height: DOCK_TOGGLE_SIZE,
     overflow: 'visible',
     alignItems: 'flex-start',
     justifyContent: 'center',
@@ -6269,20 +6494,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   dockPopoverItem: {
-    minHeight: 48,
+    minHeight: boardSizes.subOptionMinHeight,
     borderRadius: 10,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm + 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   dockPopoverItemLabel: {
-    fontSize: 16,
+    flexShrink: 1,
+    fontSize: 14,
     fontWeight: '700',
   },
   dockPopoverCheck: {
-    width: 22,
-    height: 22,
+    width: 20,
+    height: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -6388,10 +6614,10 @@ const styles = StyleSheet.create({
     bottom: DOCK_BOTTOM_GAP + DOCK_ACTION_SIZE + spacing.sm,
   },
   managePill: {
-    minHeight: 44,
+    minHeight: boardSizes.subOptionMinHeight,
     borderRadius: 12,
     paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000000',
@@ -6402,7 +6628,7 @@ const styles = StyleSheet.create({
   },
   managePillLabel: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   // Faint red blend over the Quick button on the newcomer error shake
@@ -6418,14 +6644,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dockActionLabel: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: boardSizes.controlBarLabel,
+    lineHeight: boardSizes.controlBarLabel + 4,
     fontWeight: '700',
     textAlign: 'center',
   },
   dockAddToggleLabel: {
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: boardSizes.controlBarLabel,
+    lineHeight: boardSizes.controlBarLabel + 3,
     fontWeight: '700',
     textAlign: 'center',
   },
