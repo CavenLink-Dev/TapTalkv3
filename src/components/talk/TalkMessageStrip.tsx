@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import {
   Alert,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -9,15 +8,16 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BackspaceIcon } from '../../components/icons/FigmaIcons';
+import { MulberrySymbol } from '../symbols/MulberrySymbol';
 import { useAppContext } from '../../hooks/useAppContext';
 import { useTheme } from '../../theme/useTheme';
 import { CHROME_SEPARATOR_WIDTH, spacing } from '../../theme/tokens';
 import { hapticError, hapticSelection } from '../../utils/haptics';
-import type { ImageSourcePropType } from 'react-native';
 
 const MESSAGE_HEIGHT = 104;
-const MESSAGE_CHIP_SIZE = 48;
-const MESSAGE_SLOT_COUNT = 5;
+const MESSAGE_CHIP_SIZE = 56;
+const CHIP_SYMBOL_SIZE = 38;
+const MESSAGE_SLOT_COUNT = 4;
 
 export type MessageStripTile = {
   id: string;
@@ -26,13 +26,24 @@ export type MessageStripTile = {
   color: string;
   background?: string;
   speech?: string;
+  mulberrySymbolId?: string;
+  mulberryName?: string;
 };
+
+function hexToRgba(hex: string, alpha: number): string {
+  const match = hex.match(/^#([0-9a-fA-F]{6})$/);
+  if (!match) return hex;
+  const h = match[1] as string;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 type TalkMessageStripProps = {
   messageSlotRefs: React.MutableRefObject<Array<View | null>>;
   chipTileLookup: Map<string, MessageStripTile>;
   ghostCount: number;
-  wordBackgroundForTile: (tile: MessageStripTile) => ImageSourcePropType;
   onSpeak: (messageText: string, hasWords: boolean) => void;
   onBackspace: (hasWords: boolean) => void;
   onClearAll: () => void;
@@ -46,20 +57,20 @@ function MessageChip({
   tile,
   label,
   onRemove,
-  wordBackgroundForTile,
 }: {
   tile: MessageStripTile;
   label: string;
   onRemove?: () => void;
-  wordBackgroundForTile: (tile: MessageStripTile) => ImageSourcePropType;
 }) {
   const t = useTheme();
+  const chipBg = hexToRgba(tile.color, 0.2);
   const inner = (
     <>
-      <Image
-        source={wordBackgroundForTile(tile)}
-        resizeMode="stretch"
-        style={styles.messageChipBackground}
+      <View style={[styles.messageChipBg, { backgroundColor: chipBg }]} />
+      <MulberrySymbol
+        symbolId={tile.mulberrySymbolId}
+        name={tile.mulberryName ?? tile.label}
+        size={CHIP_SYMBOL_SIZE}
       />
       <Text
         style={[styles.messageChipLabel, { color: t.colors.text }]}
@@ -91,7 +102,6 @@ export const TalkMessageStrip = React.memo(function TalkMessageStrip({
   messageSlotRefs,
   chipTileLookup,
   ghostCount,
-  wordBackgroundForTile,
   onSpeak,
   onBackspace,
   onClearAll,
@@ -196,11 +206,9 @@ export const TalkMessageStrip = React.memo(function TalkMessageStrip({
                             label: word.label,
                             kind: 'word',
                             color: '#5CC9E8',
-                            background: 'cyan',
                           }
                         }
                         onRemove={() => onRemoveWord(index, word.label)}
-                        wordBackgroundForTile={wordBackgroundForTile}
                       />
                     ) : null}
                   </View>
@@ -292,9 +300,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
+    bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 7,
   },
   messageSlotRowHidden: {
     opacity: 0,
@@ -302,23 +311,28 @@ const styles = StyleSheet.create({
   messageSlot: {
     width: MESSAGE_CHIP_SIZE,
     height: MESSAGE_CHIP_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   messageChip: {
     width: MESSAGE_CHIP_SIZE,
     height: MESSAGE_CHIP_SIZE,
-    borderRadius: 8,
+    borderRadius: 10,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 1,
   },
-  messageChipBackground: {
+  messageChipBg: {
     ...StyleSheet.absoluteFillObject,
+    borderRadius: 10,
   },
   messageChipLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    paddingHorizontal: 2,
+    fontSize: 9,
+    fontWeight: '700',
+    paddingHorizontal: 3,
     textAlign: 'center',
+    lineHeight: 11,
   },
   backspace: {
     width: 61,

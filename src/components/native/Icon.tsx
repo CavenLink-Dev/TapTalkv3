@@ -160,6 +160,55 @@ export function Icon({ name, size = 24, color, strokeWidth = 2 }: IconProps) {
           <Line x1="3" y1="21" x2="10" y2="14" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
         </Svg>
       );
+    /** Undo — curved arrow back to the left. Stroke-based so it matches
+     *  the dock's shared line weight. */
+    case 'undo':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Polyline points="8.5,5.5 4,10 8.5,14.5" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <Path
+            d="M4 10h10.5a5.5 5.5 0 0 1 0 11H10"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    /** Duplicate — two soft-cornered squares. */
+    case 'duplicate':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Path
+            d="M9 9h11v11H9z"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Path
+            d="M5 15H4V4h11v1"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    /** Favourite — star outline (toggles filled elsewhere via colour). */
+    case 'favourite':
+    case 'star':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Path
+            d="M12 3l2.7 5.6 6.1.8-4.5 4.3 1.1 6-5.4-2.9-5.4 2.9 1.1-6L3.2 9.4l6.1-.8L12 3z"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
     /** Board dock gear — tinted raster, matches dock symbol colour. */
     case 'board':
       return <BoardIcon size={size} color={strokeColor} />;
@@ -167,6 +216,35 @@ export function Icon({ name, size = 24, color, strokeWidth = 2 }: IconProps) {
     case 'setting':
     case 'settings':
       return <BoardSettingIcon size={size} color={strokeColor} />;
+    /** Fullscreen — artwork from assets/symbol/fullscreen.svg (SF-style
+     *  fill). Rendered as fill so it matches the 'sort' glyph weight. */
+    case 'fullscreen':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 18.3162 14.7559">
+          <Path
+            fill={strokeColor}
+            d="M2.76928 14.7559L15.5476 14.7559C17.3396 14.7559 18.3162 13.7793 18.3162 12.0019L18.3162 2.76367C18.3162 0.986328 17.3396 0.00976838 15.5476 0.00976838L2.76928 0.00976838C0.98217 0.00976838 0.000724 0.986328 0.000724 2.76367L0.000724 12.0019C0.000724 13.7793 0.98217 14.7559 2.76928 14.7559ZM3.00366 12.6318C2.42748 12.6318 2.11987 12.3535 2.11987 11.7432L2.11987 3.02246C2.11987 2.40723 2.42748 2.13379 3.00366 2.13379L15.3132 2.13379C15.8894 2.13379 16.197 2.40723 16.197 3.02246L16.197 11.7432C16.197 12.3535 15.8894 12.6318 15.3132 12.6318Z"
+          />
+          <Path
+            fill={strokeColor}
+            d="M5.16674 7.33887C5.53784 7.33887 5.81127 7.05566 5.81127 6.6748L5.81127 6.01074L5.64526 4.24805L7.37865 4.4336L8.06713 4.4336C8.45287 4.4336 8.73608 4.16016 8.73608 3.78418C8.73608 3.41309 8.45287 3.13965 8.0769 3.13965L5.38159 3.13965C4.84935 3.13965 4.51733 3.43262 4.51733 3.99414L4.51733 6.66504C4.51733 7.0459 4.79077 7.33887 5.16674 7.33887ZM8.17455 7.47559C8.57494 7.47559 8.88256 7.16797 8.88256 6.76758C8.88256 6.58203 8.79467 6.38672 8.63842 6.23535L7.48608 5.07813L6.38256 4.18946C5.69897 3.64746 5.03978 4.33105 5.5476 4.95118L6.47045 6.09376L7.60814 7.22656C7.77416 7.39746 7.96947 7.47559 8.17455 7.47559ZM13.155 7.42676C12.7791 7.42676 12.5056 7.70996 12.5056 8.09082L12.5056 8.75488L12.6716 10.5176L10.9382 10.332L10.2546 10.332C9.86401 10.332 9.5808 10.6055 9.5808 10.9814C9.5808 11.3525 9.86401 11.626 10.2449 11.626L12.9353 11.626C13.4724 11.626 13.8044 11.333 13.8044 10.7715L13.8044 8.10059C13.8044 7.71973 13.5261 7.42676 13.155 7.42676ZM10.1472 7.29004C9.74682 7.29004 9.4392 7.59277 9.4392 7.99805C9.4392 8.17871 9.52709 8.37891 9.67846 8.53028L10.8357 9.6875L11.9392 10.5762C12.6179 11.1182 13.2771 10.4346 12.7742 9.81446L11.8464 8.67188L10.7136 7.53907C10.5427 7.36816 10.3523 7.29004 10.1472 7.29004Z"
+          />
+        </Svg>
+      );
+    /** Hide — eye-with-slash from assets/symbol/hide.svg (SF-style fill). */
+    case 'hide':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 21.3532 17.1094">
+          <Path
+            fill={strokeColor}
+            d="M5.26384 5.67455C3.62182 6.79969 2.61291 8.11716 2.61291 8.56445C2.61291 9.59473 6.12853 13.2715 10.6744 13.2715C11.3558 13.2715 12.0141 13.1887 12.6371 13.0369L14.3537 14.751C13.2395 15.1189 12.0056 15.3369 10.6744 15.3369C4.28282 15.3369 0.0006 10.1416 0.0006 8.56445C0.0006 7.68126 1.34347 5.66498 3.64903 4.06213ZM21.3532 8.56445C21.3532 9.43668 20.0748 11.4156 17.8279 13.0086L16.2378 11.4196C17.7887 10.3453 18.7359 9.09886 18.7359 8.56445C18.7359 7.7295 15.2154 3.8623 10.6744 3.8623C10.0537 3.8623 9.45226 3.93439 8.87879 4.06602L7.15365 2.34215C8.231 1.99951 9.41154 1.79687 10.6744 1.79687C17.1735 1.79687 21.3532 6.98731 21.3532 8.56445ZM11.7869 12.188C11.4373 12.296 11.0653 12.3535 10.6793 12.3535C8.57482 12.3535 6.8756 10.6348 6.8756 8.54981C6.8756 8.16561 6.93223 7.79524 7.03889 7.44699ZM14.4781 8.54981C14.4781 8.88833 14.4336 9.21719 14.3458 9.52898L9.69994 4.88657C10.0111 4.79979 10.3399 4.75585 10.6793 4.75585C12.7887 4.75585 14.4781 6.45019 14.4781 8.54981Z"
+          />
+          <Path
+            fill={strokeColor}
+            d="M16.8121 15.5664C17.0807 15.835 17.5104 15.8447 17.7789 15.5664C18.0524 15.2832 18.0475 14.8682 17.7789 14.5996L4.53185 1.36231C4.2633 1.09375 3.82384 1.09375 3.55529 1.36231C3.29649 1.6211 3.29649 2.0703 3.55529 2.32911Z"
+          />
+        </Svg>
+      );
     case 'refresh':
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

@@ -5,6 +5,7 @@ import { BottomNavIcon, BottomNavIconName } from '../../src/components/icons/Bot
 import { PressableTabButton } from '../../src/components/native/PressableTabButton';
 import { CHROME_SEPARATOR_WIDTH } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
+import { useTabBarHidden } from '../../src/features/board/chromeVisibility';
 
 function icon(name: BottomNavIconName) {
   return ({ focused }: { focused: boolean }) => (
@@ -14,6 +15,9 @@ function icon(name: BottomNavIconName) {
 
 export default function TabsLayout() {
   const t = useTheme();
+  // "Hide" board feature — the Talk screen can collapse the tab bar for a
+  // broader, distraction-free board. Restored by tapping the peeking dock.
+  const tabBarHidden = useTabBarHidden();
 
   return (
     <Tabs
@@ -26,6 +30,7 @@ export default function TabsLayout() {
             backgroundColor: t.colors.surface,
             borderTopColor: t.colors.border,
           },
+          tabBarHidden && styles.tabBarHidden,
         ],
         tabBarActiveTintColor: t.colors.primary,
         tabBarInactiveTintColor: t.colors.textMuted,
@@ -82,5 +87,10 @@ const styles = StyleSheet.create({
   tabBarItem: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // Collapsed state for the board "Hide" feature — display none removes it
+  // from layout so the board gets the full height back.
+  tabBarHidden: {
+    display: 'none',
   },
 });

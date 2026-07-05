@@ -7,10 +7,10 @@ import {
   Animated as RNAnimated,
   Easing as RNEasing,
   LayoutAnimation,
+  LayoutChangeEvent,
   LayoutRectangle,
   NativeScrollEvent,
   NativeSyntheticEvent,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -48,20 +48,21 @@ import { buildMessageUtterances } from '../../src/utils/speechRules';
 import { animation, CHROME_SEPARATOR_WIDTH, colors, radii, spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
-import { predictSuggestions } from '../../src/utils/ngram';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import {
   resolveSymbolForKeyword,
   ResolvedSymbol,
 } from '../../src/features/symbol-brain/resolveSymbolForKeyword';
-import type { AACWord } from '../../src/context/types';
+import { setTabBarHidden } from '../../src/features/board/chromeVisibility';
 
 type TileKind = 'folder' | 'word' | 'action';
 type BoardMode = 'home' | 'foods' | 'animals' | 'tools' | 'quick' | 'settings' | 'emergency' | 'feelings';
-// New top-nav vocabulary: TAPTALK opens the keyboard page, QUICK opens
-// Quick Talk, EDIT is a stub for now (no behaviour), CLEAR clears the
-// message strip in place. See to_do/NEXT.md "Board top nav" for the lock.
-type TopTab = 'taptalk' | 'quick' | 'edit' | 'clear';
+// Top-nav vocabulary (board_control_bar restructure): EDIT opens the Edit
+// Control Bar (moved up from the bottom dock), LAYOUT is the old Resize
+// tool (grid + handles), SAVED opens saved sentences (old Quick — the
+// merged TapTalk+Saved page comes later), SETTINGS opens board settings
+// (old "Board" dock action). CLEAR was removed.
+type TopTab = 'edit' | 'layout' | 'saved' | 'settings';
 
 type BoardTile = {
   id: string;
@@ -255,10 +256,10 @@ function wordBackgroundForTile(tile: BoardTile) {
 // neutral outlined Ionicons + uppercase text labels — matches the bottom
 // nav vocabulary (one tint, two states: idle grey, active brand blue).
 const TOP_TAB_META: Record<TopTab, { icon: React.ComponentProps<typeof Ionicons>['name']; label: string }> = {
-  taptalk: { icon: 'keypad',       label: 'TAPTALK' },
-  quick:   { icon: 'flash',        label: 'QUICK'   },
-  edit:    { icon: 'create',       label: 'EDIT'    },
-  clear:   { icon: 'close-circle', label: 'CLEAR'   },
+  edit:     { icon: 'create',   label: 'EDIT'     },
+  layout:   { icon: 'grid',     label: 'LAYOUT'   },
+  saved:    { icon: 'bookmark', label: 'SAVED'    },
+  settings: { icon: 'settings', label: 'SETTINGS' },
 };
 
 // ─── Symbol palette ──────────────────────────────────────────────────────────
@@ -518,6 +519,27 @@ type DockMode =
  */
 type BoardEditTool = 'none' | 'select' | 'move' | 'resize';
 
+/** Sort options offered by the Sort popover. */
+type BoardSortMode = 'type' | 'name' | 'category';
+
+/**
+ * One reversible board edit. `layouts` is a snapshot of the whole custom
+ * layouts map (moves touch two boards at once), `favourites` the active
+ * board's pinned list, and `restoreTileIds` any tiles a delete hid via
+ * the persisted HIDE_TILE dispatch (undo re-shows them with RESTORE_TILE).
+ */
+type BoardUndoEntry = {
+  label: string;
+  layouts: Partial<Record<BoardMode, BoardLayout>>;
+  favourites: string[];
+  board: BoardMode;
+  restoreTileIds?: string[];
+};
+
+// How much of the hidden control bar keeps peeking in from the left edge
+// so the user always has a visible, tappable way back (item 4 — Hide).
+const DOCK_PEEK = 30;
+
 const BoardDockAction = React.memo(function BoardDockAction({
   label,
   icon,
@@ -692,6 +714,126 @@ const BoardDockAction = React.memo(function BoardDockAction({
     </Pressable>
   );
 });
+
+// ── DockPopover ──────────────────────────────────────────────────────────
+// Small vertical menu anchored just above a Bottom Control Bar action
+// (Sort options, Hide options). Persistent: tapping an option does NOT
+// dismiss it, so the user can toggle sort/unsort repeatedly. Springs in
+// gently and settles (calm, no harsh shadows); instant under Reduce Motion.
+type DockPopoverOption = {
+  key: string;
+  label: string;
+  a11yLabel: string;
+  selected?: boolean;
+  onPress: () => void;
+};
+
+function DockPopover({
+  visible,
+  anchorX,
+  anchorWidth,
+  a11yLabel,
+  options,
+}: {
+  visible: boolean;
+  /** Anchor button x/width relative to the dock row (same coord space). */
+  anchorX: number;
+  anchorWidth: number;
+  a11yLabel: string;
+  options: DockPopoverOption[];
+}) {
+  const t = useTheme();
+  const reduceMotion = useReduceMotion();
+  const { width: screenW } = useWindowDimensions();
+  const anim = useRef(new RNAnimated.Value(0)).current;
+  const [mounted, setMounted] = useState(visible);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      if (reduceMotion) { anim.setValue(1); return; }
+      anim.setValue(0);
+      RNAnimated.spring(anim, {
+        toValue: 1,
+        friction: 9,
+        tension: 90,
+        useNativeDriver: true,
+      }).start();
+    } else if (reduceMotion) {
+      anim.setValue(0);
+      setMounted(false);
+    } else {
+      RNAnimated.timing(anim, {
+        toValue: 0,
+        duration: 120,
+        useNativeDriver: true,
+      }).start(({ finished }) => { if (finished) setMounted(false); });
+    }
+  }, [anim, reduceMotion, visible]);
+
+  if (!mounted) return null;
+
+  const POP_WIDTH = 172;
+  // Centre over the anchor, clamped to the screen with an 8pt margin.
+  const left = Math.min(
+    Math.max(anchorX + anchorWidth / 2 - POP_WIDTH / 2, spacing.sm),
+    screenW - POP_WIDTH - spacing.sm,
+  );
+
+  return (
+    <RNAnimated.View
+      accessibilityRole="menu"
+      accessibilityLabel={a11yLabel}
+      style={[
+        styles.dockPopover,
+        {
+          left,
+          width: POP_WIDTH,
+          backgroundColor: t.isDark ? t.colors.navBackground : '#FFFFFF',
+          borderColor: t.colors.symbolOutline,
+          opacity: anim,
+          transform: [{
+            translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }),
+          }],
+        },
+      ]}
+    >
+      {options.map(opt => (
+        <Pressable
+          key={opt.key}
+          accessibilityRole="menuitem"
+          accessibilityLabel={opt.a11yLabel}
+          accessibilityState={{ selected: Boolean(opt.selected) }}
+          onPress={opt.onPress}
+          // Brief dim on press (opacity feedback) + soft fill — no harsh colour.
+          style={({ pressed }) => [
+            styles.dockPopoverItem,
+            {
+              backgroundColor: pressed
+                ? (t.isDark ? t.colors.input : colors.softBlue)
+                : 'transparent',
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+        >
+          <Text
+            style={[styles.dockPopoverItemLabel, { color: t.colors.text }]}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.4}
+          >
+            {opt.label}
+          </Text>
+          {/* Selected state does not rely on colour alone — checkmark glyph. */}
+          <View style={styles.dockPopoverCheck}>
+            {opt.selected ? (
+              <Icon name="checkmark" size={18} color={t.colors.primary} strokeWidth={3} />
+            ) : null}
+          </View>
+        </Pressable>
+      ))}
+    </RNAnimated.View>
+  );
+}
 
 // Mulberry pictograms render inside the `symbolMount` region at ~52% of
 // the tile size, which keeps them comfortably below the label without
@@ -1671,6 +1813,8 @@ interface BoardTileButtonProps {
   isSelected?: boolean;
   /** Move Mode: highlight folder tiles as tappable destinations. */
   moveDestinationMode?: boolean;
+  /** Favourite: draws a small star badge (pinned to the top of the board). */
+  isFavourite?: boolean;
 }
 
 function BoardTileButton({
@@ -1701,6 +1845,7 @@ function BoardTileButton({
   selectable = false,
   isSelected = false,
   moveDestinationMode = false,
+  isFavourite = false,
 }: BoardTileButtonProps) {
   // Actual visual dimensions default to a square of `size` for backwards
   // compatibility with existing single-slot tiles.
@@ -2050,6 +2195,17 @@ function BoardTileButton({
           <Icon name="close" size={16} color={t.colors.surface} />
         </Pressable>
       ) : null}
+      {/* ── Favourite badge ─────────────────────────────────────────────
+          Small calm star, top-left, so pinned tiles are recognisable at a
+          glance without relying on their board position alone. */}
+      {isFavourite && !isNav ? (
+        <View
+          pointerEvents="none"
+          style={[styles.favouriteBadge, { backgroundColor: 'rgba(255,255,255,0.9)' }]}
+        >
+          <Icon name="star" size={14} color={t.colors.primary} strokeWidth={2.4} />
+        </View>
+      ) : null}
       {/* ── Select Mode overlay ─────────────────────────────────────────
           Unselected: soft circular outline (calm dark neutral). Selected:
           filled blue circle with a large tick. The overlay is
@@ -2189,6 +2345,7 @@ const BoardTileCell = React.memo(function BoardTileCell({
   selectable,
   isSelected,
   moveDestinationMode,
+  isFavourite,
 }: {
   tile: BoardTile;
   size: number;
@@ -2215,6 +2372,7 @@ const BoardTileCell = React.memo(function BoardTileCell({
   selectable?: boolean;
   isSelected?: boolean;
   moveDestinationMode?: boolean;
+  isFavourite?: boolean;
 }) {
   const handlePress = useCallback(
     (rect: WindowRect | null) => onTilePress(tile, rect),
@@ -2247,6 +2405,7 @@ const BoardTileCell = React.memo(function BoardTileCell({
       selectable={selectable}
       isSelected={isSelected}
       moveDestinationMode={moveDestinationMode}
+      isFavourite={isFavourite}
     />
   );
 });
@@ -2327,7 +2486,7 @@ function TopNav({
   onTabPress,
 }: {
   visible: boolean;
-  activeTab: TopTab;
+  activeTab: TopTab | null;
   onTabPress: (tab: TopTab) => void;
 }) {
   // Item 3 — RM: collapse/expand at duration 0 (principle 18).
@@ -2370,7 +2529,7 @@ function TopNav({
           },
         ]}
       >
-        {(['taptalk', 'quick', 'edit', 'clear'] as TopTab[]).map(tab => (
+        {(['edit', 'layout', 'saved', 'settings'] as TopTab[]).map(tab => (
           <TopNavTab
             key={tab}
             tab={tab}
@@ -2405,7 +2564,9 @@ export default function TalkScreen() {
   const [showTopNav, setShowTopNav] = useState(false);
   const [activeMode, setActiveMode] = useState<BoardMode>('home');
   const [previousMode, setPreviousMode] = useState<BoardMode | null>(null);
-  const [activeTab, setActiveTab] = useState<TopTab>('taptalk');
+  // No tab is "current" by default — the new top-nav items are actions
+  // (Edit / Layout) and destinations (Saved / Settings), not modes.
+  const [activeTab, setActiveTab] = useState<TopTab | null>(null);
   const [ghosts, setGhosts] = useState<GhostTile[]>([]);
   const [resolvedSymbols, setResolvedSymbols] = useState<Map<string, ResolvedSymbol>>(new Map());
   // ── Edit mode & drag-and-snap state ─────────────────────────────────────
@@ -2445,9 +2606,40 @@ export default function TalkScreen() {
   // editFocusTileId: the tile long-pressed to enter edit mode → Delete target
   const [addFlowExpanded, setAddFlowExpanded] = useState(false);
   const [folderDockExpanded, setFolderDockExpanded] = useState(false);
-  // Main board dock: collapsed shows only ">", expanded shows
-  // Add + / Board Settings / < (rule 1 — simple first, advanced later).
-  const [homeDockExpanded, setHomeDockExpanded] = useState(false);
+  // Main board dock: expanded is the default (board_control_bar restructure:
+  // Add + | Sort | Fullscreen | Hide is the default_control_bar).
+  const [homeDockExpanded, setHomeDockExpanded] = useState(true);
+  // ── Sort popover state (item 2) ─────────────────────────────────────────
+  // Persistent popover above the Sort action — options toggle sort/unsort
+  // without dismissing. Snapshot holds the pre-sort layout for "unsort".
+  const [sortMenuVisible, setSortMenuVisible] = useState(false);
+  const [activeSort, setActiveSort] = useState<BoardSortMode | null>(null);
+  const sortSnapshotRef = useRef<BoardLayout | null>(null);
+  const [sortAnchor, setSortAnchor] = useState({ x: 0, width: 0 });
+  // ── Hide / Fullscreen state (item 4) ────────────────────────────────────
+  // hideMenuVisible: vertical popover above Hide (Nav Bar / Control Bar / All).
+  // navHidden: bottom tab bar collapsed. dockHidden: control bar slid left
+  // with a DOCK_PEEK sliver still visible as the way back.
+  const [hideMenuVisible, setHideMenuVisible] = useState(false);
+  const [navHidden, setNavHidden] = useState(false);
+  const [dockHidden, setDockHidden] = useState(false);
+  const [hideAnchor, setHideAnchor] = useState({ x: 0, width: 0 });
+  const dockSlide = useRef(new RNAnimated.Value(0)).current;
+  // ── Edit undo stack (Phase 2) ───────────────────────────────────────────
+  // Every board edit (delete / duplicate / move / group / favourite) pushes
+  // a snapshot BEFORE mutating. Undo pops one and restores the layouts map
+  // (and favourites, and any tiles hidden by a delete). Session-scoped:
+  // cleared when the Edit Control Bar opens and when the board changes.
+  const [undoStack, setUndoStack] = useState<BoardUndoEntry[]>([]);
+  // ── Favourites (Phase 3) ────────────────────────────────────────────────
+  // Per-board ordered list of favourited tile ids — favourites are pinned
+  // to the top of the board (first slots) until unfavourited. Sort keeps
+  // them pinned. Unfavouriting returns a tile to its remembered position.
+  const [favouritesByMode, setFavouritesByMode] = useState<Partial<Record<BoardMode, string[]>>>({});
+  const favouriteReturnIndexRef = useRef<Map<string, number>>(new Map());
+  // Anchors for the Select / Move vertical pop-ups in the edit bar.
+  const [selectAnchor, setSelectAnchor] = useState({ x: 0, width: 0 });
+  const [moveAnchor, setMoveAnchor] = useState({ x: 0, width: 0 });
   const [editFocusTileId, setEditFocusTileId] = useState<string | null>(null);
   // ── Edit Control Bar state ───────────────────────────────────────────────
   // The Bottom Edit button opens a dedicated toolbar (Back | Select | Move |
@@ -2464,7 +2656,6 @@ export default function TalkScreen() {
   // ── Add Symbol / Add Folder modals (Priority 2) ────────────────────────
   const [addSymbolModalVisible, setAddSymbolModalVisible] = useState(false);
   const [addFolderModalVisible, setAddFolderModalVisible] = useState(false);
-  const [showSentenceHistory, setShowSentenceHistory] = useState(true);
   const folderCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dockFade = useRef(new RNAnimated.Value(1)).current;
   const messageWordsRef = useRef(state.messageWords);
@@ -2558,6 +2749,9 @@ export default function TalkScreen() {
     setLayoutDirty(false);
     setEditFocusTileId(null);
     setAddFlowExpanded(false);
+    // Land back on the full default_control_bar (Add + | Sort | Fullscreen | Hide).
+    setHomeDockExpanded(true);
+    setFolderDockExpanded(true);
     layoutSnapshotRef.current = null;
     snapSlot.value = -1;
   }, [hapticIfEnabled, snapSlot]);
@@ -2619,20 +2813,16 @@ export default function TalkScreen() {
     exitEditClean();
   }, [exitEditClean, layoutDirty]);
 
-  // ── Folder dock collapse timer (15s) ──────────────────────────────────────
+  // ── Folder dock timer cleanup ─────────────────────────────────────────────
+  // The 15s auto-collapse was removed with the board_control_bar restructure
+  // (hiding the bar is now an explicit user action via Hide). The clear
+  // helper stays so any legacy timer is cancelled on board changes.
   const clearFolderTimer = useCallback(() => {
     if (folderCollapseTimerRef.current) {
       clearTimeout(folderCollapseTimerRef.current);
       folderCollapseTimerRef.current = null;
     }
   }, []);
-
-  const startFolderCollapseTimer = useCallback(() => {
-    clearFolderTimer();
-    folderCollapseTimerRef.current = setTimeout(() => {
-      setFolderDockExpanded(false);
-    }, 15000);
-  }, [clearFolderTimer]);
 
   // ── Dock action handlers ──────────────────────────────────────────────────
   const handleDockAddToggle = useCallback(() => {
@@ -2715,26 +2905,17 @@ export default function TalkScreen() {
     hapticIfEnabled();
   }, [activeMode, hapticIfEnabled]);
 
-  const handleFolderCollapse = useCallback(() => {
-    hapticIfEnabled();
-    clearFolderTimer();
-    setFolderDockExpanded(false);
-  }, [clearFolderTimer, hapticIfEnabled]);
-
+  // Collapse handlers were removed with the board_control_bar restructure —
+  // the expanded bar (Add + | Sort | Fullscreen | Hide) is now the default,
+  // and hiding is an explicit user action via the Hide control.
   const handleFolderExpand = useCallback(() => {
     hapticIfEnabled();
     setFolderDockExpanded(true);
-    startFolderCollapseTimer();
-  }, [hapticIfEnabled, startFolderCollapseTimer]);
+  }, [hapticIfEnabled]);
 
   const handleHomeDockExpand = useCallback(() => {
     hapticIfEnabled();
     setHomeDockExpanded(true);
-  }, [hapticIfEnabled]);
-
-  const handleHomeDockCollapse = useCallback(() => {
-    hapticIfEnabled();
-    setHomeDockExpanded(false);
   }, [hapticIfEnabled]);
 
   const handleOpenBoardSettings = useCallback(() => {
@@ -2751,24 +2932,13 @@ export default function TalkScreen() {
     setEditControlsOpen(true);
     setActiveEditTool('none');
     setSelectedTileIds(new Set());
+    setUndoStack([]); // fresh session, fresh history
     setHomeDockExpanded(false);
     setFolderDockExpanded(false);
     setAddFlowExpanded(false);
     // Exiting resize-mode outline as well — Edit Control Bar entry starts calm.
     setEditMode(false);
   }, [hapticIfEnabled]);
-
-  // Back from Edit Control Bar → previous dock (home or folder). Also
-  // clears any in-progress tool state so Select taps don't linger.
-  const handleEditControlsBack = useCallback(() => {
-    hapticIfEnabled();
-    setEditControlsOpen(false);
-    setActiveEditTool('none');
-    setSelectedTileIds(new Set());
-    setEditMode(false);
-    if (activeMode === 'home') setHomeDockExpanded(true);
-    else setFolderDockExpanded(true);
-  }, [activeMode, hapticIfEnabled]);
 
   // Done closes everything: tool state, selection, resize outline, controls.
   const handleEditControlsDone = useCallback(() => {
@@ -2777,12 +2947,9 @@ export default function TalkScreen() {
     setActiveEditTool('none');
     setSelectedTileIds(new Set());
     setEditMode(false);
-  }, [hapticIfEnabled]);
-
-  const handleEditToolSelect = useCallback(() => {
-    hapticIfEnabled();
-    setActiveEditTool('select');
-    setEditMode(false); // Select mode shouldn't draw jiggle/handles.
+    // Land back on the full default_control_bar rather than the collapsed ">".
+    setHomeDockExpanded(true);
+    setFolderDockExpanded(true);
   }, [hapticIfEnabled]);
 
   const handleEditToolMove = useCallback(() => {
@@ -2823,8 +2990,47 @@ export default function TalkScreen() {
     const staticTiles = BOARD_TILES[activeMode] ?? [];
     const hit = staticTiles.find(tt => tt.id === tileId);
     if (hit) return hit;
-    return userTilesRef.current.get(tileId);
+    const userTile = userTilesRef.current.get(tileId);
+    if (userTile) return userTile;
+    // Cross-board fallback (tiles Moved / Grouped in from another board).
+    return Object.values(BOARD_TILES).flat().find(tt => tt.id === tileId);
   }, [activeMode]);
+
+  // ── Undo (Phase 2) ──────────────────────────────────────────────────────
+  // Snapshot BEFORE a mutating edit. Deep-copies each board's placement
+  // array (tiny data) so later mutations can't bleed into history.
+  const pushUndo = useCallback((label: string, restoreTileIds?: string[]) => {
+    setUndoStack(prev => {
+      const snapshot: Partial<Record<BoardMode, BoardLayout>> = {};
+      (Object.keys(layouts) as BoardMode[]).forEach(k => {
+        const l = layouts[k];
+        if (l) snapshot[k] = l.map(p => ({ ...p }));
+      });
+      const entry: BoardUndoEntry = {
+        label,
+        layouts: snapshot,
+        favourites: [...(favouritesByMode[activeMode] ?? [])],
+        board: activeMode,
+        restoreTileIds,
+      };
+      // Keep the last 20 — calm, predictable, and enough for a session.
+      return [...prev.slice(-19), entry];
+    });
+  }, [activeMode, favouritesByMode, layouts]);
+
+  const handleUndoEdit = useCallback(() => {
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry) return;
+    hapticIfEnabled();
+    setUndoStack(prev => prev.slice(0, -1));
+    setLayouts(entry.layouts);
+    setFavouritesByMode(prev => ({ ...prev, [entry.board]: entry.favourites }));
+    // Deletes also hid tiles persistently — bring them back.
+    entry.restoreTileIds?.forEach(id => dispatch({ type: 'RESTORE_TILE', payload: id }));
+    setSelectedTileIds(new Set());
+    setLayoutDirty(true);
+    AccessibilityInfo.announceForAccessibility?.(`Undid ${entry.label}`);
+  }, [dispatch, hapticIfEnabled, undoStack]);
 
   // Delete every selected symbol/folder. Reuses the existing HIDE_TILE
   // dispatch + boardPlacements filter so persistence stays intact. Skips
@@ -2858,6 +3064,7 @@ export default function TalkScreen() {
         text: 'Remove',
         style: 'destructive',
         onPress: () => {
+          pushUndo('delete', removable);
           setLayouts(prev => {
             const curr: BoardLayout = prev[activeMode]
               ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
@@ -2874,7 +3081,7 @@ export default function TalkScreen() {
         },
       },
     ]);
-  }, [activeMode, dispatch, hapticIfEnabled, resolveTileById, selectedTileIds]);
+  }, [activeMode, dispatch, hapticIfEnabled, pushUndo, resolveTileById, selectedTileIds]);
 
   // In Select Mode, a tap toggles selection. Speech / folder navigation
   // are gated in `handleTilePress` so those side-effects never fire while
@@ -2939,6 +3146,7 @@ export default function TalkScreen() {
       return;
     }
     hapticIfEnabled();
+    pushUndo('move');
     // Persistence-safe move: pull placements out of source board and
     // append them at the end of the destination board layout.
     setLayouts(prev => {
@@ -2960,6 +3168,11 @@ export default function TalkScreen() {
     setLayoutDirty(true);
     setSelectedTileIds(new Set());
     setActiveEditTool('select');
+    // Moved tiles leave this board — they can't stay pinned here.
+    setFavouritesByMode(prev => ({
+      ...prev,
+      [activeMode]: (prev[activeMode] ?? []).filter(id => !moveable.includes(id)),
+    }));
     AccessibilityInfo.announceForAccessibility?.(
       moveable.length === 1
         ? 'Item moved'
@@ -2972,7 +3185,242 @@ export default function TalkScreen() {
         [{ text: 'OK' }],
       );
     }
-  }, [activeMode, hapticIfEnabled, isDescendantFolder, resolveTileById, selectedTileIds]);
+  }, [activeMode, hapticIfEnabled, isDescendantFolder, pushUndo, resolveTileById, selectedTileIds]);
+
+  // ── Duplicate (Phase 2) ────────────────────────────────────────────────
+  // Copies every selected symbol onto the same board at the next available
+  // positions (predictable: appended after everything, in selection order).
+  // Folders and protected tiles are skipped — duplicating a folder would
+  // alias its contents, which is confusing rather than helpful.
+  const handleEditToolDuplicate = useCallback(() => {
+    if (selectedTileIds.size === 0) return;
+    hapticIfEnabled();
+    const current: BoardLayout = layouts[activeMode]
+      ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+    const ordered = [...current]
+      .sort((a, b) => a.slot - b.slot)
+      .filter(p => selectedTileIds.has(p.id));
+    const copyable = ordered.filter(p => {
+      const tile = resolveTileById(p.id);
+      return tile && tile.kind !== 'folder' && !tile.isProtected;
+    });
+    if (copyable.length === 0) {
+      AccessibilityInfo.announceForAccessibility?.('Folders can\'t be duplicated');
+      return;
+    }
+    pushUndo('duplicate');
+    let nextSlot = current.reduce((m, p) => Math.max(m, p.slot + 1), 0);
+    const additions: TilePlacement[] = [];
+    copyable.forEach(p => {
+      const tile = resolveTileById(p.id);
+      if (!tile) return;
+      const copyId = `copy_${tile.id}_${Date.now()}_${additions.length}`;
+      userTilesRef.current.set(copyId, { ...tile, id: copyId, isProtected: false });
+      additions.push({ id: copyId, slot: nextSlot, fw: p.fw, fh: p.fh });
+      nextSlot += 1;
+    });
+    setLayouts(prev => {
+      const curr: BoardLayout = prev[activeMode]
+        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+      return { ...prev, [activeMode]: [...curr, ...additions] };
+    });
+    setLayoutDirty(true);
+    setSelectedTileIds(new Set());
+    AccessibilityInfo.announceForAccessibility?.(
+      additions.length === 1 ? 'Item duplicated' : `${additions.length} items duplicated`,
+    );
+  }, [activeMode, hapticIfEnabled, layouts, pushUndo, resolveTileById, selectedTileIds]);
+
+  // ── Group (Phase 2) ────────────────────────────────────────────────────
+  // Different from Move: takes ALL selected symbols and places them
+  // together into ONE brand-new folder on this board. The folder lands at
+  // the first selected tile's position. Reuses the persistence-safe move.
+  const handleEditToolGroup = useCallback(() => {
+    if (selectedTileIds.size === 0) return;
+    hapticIfEnabled();
+    const ids = Array.from(selectedTileIds);
+    const groupable = ids.filter(id => {
+      const tile = resolveTileById(id);
+      return tile && !tile.isProtected;
+    });
+    if (groupable.length === 0) {
+      Alert.alert('Protected', 'The selected items can\'t be grouped.', [{ text: 'OK' }]);
+      return;
+    }
+    pushUndo('group');
+    const boardKey = `group_${Date.now()}` as BoardMode;
+    // Register the new child board (Home/back tile first, like Add Folder).
+    (BOARD_TILES as Record<string, BoardTile[]>)[boardKey] = [
+      { id: `back-${boardKey}`, label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
+    ];
+    const folderId = `folder_${boardKey}`;
+    const folderTile: BoardTile = {
+      id: folderId,
+      label: `Group (${groupable.length})`,
+      kind: 'folder',
+      color: '#1DCDFF',
+      target: boardKey,
+      mulberrySymbolId: 'mulberry_group_work_14prpc8',
+    };
+    userTilesRef.current.set(folderId, folderTile);
+    setLayouts(prev => {
+      const source: BoardLayout = prev[activeMode]
+        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+      const moving = [...source]
+        .sort((a, b) => a.slot - b.slot)
+        .filter(p => groupable.includes(p.id));
+      const anchorSlot = moving[0]?.slot ?? source.length;
+      const rest = source.filter(p => !groupable.includes(p.id));
+      // Folder takes the first selected tile's place; the board reflows.
+      const withFolder = [...rest, { id: folderId, slot: anchorSlot, fw: 2, fh: 2 }]
+        .sort((a, b) => a.slot - b.slot)
+        .map((p, i) => ({ ...p, slot: i }));
+      const childSeed: BoardLayout = [
+        { id: `back-${boardKey}`, slot: 0, fw: 2, fh: 2 },
+        ...moving.map((p, i) => ({ ...p, slot: i + 1 })),
+      ];
+      return { ...prev, [activeMode]: withFolder, [boardKey]: childSeed };
+    });
+    setLayoutDirty(true);
+    setSelectedTileIds(new Set());
+    setActiveEditTool('select');
+    // Grouped tiles leave this board — they can't stay pinned here.
+    setFavouritesByMode(prev => ({
+      ...prev,
+      [activeMode]: (prev[activeMode] ?? []).filter(id => !groupable.includes(id)),
+    }));
+    AccessibilityInfo.announceForAccessibility?.(
+      `${groupable.length} item${groupable.length === 1 ? '' : 's'} grouped into a new folder`,
+    );
+  }, [activeMode, hapticIfEnabled, pushUndo, resolveTileById, selectedTileIds]);
+
+  // ── Favourite / Unfavourite (Phase 3) ──────────────────────────────────
+  // Favourites pin to the top of the board (first slots) until toggled
+  // off. Unfavouriting returns a tile to its remembered position in the
+  // board's natural order, as if it was never favourited. Sort ignores
+  // favourites — they stay pinned.
+  const favouriteIds = favouritesByMode[activeMode] ?? [];
+  const selectedAllFavourites = useMemo(
+    () =>
+      selectedTileIds.size > 0 &&
+      Array.from(selectedTileIds).every(id => favouriteIds.includes(id)),
+    [favouriteIds, selectedTileIds],
+  );
+
+  const rebuildWithFavourites = useCallback(
+    (layout: BoardLayout, favIds: string[]): BoardLayout => {
+      const ordered = [...layout].sort((a, b) => a.slot - b.slot);
+      const favs = favIds
+        .map(id => ordered.find(p => p.id === id))
+        .filter((p): p is TilePlacement => Boolean(p));
+      const rest = ordered.filter(p => !favIds.includes(p.id));
+      return [...favs, ...rest].map((p, i) => ({ ...p, slot: i }));
+    },
+    [],
+  );
+
+  const handleEditToolFavourite = useCallback(() => {
+    if (selectedTileIds.size === 0) return;
+    hapticIfEnabled();
+    pushUndo(selectedAllFavourites ? 'unfavourite' : 'favourite');
+    const current: BoardLayout = layouts[activeMode]
+      ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+    const ordered = [...current].sort((a, b) => a.slot - b.slot);
+    const favs = [...favouriteIds];
+    const selected = ordered.filter(p => selectedTileIds.has(p.id)).map(p => p.id);
+
+    let nextFavs: string[];
+    let nextLayout: BoardLayout;
+    if (selectedAllFavourites) {
+      // Unfavourite — remove from the pinned list and reinsert each tile
+      // at its remembered index within the non-favourite order.
+      nextFavs = favs.filter(id => !selected.includes(id));
+      const rest = ordered.filter(p => !favs.includes(p.id));
+      const returning = ordered.filter(p => selected.includes(p.id));
+      const merged = [...rest];
+      returning.forEach(p => {
+        const at = favouriteReturnIndexRef.current.get(p.id);
+        const idx = at === undefined ? merged.length : Math.min(at, merged.length);
+        merged.splice(idx, 0, p);
+        favouriteReturnIndexRef.current.delete(p.id);
+      });
+      const pinned = nextFavs
+        .map(id => ordered.find(p => p.id === id))
+        .filter((p): p is TilePlacement => Boolean(p));
+      nextLayout = [...pinned, ...merged].map((p, i) => ({ ...p, slot: i }));
+      AccessibilityInfo.announceForAccessibility?.(
+        selected.length === 1 ? 'Removed from favourites' : `${selected.length} items removed from favourites`,
+      );
+    } else {
+      // Favourite — remember each tile's index among non-favourites so it
+      // can go home later, then pin (new favourites go in front).
+      const rest = ordered.filter(p => !favs.includes(p.id));
+      selected.forEach(id => {
+        if (favs.includes(id)) return;
+        const idx = rest.findIndex(p => p.id === id);
+        if (idx >= 0) favouriteReturnIndexRef.current.set(id, idx);
+      });
+      nextFavs = [...selected.filter(id => !favs.includes(id)), ...favs];
+      nextLayout = rebuildWithFavourites(current, nextFavs);
+      AccessibilityInfo.announceForAccessibility?.(
+        selected.length === 1 ? 'Added to favourites' : `${selected.length} items added to favourites`,
+      );
+    }
+    setFavouritesByMode(prev => ({ ...prev, [activeMode]: nextFavs }));
+    setLayouts(prev => ({ ...prev, [activeMode]: nextLayout }));
+    setLayoutDirty(true);
+    setSelectedTileIds(new Set());
+  }, [activeMode, favouriteIds, hapticIfEnabled, layouts, pushUndo, rebuildWithFavourites, selectedAllFavourites, selectedTileIds]);
+
+  // ── Select / Unselect toggle (Phase 2) ─────────────────────────────────
+  // With a selection: clears it (button reads "Unselect"). Without one:
+  // toggles selection mode on/off.
+  const handleEditToolSelectToggle = useCallback(() => {
+    hapticIfEnabled();
+    if (selectedTileIds.size > 0) {
+      setSelectedTileIds(new Set());
+      AccessibilityInfo.announceForAccessibility?.('Selection cleared');
+      return;
+    }
+    setActiveEditTool(prev => (prev === 'select' ? 'none' : 'select'));
+    setEditMode(false);
+  }, [hapticIfEnabled, selectedTileIds.size]);
+
+  // ── Save (Phase 2) ─────────────────────────────────────────────────────
+  // Persists the current board layout and closes the edit bar. Calm and
+  // final — the undo history belongs to the session, so it clears too.
+  const handleEditControlsSave = useCallback(() => {
+    hapticIfEnabled();
+    const current = layouts[activeMode];
+    if (current) {
+      dispatch({
+        type: 'SET_BOARD_PLACEMENTS',
+        payload: {
+          board: activeMode,
+          placements: current.map(p => ({ id: p.id, slot: p.slot, fw: p.fw, fh: p.fh })),
+        },
+      });
+    }
+    setLayoutDirty(false);
+    setUndoStack([]);
+    setEditControlsOpen(false);
+    setActiveEditTool('none');
+    setSelectedTileIds(new Set());
+    setEditMode(false);
+    setHomeDockExpanded(true);
+    setFolderDockExpanded(true);
+    AccessibilityInfo.announceForAccessibility?.('Changes saved');
+  }, [activeMode, dispatch, hapticIfEnabled, layouts]);
+
+  const handleSelectAnchorLayout = useCallback((e: LayoutChangeEvent) => {
+    const { x, width: w } = e.nativeEvent.layout;
+    setSelectAnchor({ x, width: w });
+  }, []);
+
+  const handleMoveAnchorLayout = useCallback((e: LayoutChangeEvent) => {
+    const { x, width: w } = e.nativeEvent.layout;
+    setMoveAnchor({ x, width: w });
+  }, []);
 
   const handleDockDone = useCallback(() => {
     exitEditClean();
@@ -3006,20 +3454,28 @@ export default function TalkScreen() {
     return folderDockExpanded ? 'folderExpanded' : 'folderCollapsed';
   }, [activeMode, addFlowExpanded, editControlsOpen, editMode, folderDockExpanded, homeDockExpanded, layoutDirty]);
 
-  // On board change: reset add flow; folders start expanded with a 15s timer,
-  // home clears folder nav entirely.
+  // On board change: reset add flow and popovers; the default_control_bar
+  // (Add + | Sort | Fullscreen | Hide) is always expanded now, so home and
+  // folders both land with the full bar. Sort state is per-board — clear it.
   useEffect(() => {
     setAddFlowExpanded(false);
-    setHomeDockExpanded(false); // home always lands calm — just ">"
+    setHomeDockExpanded(true);
+    setSortMenuVisible(false);
+    setHideMenuVisible(false);
+    setActiveSort(null);
+    sortSnapshotRef.current = null;
+    setUndoStack([]); // undo history is per board
     if (activeMode === 'home') {
       setFolderDockExpanded(false);
       clearFolderTimer();
     } else {
       setFolderDockExpanded(true);
-      startFolderCollapseTimer();
+      // No auto-collapse — hiding the bar is now an explicit user action
+      // (the Hide control), so the bar never disappears on its own.
+      clearFolderTimer();
     }
     return clearFolderTimer;
-  }, [activeMode, clearFolderTimer, startFolderCollapseTimer]);
+  }, [activeMode, clearFolderTimer]);
 
   // Entering edit mode hides folder nav + any open add flow.
   useEffect(() => {
@@ -3034,6 +3490,24 @@ export default function TalkScreen() {
   useEffect(() => {
     if (layoutDirty) setAddFlowExpanded(false);
   }, [layoutDirty]);
+
+  // Popovers only make sense while their anchor buttons are on screen;
+  // entering the add flow or edit tools also brings a hidden dock back so
+  // the user always sees the controls they just asked for.
+  useEffect(() => {
+    if (dockMode !== 'homeExpanded' && dockMode !== 'folderExpanded') {
+      setSortMenuVisible(false);
+      setHideMenuVisible(false);
+    }
+    if (
+      dockMode === 'addExpanded' ||
+      dockMode === 'editControls' ||
+      dockMode === 'editClean' ||
+      dockMode === 'editDirty'
+    ) {
+      setDockHidden(false);
+    }
+  }, [dockMode]);
 
   // Calm crossfade whenever the dock content changes; instant under Reduce Motion.
   useEffect(() => {
@@ -3260,6 +3734,12 @@ export default function TalkScreen() {
     for (const [id, tile] of userTilesRef.current) {
       if (!map.has(id)) map.set(id, tile);
     }
+    // Cross-board fallback: tiles Moved or Grouped into this board keep
+    // their original definitions from their home board (active board and
+    // user tiles win on id collisions).
+    Object.values(BOARD_TILES).flat().forEach(t => {
+      if (!map.has(t.id)) map.set(t.id, t);
+    });
     return map;
   }, [activeMode, layouts]);
 
@@ -3346,7 +3826,12 @@ export default function TalkScreen() {
       // Navigation folders that go Home ("back" tiles) always stay last, in
       // every sort mode, so Home never jumps to the top of the board.
       const isBackHome = (tile: BoardTile) => tile.kind === 'folder' && tile.target === 'home';
-      const sorted = [...activeLayout].sort((a, b) => {
+      // Favourites are pinned — Sort never moves them (Phase 3 rule).
+      const pinned = favouriteIds
+        .map(id => activeLayout.find(p => p.id === id))
+        .filter((p): p is TilePlacement => Boolean(p));
+      const sortable = activeLayout.filter(p => !favouriteIds.includes(p.id));
+      const sorted = [...sortable].sort((a, b) => {
         const ta = tileMapForMode.get(a.id);
         const tb = tileMapForMode.get(b.id);
         if (!ta || !tb) return 0;
@@ -3369,35 +3854,126 @@ export default function TalkScreen() {
         const catA = ta.kind === 'folder' ? 0 : 1;
         const catB = tb.kind === 'folder' ? 0 : 1;
         return catA - catB || ta.label.localeCompare(tb.label);
-      }).map((p, i) => ({ ...p, slot: i }));
-      setLayouts(prev => ({ ...prev, [activeMode]: sorted }));
+      });
+      const next = [...pinned, ...sorted].map((p, i) => ({ ...p, slot: i }));
+      setLayouts(prev => ({ ...prev, [activeMode]: next }));
       hapticSelection();
       AccessibilityInfo.announceForAccessibility?.(`Sorted by ${mode}`);
     },
-    [activeLayout, tileMapForMode, activeMode],
+    [activeLayout, activeMode, favouriteIds, tileMapForMode],
   );
 
-  const openSortMenu = useCallback(() => {
-    hapticSelection();
-    const run = (i: number) => {
-      if (i === 0) applySort('type');
-      else if (i === 1) applySort('name');
-      else if (i === 2) applySort('category');
-    };
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Type', 'Name', 'Category', 'Cancel'], cancelButtonIndex: 3, title: 'Sort by' },
-        run,
-      );
-    } else {
-      Alert.alert('Sort by', undefined, [
-        { text: 'Type', onPress: () => run(0) },
-        { text: 'Name', onPress: () => run(1) },
-        { text: 'Category', onPress: () => run(2) },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
+  // ── Sort popover handlers (item 2) ────────────────────────────────────
+  // The popover sits just above the Sort action and is PERSISTENT — tapping
+  // an option applies (or removes) that sort and keeps the menu open so the
+  // user can keep toggling. Dismissed by tapping Sort again, opening Hide,
+  // or leaving the board.
+  const toggleSortMenu = useCallback(() => {
+    hapticIfEnabled();
+    setHideMenuVisible(false);
+    setSortMenuVisible(v => !v);
+  }, [hapticIfEnabled]);
+
+  const handleSortOption = useCallback((mode: BoardSortMode) => {
+    hapticIfEnabled();
+    if (activeSort === mode) {
+      // Unsort — restore the layout captured before the first sort.
+      if (sortSnapshotRef.current) {
+        const snapshot = sortSnapshotRef.current;
+        setLayouts(prev => ({ ...prev, [activeMode]: snapshot }));
+      }
+      sortSnapshotRef.current = null;
+      setActiveSort(null);
+      AccessibilityInfo.announceForAccessibility?.('Sort removed');
+      return;
     }
-  }, [applySort]);
+    if (activeSort === null) {
+      // First sort in this session — remember how the board looked.
+      sortSnapshotRef.current = activeLayout.map(p => ({ ...p }));
+    }
+    applySort(mode);
+    setActiveSort(mode);
+  }, [activeLayout, activeMode, activeSort, applySort, hapticIfEnabled]);
+
+  const handleSortAnchorLayout = useCallback((e: LayoutChangeEvent) => {
+    const { x, width: w } = e.nativeEvent.layout;
+    setSortAnchor({ x, width: w });
+  }, []);
+
+  // ── Hide / Fullscreen handlers (item 4) ───────────────────────────────
+  const toggleHideMenu = useCallback(() => {
+    hapticIfEnabled();
+    setSortMenuVisible(false);
+    setHideMenuVisible(v => !v);
+  }, [hapticIfEnabled]);
+
+  const handleHideAnchorLayout = useCallback((e: LayoutChangeEvent) => {
+    const { x, width: w } = e.nativeEvent.layout;
+    setHideAnchor({ x, width: w });
+  }, []);
+
+  // Nav Bar option — TOGGLES the bottom tab bar (slide down/up via
+  // LayoutAnimation; instant under Reduce Motion). Menu stays open.
+  const handleHideNavBar = useCallback(() => {
+    hapticIfEnabled();
+    const next = !navHidden;
+    if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setNavHidden(next);
+    setTabBarHidden(next);
+    AccessibilityInfo.announceForAccessibility?.(
+      next ? 'Navigation bar hidden' : 'Navigation bar shown',
+    );
+  }, [hapticIfEnabled, navHidden, reduceMotion]);
+
+  // Control Bar option — slides the dock right-to-left until only a
+  // DOCK_PEEK sliver stays on the left edge (tap it to bring it back).
+  const handleHideDock = useCallback(() => {
+    hapticIfEnabled();
+    setHideMenuVisible(false);
+    setSortMenuVisible(false);
+    setDockHidden(true);
+    AccessibilityInfo.announceForAccessibility?.(
+      'Controls hidden. Tap the lower left edge of the screen to bring them back.',
+    );
+  }, [hapticIfEnabled]);
+
+  // All — nav bar and control bar together. Also what Fullscreen does.
+  const handleHideAll = useCallback(() => {
+    hapticIfEnabled();
+    setHideMenuVisible(false);
+    setSortMenuVisible(false);
+    if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setNavHidden(true);
+    setTabBarHidden(true);
+    setDockHidden(true);
+    AccessibilityInfo.announceForAccessibility?.(
+      'All controls hidden. Tap the lower left edge of the screen to bring them back.',
+    );
+  }, [hapticIfEnabled, reduceMotion]);
+
+  // Tap on the peeking sliver restores everything at once.
+  const handleChromeRestore = useCallback(() => {
+    hapticIfEnabled();
+    if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setNavHidden(false);
+    setTabBarHidden(false);
+    setDockHidden(false);
+    AccessibilityInfo.announceForAccessibility?.('Controls shown');
+  }, [hapticIfEnabled, reduceMotion]);
+
+  // Dock slide animation — right-to-left "cuddle" leaving a half-visible
+  // sliver. Native-driver transform; instant under Reduce Motion.
+  useEffect(() => {
+    RNAnimated.timing(dockSlide, {
+      toValue: dockHidden ? 1 : 0,
+      duration: reduceMotion ? 0 : 280,
+      easing: RNEasing.out(RNEasing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [dockHidden, dockSlide, reduceMotion]);
+
+  // Never leave the app without its tab bar if the user navigates away.
+  useEffect(() => () => setTabBarHidden(false), []);
 
   // Keep `tiles` for the Mulberry prewarm effect (all tiles in active mode).
   const tiles = useMemo(() => BOARD_TILES[activeMode], [activeMode]);
@@ -3546,26 +4122,6 @@ export default function TalkScreen() {
     announce(`Speaking: ${messageText}`);
   }, [announce, speakChained, dispatch]);
 
-  const handleReplaySentence = useCallback((words: AACWord[]) => {
-    hapticIfEnabled();
-    dispatch({ type: 'CLEAR_WORDS' });
-    words.forEach((word) => {
-      dispatch({
-        type: 'APPEND_WORD',
-        payload: {
-          id: `replay-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          label: word.label,
-          wordType: word.wordType,
-          source: word.source ?? 'board',
-        },
-      });
-    });
-    const messageText = words.map(w => w.label).join(' ');
-    setTimeout(() => {
-      speakChained(messageText);
-    }, 50);
-  }, [dispatch, hapticIfEnabled, speakChained]);
-
   const handleStripBackspace = useCallback((hasWords: boolean) => {
     hapticIfEnabled();
     if (hasWords) {
@@ -3574,7 +4130,7 @@ export default function TalkScreen() {
     }
     setActiveMode('home');
     setPreviousMode(null);
-    setActiveTab('taptalk');
+    setActiveTab(null);
   }, [dispatch, hapticIfEnabled]);
 
   const handleStripRemoveWord = useCallback((index: number, label: string) => {
@@ -3761,7 +4317,7 @@ export default function TalkScreen() {
     if (tile.id === 'home') {
       setActiveMode('home');
       setPreviousMode(null);
-      setActiveTab('taptalk');
+      setActiveTab(null);
       dispatch({ type: 'SET_BOARD', payload: 'home' });
       announce('Home');
       return;
@@ -3781,7 +4337,7 @@ export default function TalkScreen() {
       if (tile.id === 'home-settings') {
         setActiveMode('home');
         setPreviousMode(null);
-        setActiveTab('taptalk');
+        setActiveTab(null);
         dispatch({ type: 'SET_BOARD', payload: 'home' });
       }
       return;
@@ -3817,30 +4373,35 @@ export default function TalkScreen() {
 
   const handleTopTab = useCallback((tab: TopTab) => {
     hapticIfEnabled();
-    // TAPTALK opens the dedicated keyboard page (new route — see
-    // app/board/keyboard). QUICK opens Quick Talk. EDIT is a stub
-    // for now. CLEAR is an in-place action on the message strip.
-    if (tab === 'taptalk') {
-      router.push('/board/keyboard' as Href);
-      // Item 5 — announce destination for VoiceOver (principle 21).
-      announce('TapTalk keyboard');
+    // EDIT (moved up from the bottom dock) opens the Edit Control Bar.
+    // LAYOUT is the old Resize tool (grid + handles). SAVED opens saved
+    // sentences (old Quick — the merged TapTalk+Saved page comes in a
+    // later phase). SETTINGS opens board settings (old "Board" action).
+    if (tab === 'edit') {
+      // Toggle: a second tap on EDIT closes the edit bar calmly.
+      if (editControlsOpen) {
+        handleEditControlsDone();
+        announce('Edit closed');
+      } else {
+        handleOpenEditControls();
+        announce('Edit board');
+      }
       return;
     }
-    if (tab === 'quick') {
+    if (tab === 'layout') {
+      handleEditToolResize();
+      announce('Layout mode. Drag handles to resize tiles.');
+      return;
+    }
+    if (tab === 'saved') {
       router.push('/board/quick-talk' as Href);
-      announce('Quick Talk');
+      announce('Saved sentences');
       return;
     }
-    if (tab === 'clear') {
-      clearMessage();
-      setActiveTab(tab);
-      // clearMessage() already announces "Message cleared".
-      return;
-    }
-    // EDIT — placeholder, intentionally no-op for v1.
-    setActiveTab(tab);
-    announce(`${TOP_TAB_META[tab].label} selected`);
-  }, [announce, clearMessage, hapticIfEnabled, router]);
+    // SETTINGS
+    handleOpenBoardSettings();
+    announce('Board settings');
+  }, [announce, editControlsOpen, handleEditControlsDone, handleEditToolResize, handleOpenBoardSettings, handleOpenEditControls, hapticIfEnabled, router]);
 
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -3871,7 +4432,6 @@ export default function TalkScreen() {
           messageSlotRefs={messageSlotRefs}
           chipTileLookup={chipTileLookup as Map<string, MessageStripTile>}
           ghostCount={ghosts.length}
-          wordBackgroundForTile={(tile) => wordBackgroundForTile(tile as BoardTile)}
           onSpeak={handleStripSpeak}
           onBackspace={handleStripBackspace}
           onClearAll={clearMessage}
@@ -3883,127 +4443,6 @@ export default function TalkScreen() {
             setShowTopNav(value => !value);
           }}
         />
-
-        {/* Prediction v1 — 5+ ranked suggestions (bigram + frequency + core vocab) */}
-        {(() => {
-          const lastWord = state.messageWords[state.messageWords.length - 1]?.label;
-          // Title-case so chips read like board tiles (Want, Stop, …).
-          const titleCase = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
-          // Show whenever there's any message context; core vocab fills the row.
-          // Exclude words already in the strip so we never re-suggest them.
-          const preds = state.messageWords.length > 0
-            ? predictSuggestions({
-                lastWord,
-                model: state.ngramModel,
-                exclude: state.messageWords.map(w => w.label),
-                limit: 7, // 5+ ranked suggestions (highest→lowest)
-              }).map(s => ({ ...s, word: titleCase(s.word) }))
-            : [];
-          if (preds.length === 0) return null;
-          return (
-            <View style={{ marginTop: spacing.sm, paddingHorizontal: spacing.lg }}>
-              <Text
-                accessibilityRole="header"
-                maxFontSizeMultiplier={1.6}
-                style={{ fontSize: 13, fontWeight: '700', color: t.colors.textMuted, marginBottom: spacing.xs }}
-              >
-                Suggestions
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: spacing.sm }}
-              >
-                {preds.map(({ word }) => (
-                  <Pressable
-                    key={word}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Add ${word}`}
-                    accessibilityHint="Adds this word to your message"
-                    onPress={() => {
-                      hapticIfEnabled();
-                      dispatch({
-                        type: 'APPEND_WORD',
-                        payload: {
-                          id: `pred-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                          label: word,
-                          wordType: 'core',
-                          source: 'suggestion',
-                        },
-                      });
-                    }}
-                    style={({ pressed }) => ({
-                      backgroundColor: pressed ? t.colors.selectionBg : t.colors.inputBg,
-                      borderRadius: radii.pill,
-                      paddingHorizontal: spacing.md,
-                      paddingVertical: spacing.sm,
-                      minHeight: 44, // HIG minimum touch target
-                      justifyContent: 'center',
-                      opacity: pressed ? 0.7 : 1,
-                    })}
-                  >
-                    <Text
-                      maxFontSizeMultiplier={1.6}
-                      style={{ fontSize: 14, fontWeight: '600', color: t.colors.text }}
-                    >
-                      {word}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          );
-        })()}
-
-        {/* Sentence History */}
-        {state.sentenceHistory.length > 0 && (
-          <View style={{ marginTop: spacing.sm }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: t.colors.textMuted }}>Recent Sentences</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={showSentenceHistory ? 'Hide recent sentences' : 'Show recent sentences'}
-                onPress={() => setShowSentenceHistory(v => !v)}
-                hitSlop={12}
-              >
-                <Ionicons name={showSentenceHistory ? 'chevron-up' : 'chevron-down'} size={18} color={t.colors.textMuted} />
-              </Pressable>
-            </View>
-            {showSentenceHistory && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm }}
-                accessibilityLabel="Recent sentences"
-              >
-                {state.sentenceHistory.map((entry) => {
-                  const summary = entry.words.slice(0, 3).map(w => w.label).join(' ');
-                  const hasMore = entry.words.length > 3;
-                  return (
-                    <Pressable
-                      key={entry.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Replay sentence: ${summary}${hasMore ? ' and more' : ''}`}
-                      onPress={() => handleReplaySentence(entry.words)}
-                      style={({ pressed }) => ({
-                        backgroundColor: pressed ? t.colors.selectionBg : t.colors.inputBg,
-                        borderRadius: radii.pill,
-                        paddingHorizontal: spacing.md,
-                        paddingVertical: spacing.sm,
-                        minHeight: 36,
-                        justifyContent: 'center',
-                      })}
-                    >
-                      <Text style={{ fontSize: 14, fontWeight: '600', color: t.colors.text }} numberOfLines={1}>
-                        {summary}{hasMore ? '…' : ''}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            )}
-          </View>
-        )}
 
         <TopNav
           visible={showTopNav}
@@ -4124,6 +4563,7 @@ export default function TalkScreen() {
                           selectable={editControlsOpen && activeEditTool === 'select'}
                           isSelected={selectedTileIds.has(tile.id)}
                           moveDestinationMode={editControlsOpen && activeEditTool === 'move'}
+                          isFavourite={favouriteIds.includes(tile.id)}
                         />
                         {editMode && state.showUsageHeatmap && (state.tileTapCounts[tile.id] ?? 0) > 0 && (
                           <View
@@ -4176,25 +4616,191 @@ export default function TalkScreen() {
             })()}
           </ScrollView>
 
+          {/* ── Top Sub Control (item 5) ─────────────────────────────────
+              Secondary control layer near the top of the board area with
+              even spacing left / right / top. Only appears in edit mode so
+              the Bottom Control Bar stays uncrowded. Calm and light: soft
+              surface, existing tokens, no harsh colour or heavy shadow. */}
+          {editControlsOpen ? (
+            <View
+              pointerEvents="none"
+              accessibilityLiveRegion="polite"
+              style={[
+                styles.topSubControl,
+                {
+                  backgroundColor: t.isDark ? t.colors.navBackground : '#FFFFFF',
+                  borderColor: t.colors.symbolOutline,
+                },
+              ]}
+            >
+              <Text
+                style={[styles.topSubControlText, { color: t.colors.text }]}
+                numberOfLines={1}
+                maxFontSizeMultiplier={1.4}
+              >
+                {selectedTileIds.size > 0
+                  ? `${selectedTileIds.size} selected`
+                  : activeEditTool === 'move'
+                    ? 'Tap a folder to move items into it'
+                    : activeEditTool === 'select'
+                      ? 'Tap symbols to select them'
+                      : 'Editing — choose Select to begin'}
+              </Text>
+            </View>
+          ) : null}
+
           {/* ── Unified contextual dock (fixed, outside the ScrollView) ── */}
           <RNAnimated.View
             accessibilityRole="toolbar"
             accessibilityLabel="Board actions"
+            // While slid away, keep the offscreen buttons out of the
+            // VoiceOver order — the restore handle is the only target.
+            accessibilityElementsHidden={dockHidden}
+            importantForAccessibility={dockHidden ? 'no-hide-descendants' : 'auto'}
+            pointerEvents={dockHidden ? 'none' : 'auto'}
             style={[
               styles.boardDock,
               {
                 paddingBottom: DOCK_BOTTOM_GAP,
                 opacity: dockFade,
-                transform: [{
-                  translateX:
-                    !reduceMotion &&
-                    (dockMode === 'homeExpanded' || dockMode === 'homeCollapsed')
-                      ? dockFade.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] })
-                      : 0,
-                }],
+                transform: [
+                  {
+                    translateX:
+                      !reduceMotion &&
+                      (dockMode === 'homeExpanded' || dockMode === 'homeCollapsed')
+                        ? dockFade.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] })
+                        : 0,
+                  },
+                  {
+                    // "Hide" slide — right-to-left until only DOCK_PEEK peeks in.
+                    translateX: dockSlide.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, -(width - DOCK_PEEK)],
+                    }),
+                  },
+                ],
               },
             ]}
           >
+            {/* Sort popover — persistent, anchored just above the Sort action. */}
+            <DockPopover
+              visible={
+                sortMenuVisible &&
+                (dockMode === 'homeExpanded' || dockMode === 'folderExpanded')
+              }
+              anchorX={sortAnchor.x}
+              anchorWidth={sortAnchor.width}
+              a11yLabel="Sort options"
+              options={[
+                {
+                  key: 'type',
+                  label: 'Type',
+                  a11yLabel: activeSort === 'type' ? 'Remove sort by type' : 'Sort by type',
+                  selected: activeSort === 'type',
+                  onPress: () => handleSortOption('type'),
+                },
+                {
+                  key: 'name',
+                  label: 'Name',
+                  a11yLabel: activeSort === 'name' ? 'Remove sort by name' : 'Sort by name',
+                  selected: activeSort === 'name',
+                  onPress: () => handleSortOption('name'),
+                },
+                {
+                  key: 'category',
+                  label: 'Category',
+                  a11yLabel: activeSort === 'category' ? 'Remove sort by category' : 'Sort by category',
+                  selected: activeSort === 'category',
+                  onPress: () => handleSortOption('category'),
+                },
+              ]}
+            />
+            {/* Hide popover — vertical options above the Hide action. */}
+            <DockPopover
+              visible={
+                hideMenuVisible &&
+                (dockMode === 'homeExpanded' || dockMode === 'folderExpanded')
+              }
+              anchorX={hideAnchor.x}
+              anchorWidth={hideAnchor.width}
+              a11yLabel="Hide options"
+              options={[
+                {
+                  key: 'nav',
+                  label: 'Nav Bar',
+                  a11yLabel: navHidden ? 'Show navigation bar' : 'Hide navigation bar',
+                  selected: navHidden,
+                  onPress: handleHideNavBar,
+                },
+                {
+                  key: 'dock',
+                  label: 'Control Bar',
+                  a11yLabel: 'Hide control bar',
+                  onPress: handleHideDock,
+                },
+                {
+                  key: 'all',
+                  label: 'All',
+                  a11yLabel: 'Hide all controls',
+                  onPress: handleHideAll,
+                },
+              ]}
+            />
+            {/* Select pop-up — appears from Select/Unselect when items are
+                selected. Bottom-to-top: (button) → Delete → Duplicate →
+                Favourite, so the array below is top-to-bottom. */}
+            <DockPopover
+              visible={
+                dockMode === 'editControls' &&
+                selectedTileIds.size > 0 &&
+                activeEditTool !== 'move'
+              }
+              anchorX={selectAnchor.x}
+              anchorWidth={selectAnchor.width}
+              a11yLabel="Selection actions"
+              options={[
+                {
+                  key: 'favourite',
+                  label: selectedAllFavourites ? 'Unfavourite' : 'Favourite',
+                  a11yLabel: selectedAllFavourites
+                    ? 'Remove selected from favourites'
+                    : 'Add selected to favourites',
+                  selected: selectedAllFavourites,
+                  onPress: handleEditToolFavourite,
+                },
+                {
+                  key: 'duplicate',
+                  label: 'Duplicate',
+                  a11yLabel: 'Duplicate selected symbols',
+                  onPress: handleEditToolDuplicate,
+                },
+                {
+                  key: 'delete',
+                  label: 'Delete',
+                  a11yLabel: 'Delete selected symbols',
+                  onPress: handleEditToolDelete,
+                },
+              ]}
+            />
+            {/* Move pop-up — Group places all selected into one new folder. */}
+            <DockPopover
+              visible={
+                dockMode === 'editControls' &&
+                activeEditTool === 'move' &&
+                selectedTileIds.size > 0
+              }
+              anchorX={moveAnchor.x}
+              anchorWidth={moveAnchor.width}
+              a11yLabel="Move actions"
+              options={[
+                {
+                  key: 'group',
+                  label: 'Group',
+                  a11yLabel: 'Group selected symbols into one folder',
+                  onPress: handleEditToolGroup,
+                },
+              ]}
+            />
             <View
               style={[
                 styles.dockRow,
@@ -4202,22 +4808,13 @@ export default function TalkScreen() {
               ]}
             >
               {dockMode === 'homeCollapsed' ? (
-                <>
-                  <BoardDockAction
-                    icon="chevron-right" label="More"
-                    a11yLabel="More"
-                    a11yHint="Expand board controls. Shows Add and Board settings."
-                    onPress={handleHomeDockExpand}
-                    isToggle
-                  />
-                  <BoardDockAction
-                    icon="edit" label="Edit"
-                    a11yLabel="Edit board"
-                    a11yHint="Opens select, move, delete, and resize tools"
-                    onPress={handleOpenEditControls}
-                    kind="neutral"
-                  />
-                </>
+                <BoardDockAction
+                  icon="chevron-right" label="More"
+                  a11yLabel="More"
+                  a11yHint="Expand board controls"
+                  onPress={handleHomeDockExpand}
+                  isToggle
+                />
               ) : dockMode === 'homeExpanded' ? (
                 <>
                   <BoardDockAction
@@ -4227,34 +4824,35 @@ export default function TalkScreen() {
                     onPress={handleDockAddPlus}
                     kind="neutral"
                   />
+                  <View onLayout={handleSortAnchorLayout}>
+                    <BoardDockAction
+                      icon="sort" label="Sort"
+                      a11yLabel="Sort tiles"
+                      a11yHint="Opens sort options above this button"
+                      onPress={toggleSortMenu}
+                      kind="neutral"
+                      isToggle
+                      isActive={sortMenuVisible}
+                    />
+                  </View>
                   <BoardDockAction
-                    icon="sort" label="Sort"
-                    a11yLabel="Sort tiles"
-                    a11yHint="Sort this board by type, name, or category"
-                    onPress={openSortMenu}
+                    icon="fullscreen" label="Fullscreen"
+                    a11yLabel="Fullscreen"
+                    a11yHint="Hides the navigation bar and controls so the board fills the screen"
+                    onPress={handleHideAll}
                     kind="neutral"
                   />
-                  <BoardDockAction
-                    icon="board" label="Board"
-                    a11yLabel="Board settings"
-                    a11yHint="Opens board display and layout settings"
-                    onPress={handleOpenBoardSettings}
-                    kind="neutral"
-                  />
-                  <BoardDockAction
-                    icon="edit" label="Edit"
-                    a11yLabel="Edit board"
-                    a11yHint="Opens select, move, delete, and resize tools"
-                    onPress={handleOpenEditControls}
-                    kind="neutral"
-                  />
-                  <BoardDockAction
-                    icon="chevron-left" label="Hide"
-                    a11yLabel="Hide"
-                    a11yHint="Collapse board controls"
-                    onPress={handleHomeDockCollapse}
-                    isToggle
-                  />
+                  <View onLayout={handleHideAnchorLayout}>
+                    <BoardDockAction
+                      icon="hide" label="Hide"
+                      a11yLabel="Hide controls"
+                      a11yHint="Choose to hide the nav bar, the control bar, or all"
+                      onPress={toggleHideMenu}
+                      kind="neutral"
+                      isToggle
+                      isActive={hideMenuVisible || navHidden}
+                    />
+                  </View>
                 </>
               ) : dockMode === 'addExpanded' ? (
                 <>
@@ -4270,14 +4868,6 @@ export default function TalkScreen() {
                   <BoardDockAction
                     label="Folder" a11yLabel="Add folder"
                     onPress={handleDockAddFolder} kind="neutral"
-                  />
-                  <BoardDockAction
-                    icon="add" label="Add"
-                    a11yLabel="Add item"
-                    a11yHint="Close add options"
-                    onPress={handleDockAddToggle}
-                    isToggle
-                    isActive
                   />
                 </>
               ) : dockMode === 'folderExpanded' ? (
@@ -4295,91 +4885,93 @@ export default function TalkScreen() {
                     onPress={handleDockAddToggle}
                     isToggle
                   />
+                  <View onLayout={handleSortAnchorLayout}>
+                    <BoardDockAction
+                      icon="sort" label="Sort"
+                      a11yLabel="Sort tiles"
+                      a11yHint="Opens sort options above this button"
+                      onPress={toggleSortMenu}
+                      kind="neutral"
+                      isToggle
+                      isActive={sortMenuVisible}
+                    />
+                  </View>
                   <BoardDockAction
-                    icon="sort" label="Sort"
-                    a11yLabel="Sort tiles"
-                    a11yHint="Sort this board by type, name, or category"
-                    onPress={openSortMenu}
+                    icon="fullscreen" label="Fullscreen"
+                    a11yLabel="Fullscreen"
+                    a11yHint="Hides the navigation bar and controls so the board fills the screen"
+                    onPress={handleHideAll}
                     kind="neutral"
                   />
-                  <BoardDockAction
-                    icon="edit" label="Edit"
-                    a11yLabel="Edit board"
-                    a11yHint="Opens select, move, delete, and resize tools"
-                    onPress={handleOpenEditControls}
-                    kind="neutral"
-                  />
-                  <BoardDockAction
-                    icon="chevron-left" label="Hide"
-                    a11yLabel="Hide"
-                    a11yHint="Collapse actions. Hides Back and Add."
-                    onPress={handleFolderCollapse} isToggle
-                  />
+                  <View onLayout={handleHideAnchorLayout}>
+                    <BoardDockAction
+                      icon="hide" label="Hide"
+                      a11yLabel="Hide controls"
+                      a11yHint="Choose to hide the nav bar, the control bar, or all"
+                      onPress={toggleHideMenu}
+                      kind="neutral"
+                      isToggle
+                      isActive={hideMenuVisible || navHidden}
+                    />
+                  </View>
                 </>
               ) : dockMode === 'folderCollapsed' ? (
-                <>
-                  <BoardDockAction
-                    icon="chevron-right" label="More"
-                    a11yLabel="More"
-                    a11yHint="Expand actions. Shows Back and Add."
-                    onPress={handleFolderExpand} isToggle
-                  />
-                  <BoardDockAction
-                    icon="edit" label="Edit"
-                    a11yLabel="Edit board"
-                    a11yHint="Opens select, move, delete, and resize tools"
-                    onPress={handleOpenEditControls}
-                    kind="neutral"
-                  />
-                </>
+                <BoardDockAction
+                  icon="chevron-right" label="More"
+                  a11yLabel="More"
+                  a11yHint="Expand board controls"
+                  onPress={handleFolderExpand} isToggle
+                />
               ) : dockMode === 'editControls' ? (
                 <>
+                  {/* Undo — safest recovery action, always first (left). */}
                   <BoardDockAction
-                    icon="back-out" label="Back"
-                    a11yLabel="Back"
-                    a11yHint="Close the edit toolbar"
-                    onPress={handleEditControlsBack} kind="neutral"
-                  />
-                  <BoardDockAction
-                    icon="select" label="Select"
-                    a11yLabel="Select tiles"
-                    a11yHint="Tap tiles to select them"
-                    onPress={handleEditToolSelect}
+                    icon="undo" label="Undo"
+                    a11yLabel="Undo"
+                    a11yHint="Reverses the last board edit"
+                    onPress={handleUndoEdit}
                     kind="neutral"
-                    isToggle
-                    isActive={activeEditTool === 'select'}
+                    disabled={undoStack.length === 0}
                   />
+                  {/* Select / Unselect — controls the edit state. */}
+                  <View onLayout={handleSelectAnchorLayout}>
+                    <BoardDockAction
+                      icon="select"
+                      label={selectedTileIds.size > 0 ? 'Unselect' : 'Select'}
+                      a11yLabel={
+                        selectedTileIds.size > 0
+                          ? `Unselect ${selectedTileIds.size} selected tiles`
+                          : 'Select tiles'
+                      }
+                      a11yHint={
+                        selectedTileIds.size > 0
+                          ? 'Clears the current selection'
+                          : 'Tap tiles to select them'
+                      }
+                      onPress={handleEditToolSelectToggle}
+                      kind="neutral"
+                      isToggle
+                      isActive={activeEditTool === 'select'}
+                    />
+                  </View>
+                  {/* Move — acts on the selection, after Select. */}
+                  <View onLayout={handleMoveAnchorLayout}>
+                    <BoardDockAction
+                      icon="move" label="Move"
+                      a11yLabel="Move selected tiles"
+                      a11yHint="Then tap a folder as the destination"
+                      onPress={handleEditToolMove}
+                      kind="neutral"
+                      disabled={selectedTileIds.size === 0}
+                      isToggle
+                      isActive={activeEditTool === 'move'}
+                    />
+                  </View>
                   <BoardDockAction
-                    icon="move" label="Move"
-                    a11yLabel="Move selected tiles"
-                    a11yHint="Then tap a folder as the destination"
-                    onPress={handleEditToolMove}
-                    kind="neutral"
-                    disabled={selectedTileIds.size === 0}
-                    isToggle
-                    isActive={activeEditTool === 'move'}
-                  />
-                  <BoardDockAction
-                    icon="remove" label="Delete"
-                    a11yLabel="Delete selected tiles"
-                    a11yHint="Removes the selected tiles from this board"
-                    onPress={handleEditToolDelete}
-                    kind="muted"
-                    disabled={selectedTileIds.size === 0}
-                  />
-                  <BoardDockAction
-                    icon="resize" label="Resize"
-                    a11yLabel="Resize tiles"
-                    a11yHint="Shows resize handles and grid outline"
-                    onPress={handleEditToolResize}
-                    kind="neutral"
-                    isToggle
-                    isActive={activeEditTool === 'resize'}
-                  />
-                  <BoardDockAction
-                    icon="checkmark" label="Done"
-                    a11yLabel="Finish editing"
-                    onPress={handleEditControlsDone} kind="primary"
+                    icon="checkmark" label="Save"
+                    a11yLabel="Save changes"
+                    a11yHint="Saves the board and closes editing"
+                    onPress={handleEditControlsSave} kind="primary"
                   />
                 </>
               ) : dockMode === 'editDirty' ? (
@@ -4418,6 +5010,25 @@ export default function TalkScreen() {
               ) : null}
             </View>
           </RNAnimated.View>
+
+          {/* ── Hidden-dock restore handle ────────────────────────────────
+              While the control bar is slid away, this generous invisible
+              target sits over the peeking sliver on the lower-left edge.
+              One tap brings the nav bar and control bar back — no fine
+              motor precision needed (hitSlop widens it further). */}
+          {dockHidden ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Show board controls"
+              accessibilityHint="Brings back the control bar and navigation bar"
+              onPress={handleChromeRestore}
+              hitSlop={{ top: 12, bottom: 12, left: 0, right: 16 }}
+              style={({ pressed }) => [
+                styles.dockRestoreHandle,
+                pressed && { opacity: 0.7 },
+              ]}
+            />
+          ) : null}
         </View>
 
         {/* ── Undo toast (Rule 26) ─────────────────────────────────────── */}
@@ -4755,6 +5366,77 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'nowrap',
     gap: DOCK_GAP,
+  },
+  // ── DockPopover (Sort / Hide options) ───────────────────────────────────
+  // Sits just above the control bar, aligned with its anchor button.
+  // Calm: soft border, no heavy shadow, generous 48pt rows.
+  dockPopover: {
+    position: 'absolute',
+    bottom: DOCK_BOTTOM_GAP + DOCK_ACTION_SIZE + spacing.sm,
+    borderRadius: 14,
+    borderWidth: 1.6,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    overflow: 'hidden',
+  },
+  dockPopoverItem: {
+    minHeight: 48,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dockPopoverItemLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  dockPopoverCheck: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Favourite star — small calm badge, top-left of pinned tiles.
+  favouriteBadge: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9,
+  },
+  // ── Top Sub Control (item 5) ─────────────────────────────────────────────
+  // Even spacing from left, right, and top of the board area. Light pill —
+  // soft border, no shadow — so it reads as guidance, not another toolbar.
+  topSubControl: {
+    position: 'absolute',
+    top: spacing.md,
+    left: spacing.md,
+    right: spacing.md,
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1.6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  topSubControlText: {
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  // Invisible tap target over the peeking sliver of a hidden control bar.
+  dockRestoreHandle: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    width: DOCK_PEEK + 18,
+    height: DOCK_ACTION_SIZE + DOCK_BOTTOM_GAP + spacing.sm,
   },
   dockAction: {
     borderRadius: 14,
