@@ -112,7 +112,15 @@ function MessageChip({
     );
   }
 
-  return <View style={styles.messageChip}>{inner}</View>;
+  return (
+    <View
+      style={styles.messageChip}
+      accessibilityRole="text"
+      accessibilityLabel={label}
+    >
+      {inner}
+    </View>
+  );
 }
 
 export const TalkMessageStrip = React.memo(function TalkMessageStrip({
@@ -178,6 +186,21 @@ export const TalkMessageStrip = React.memo(function TalkMessageStrip({
         },
       ]}
     >
+      {/*
+        Hidden live-region node — iOS VoiceOver watches this view and
+        announces its accessibilityLabel whenever the content changes.
+        "polite" waits for any current speech to finish before announcing,
+        which is correct for tile-tap feedback (user may still be tapping).
+        The node is visually absent (1×1, clipped) so it never affects layout
+        or sighted users; importantForAccessibility="no-hide-descendants"
+        keeps VoiceOver from tabbing into it as a separate focus target.
+      */}
+      <View
+        accessibilityLiveRegion="polite"
+        accessibilityLabel={messageText ? `Message: ${messageText}` : ''}
+        importantForAccessibility="no-hide-descendants"
+        style={styles.liveRegion}
+      />
       <View style={styles.messageContentRow}>
         <View style={styles.messageButtonSlot}>
           <Pressable
@@ -291,8 +314,7 @@ export const TalkMessageStrip = React.memo(function TalkMessageStrip({
 const styles = StyleSheet.create({
   messageArea: {
     height: MESSAGE_HEIGHT,
-    paddingLeft: 21,
-    paddingRight: 17,
+    paddingHorizontal: 16,
     justifyContent: 'center',
     paddingBottom: 15,
     position: 'relative',
@@ -370,12 +392,10 @@ const styles = StyleSheet.create({
   },
   navDropdownHandle: {
     position: 'absolute',
-    left: '50%',
+    alignSelf: 'center',
     bottom: -15,
     width: 62,
     height: 14,
-    // Truly centred: -width/2 (was -13, which left the handle 18pt off-centre).
-    marginLeft: -31,
     borderWidth: 1.5,
     borderTopWidth: 0,
     borderBottomLeftRadius: 5,
@@ -390,5 +410,13 @@ const styles = StyleSheet.create({
   },
   navDropdownHandlePressed: {
     opacity: 0.78,
+  },
+  // Hidden VoiceOver live-region node — visually absent, never interactive.
+  liveRegion: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    overflow: 'hidden',
+    opacity: 0,
   },
 });

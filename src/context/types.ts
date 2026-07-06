@@ -45,7 +45,70 @@ export interface AppState {
     motorAccessMode: boolean;
     /** Reduce non-essential animation/particles/sound beyond system Reduce Motion. */
     reduceSensoryLoad: boolean;
+    /**
+     * When true, the spell-and-speak path in `buildMessageUtterances` is
+     * active for single words not found in the board vocabulary.
+     * Defaults to false — known vocab words always speak directly regardless
+     * of this flag (emergency communication safety requirement).
+     */
+    spellingModeEnabled: boolean;
+    /**
+     * Controls per-tile-tap speech behaviour on the AAC board.
+     * 'word-by-word' — each tile tap enqueues the word; spoken FIFO so
+     *   rapid taps are heard in order without cancellation.
+     * 'sentence' — tile taps are silent; full message speaks on Send.
+     * Default: 'word-by-word'.
+     */
+    wordSpeechMode: 'word-by-word' | 'sentence';
+    /**
+     * Switch Access / Scanning subsystem — Phase 4 motor access.
+     * When enabled, a row-then-column highlight loop drives selection so
+     * users with cerebral palsy / ALS / SCI who cannot touch-target the
+     * screen can operate the app via one or two external switches.
+     * State is deliberately decoupled from touch input so both work
+     * simultaneously without collision.
+     */
+    scanningEnabled: boolean;
+    /**
+     * Interval between scan advances, milliseconds. Range 100–2000ms.
+     * Slow scanners need 1200ms+; fast users often prefer 300–500ms.
+     * Default 800ms — a conservative middle-ground per RESNA guidance.
+     */
+    scanRate: number;
+    /**
+     * 'auto' — highlight advances on its own; switch selects the highlighted row/tile.
+     * 'step' — one switch advances, another switch selects (dual-switch users).
+     * 'inverse' — highlight advances only while the switch is HELD (rarely used, but common in older AAC hardware).
+     */
+    scanMode: 'auto' | 'step' | 'inverse';
+    /**
+     * Which physical input maps to the scanner. Keyboard covers Bluetooth
+     * switch interfaces that emulate keys (Blue2, AbleNet Hook+, Tecla).
+     * Volume covers iOS hardware volume rockers as an accessible fallback
+     * for users without dedicated switch hardware.
+     */
+    switchInputSource: 'keyboard' | 'volume' | 'both';
+    /**
+     * Number of consecutive full-board scan cycles with no selection before
+     * scanning auto-pauses. Prevents the highlight from cycling forever
+     * when the user has stepped away. Default 3.
+     */
+    scanAutoPauseCycles: number;
+    /**
+     * When true, plays a soft audio tick on each scan advance so blind /
+     * low-vision users can time their switch press without watching the
+     * highlight. Off by default.
+     */
+    scanAudioCue: boolean;
   };
+
+  /**
+   * Per-board ordered list of pinned (favourited) tile IDs.
+   * Keys are BoardMode strings; values are tile ID arrays in pin order.
+   * Persisted to hot storage and hydrated on launch.
+   * Stale IDs (tiles deleted after favouriting) are scrubbed on first load.
+   */
+  favouritesByMode: Partial<Record<string, string[]>>;
   user: {
     legalName: string;
     displayName: string;
@@ -191,6 +254,17 @@ export interface CustomBoardTile {
   backgroundOpacity?: number;
   outlineColor?: string;
   outlineOpacity?: number;
+  /**
+   * 'folder' for tiles that navigate to a child board; 'word' (default) for
+   * communication tiles. Folders require `target` to be set.
+   */
+  kind?: 'word' | 'folder';
+  /**
+   * The board key this folder tile navigates to. Only valid when kind = 'folder'.
+   * Must match a key in `boardPlacements` (for custom boards) or BoardMode (for
+   * static boards).
+   */
+  target?: string;
 }
 
 export interface TaskTag {
@@ -302,4 +376,6 @@ export type Action =
   | { type: 'UPDATE_NGRAM_MODEL'; payload: { words: string[] } }
   | { type: 'ADD_PRONUNCIATION'; payload: PronunciationRule }
   | { type: 'DELETE_PRONUNCIATION'; payload: string }
-  | { type: 'SET_PASSPORT'; payload: Partial<CommunicationPassport> };
+  | { type: 'SET_PASSPORT'; payload: Partial<CommunicationPassport> }
+  | { type: 'SET_FAVOURITES_BY_MODE'; payload: { board: string; ids: string[] } }
+  | { type: 'SET_ALL_FAVOURITES'; payload: Partial<Record<string, string[]>> };

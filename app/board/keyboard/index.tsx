@@ -179,7 +179,12 @@ export default function KeyboardScreen() {
 
   const speakMessage = useCallback((text: string) => {
     cancelSpeech();
-    const utterances = buildMessageUtterances(text, speechRate, speechPitch);
+    // Keyboard operates on free text — no board vocab context is available
+    // here, so knownVocabSet is omitted.  spellingModeEnabled is honoured so
+    // the user's preference still applies to freely typed single words.
+    const utterances = buildMessageUtterances(text, speechRate, speechPitch, {
+      spellingModeEnabled: state.accessibility.spellingModeEnabled,
+    });
     if (utterances.length === 0) return;
     const run = runIdRef.current;
 
@@ -200,7 +205,7 @@ export default function KeyboardScreen() {
     };
 
     speakNext(0);
-  }, [cancelSpeech, speak, speechRate, speechPitch]);
+  }, [cancelSpeech, speak, speechRate, speechPitch, state.accessibility.spellingModeEnabled]);
 
   const clearBuffer = useCallback(() => {
     cancelSpeech();

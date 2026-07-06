@@ -44,7 +44,16 @@ export const initialState: AppState = {
     reduceMotionOverride: false,
     motorAccessMode: false,
     reduceSensoryLoad: false,
+    spellingModeEnabled: false,
+    wordSpeechMode: 'word-by-word',
+    scanningEnabled: false,
+    scanRate: 800,
+    scanMode: 'auto',
+    switchInputSource: 'keyboard',
+    scanAutoPauseCycles: 3,
+    scanAudioCue: false,
   },
+  favouritesByMode: {},
   user: {
     legalName: '',
     displayName: '',
@@ -95,6 +104,8 @@ export const initialState: AppState = {
 
 function mergeStoredState(storedState: Partial<AppState>): AppState {
   const storedAccessibility: Partial<AppState['accessibility']> = storedState.accessibility ?? {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const storedFavourites: Partial<Record<string, string[]>> = (storedState as any).favouritesByMode ?? {};
 
   return {
     ...initialState,
@@ -122,6 +133,7 @@ function mergeStoredState(storedState: Partial<AppState>): AppState {
     },
     customBoardTiles: storedState.customBoardTiles ?? initialState.customBoardTiles,
     hiddenTileIds: storedState.hiddenTileIds ?? initialState.hiddenTileIds,
+    favouritesByMode: storedFavourites,
     firstThen: {
       ...initialState.firstThen,
       ...storedState.firstThen,
@@ -216,8 +228,28 @@ export function appReducer(state: AppState, action: Action): AppState {
       };
     case 'SET_PROFILE_PHOTO':
       return { ...state, profilePhotoUri: action.payload };
-    case 'SET_ACCESSIBILITY':
-      return { ...state, accessibility: { ...state.accessibility, ...action.payload } };
+    case 'SET_ACCESSIBILITY': {
+      // Clamp scan rate defensively — a stray 0 or NaN from persisted state
+      // would freeze the scan loop or spin it into a busy-wait. 100ms floor
+      // matches setInterval's practical iOS scheduling ceiling; 2000ms max
+      // is the slowest interval single-switch users can tolerate before
+      // the highlight feels disconnected from intent.
+      const merged = { ...state.accessibility, ...action.payload };
+      const rawRate = Number(merged.scanRate);
+      const safeRate =
+        Number.isFinite(rawRate) && rawRate > 0
+          ? Math.min(2000, Math.max(100, Math.round(rawRate)))
+          : state.accessibility.scanRate ?? 800;
+      const rawPauseCycles = Number(merged.scanAutoPauseCycles);
+      const safePauseCycles =
+        Number.isFinite(rawPauseCycles) && rawPauseCycles > 0
+          ? Math.min(10, Math.max(1, Math.round(rawPauseCycles)))
+          : state.accessibility.scanAutoPauseCycles ?? 3;
+      return {
+        ...state,
+        accessibility: { ...merged, scanRate: safeRate, scanAutoPauseCycles: safePauseCycles },
+      };
+    }
     case 'APPEND_WORD':
       return { ...state, messageWords: [...state.messageWords, action.payload] };
     case 'CLEAR_WORDS':
@@ -408,6 +440,16 @@ export function appReducer(state: AppState, action: Action): AppState {
       };
     case 'SET_PASSPORT':
       return { ...state, passport: { ...state.passport, ...action.payload } };
+    case 'SET_FAVOURITES_BY_MODE':
+      return {
+        ...state,
+        favouritesByMode: {
+          ...state.favouritesByMode,
+          [action.payload.board]: action.payload.ids,
+        },
+      };
+    case 'SET_ALL_FAVOURITES':
+      return { ...state, favouritesByMode: action.payload };
     case 'UPDATE_NGRAM_MODEL': {
       const words = action.payload.words;
       if (words.length < 2) return state;

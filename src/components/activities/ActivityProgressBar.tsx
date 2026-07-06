@@ -16,6 +16,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { layout, spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/useTheme';
 
 interface ActivityProgressBarProps {
   /** 1-based current level. */
@@ -42,6 +43,7 @@ export function ActivityProgressBar({
   backAccessibleLabel = 'Back',
   progressAccessibleLabel,
 }: ActivityProgressBarProps) {
+  const t = useTheme();
   const safeTotal   = Math.max(1, total);
   const safeCurrent = Math.max(0, Math.min(current, safeTotal));
 
@@ -53,13 +55,13 @@ export function ActivityProgressBar({
         accessibilityRole="button"
         accessibilityLabel={backAccessibleLabel}
       >
-        <View style={styles.backCircle}>
+        <View style={[styles.backCircle, { backgroundColor: t.colors.surface }]}>
           <Svg width={BACK_SIZE} height={BACK_SIZE} viewBox="0 0 40 40">
             <Path
               fillRule="evenodd"
               clipRule="evenodd"
               d="M21.0996 7.09993C21.6803 7.67849 21.6803 8.61651 21.0996 9.19506L11.7426 18.5179H31.8458C32.667 18.5179 33.3327 19.1811 33.3327 19.9993C33.3327 20.8175 32.667 21.4808 31.8458 21.4808H11.7426L21.0996 30.8036C21.6803 31.3822 21.6803 32.3202 21.0996 32.8988C20.5189 33.4773 19.5775 33.4773 18.9968 32.8988L7.10152 21.0469C6.52085 20.4684 6.52085 19.5303 7.10152 18.9518L18.9968 7.09993C19.5775 6.52138 20.5189 6.52138 21.0996 7.09993Z"
-              fill="#252222"
+              fill={t.colors.text}
             />
           </Svg>
         </View>
@@ -85,6 +87,7 @@ export function ActivityProgressBar({
 // ─── Fill bar ───────────────────────────────────────────────────────────────
 
 function FillBar({ current, total }: { current: number; total: number }) {
+  const t = useTheme();
   const [trackWidth, setTrackWidth] = useState(0);
 
   // Progress fraction: start at a small but visible dot at level 1,
@@ -103,7 +106,8 @@ function FillBar({ current, total }: { current: number; total: number }) {
   return (
     <View
       onLayout={e => setTrackWidth(e.nativeEvent.layout.width)}
-      style={styles.track}
+      // Theme-aware track — the light #D5E1E8 glared on dark surfaces.
+      style={[styles.track, { backgroundColor: t.colors.progressTrack }]}
     >
       {trackWidth > 0 && (
         <View

@@ -231,9 +231,11 @@ function makeTraj(size: number, fw: number, fh: number): Traj {
 // ─── Shape rendering ──────────────────────────────────────────────────────────
 
 function ShapeArt({ kind, colour, size }: { kind: ShapeKind; colour: ColourDef; size: number }) {
+  // Theme-aware outline so shapes stay defined on dark surfaces.
+  const t = useTheme();
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {renderShape(kind, size, colour.hex, '#263238', 2)}
+      {renderShape(kind, size, colour.hex, t.colors.symbolOutline, 2)}
     </Svg>
   );
 }
@@ -480,7 +482,7 @@ function StartOverlay({
       accessibilityRole="radio"
       accessibilityLabel={`${label} ${a11ySuffix}`}
       accessibilityState={{ selected: active }}
-      style={({ pressed }) => [styles.diffRow, active && styles.diffRowActive, pressed && { opacity: 0.88 }]}
+      style={({ pressed }) => [styles.diffRow, active && { backgroundColor: t.colors.selectionBg }, pressed && { opacity: 0.88 }]}
     >
       <View style={[styles.radio, active && styles.radioActive]}>
         {active ? <View style={[styles.radioDot, { backgroundColor: t.colors.primary }]} /> : null}
@@ -517,7 +519,7 @@ function StartOverlay({
               onPress={onCancel}
               accessibilityRole="button"
               accessibilityLabel="Cancel"
-              style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.btnGhost, { backgroundColor: t.colors.input }, pressed && { opacity: 0.85 }]}
             >
               <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Cancel</Text>
             </Pressable>
@@ -984,7 +986,7 @@ export default function ColourPopScreen() {
               accessibilityLabel={canGoBack ? `Back to level ${colourIdx}` : 'No previous level'}
               accessibilityState={{ disabled: !canGoBack }}
               style={({ pressed }) => [
-                styles.footerBtn, styles.footerGhost,
+                styles.footerBtn, { backgroundColor: t.colors.selectionBg },
                 !canGoBack && styles.footerBtnDisabled,
                 pressed && canGoBack && { opacity: 0.85 },
               ]}
@@ -997,7 +999,7 @@ export default function ColourPopScreen() {
               onPress={onReset}
               accessibilityRole="button"
               accessibilityLabel="Reset level"
-              style={({ pressed }) => [styles.footerBtn, styles.footerReset, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.footerBtn, { backgroundColor: t.colors.input }, pressed && { opacity: 0.85 }]}
             >
               <Ionicons name="refresh" size={20} color={t.colors.textMuted} />
               <Text style={[styles.footerBtnText, { color: t.colors.textMuted }]}>Reset</Text>
@@ -1023,11 +1025,15 @@ export default function ColourPopScreen() {
           {/* Try Again toast — soft amber, auto-dismiss (§4.2) */}
           {tryAgainVisible && (
             <Animated.View
-              style={[styles.tryAgain, { bottom: insets.bottom + 80, opacity: tryAgainFade }]}
+              style={[
+                styles.tryAgain,
+                { backgroundColor: t.isDark ? 'rgba(255,149,0,0.20)' : '#FFF4E0' },
+                { bottom: insets.bottom + 80, opacity: tryAgainFade },
+              ]}
               pointerEvents="none"
             >
-              <Ionicons name="refresh-circle-outline" size={20} color="#A65900" />
-              <Text style={styles.tryAgainText}>Try Again</Text>
+              <Ionicons name="refresh-circle-outline" size={20} color={t.isDark ? t.colors.warning : '#A65900'} />
+              <Text style={[styles.tryAgainText, { color: t.isDark ? t.colors.warning : '#A65900' }]}>Try Again</Text>
             </Animated.View>
           )}
         </View>

@@ -6,6 +6,7 @@ import {
   Alert,
   Animated as RNAnimated,
   Easing as RNEasing,
+  FlatList,
   LayoutAnimation,
   LayoutChangeEvent,
   LayoutRectangle,
@@ -52,7 +53,7 @@ import { AvatarView } from '../../src/features/profile/AvatarView';
 import { parseAvatar } from '../../src/features/profile/avatar';
 import { useAppContext } from '../../src/hooks/useAppContext';
 import { useSpeech } from '../../src/hooks/useSpeech';
-import { buildMessageUtterances } from '../../src/utils/speechRules';
+import { buildMessageUtterances, isKnownVocabWord } from '../../src/utils/speechRules';
 import { animation, boardSizes, CHROME_SEPARATOR_WIDTH, colors, radii, spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/theme/useTheme';
 import { hapticError, hapticSelection } from '../../src/utils/haptics';
@@ -63,6 +64,7 @@ import {
   ResolvedSymbol,
 } from '../../src/features/symbol-brain/resolveSymbolForKeyword';
 import { setTabBarHidden } from '../../src/features/board/chromeVisibility';
+import { predictSuggestions } from '../../src/utils/ngram';
 
 type TileKind = 'folder' | 'word' | 'action';
 // `places` was previously (incorrectly) named `animals` while holding
@@ -106,12 +108,14 @@ type BoardTile = {
 type WindowRect = LayoutRectangle;
 
 function boardTileFromCustomTile(tile: CustomBoardTile): BoardTile {
+  const isFolder = tile.kind === 'folder';
   return {
     id: tile.id,
     label: tile.label,
-    kind: 'word',
+    kind: isFolder ? 'folder' : 'word',
+    target: isFolder ? (tile.target as BoardMode | undefined) : undefined,
     color: tile.color,
-    speech: tile.speech ?? tile.label,
+    speech: isFolder ? undefined : (tile.speech ?? tile.label),
     wordType: tile.wordType,
     mulberrySymbolId: tile.mulberrySymbolId,
     customImageUri: tile.customImageUri,
@@ -183,10 +187,10 @@ const DOCK_ACTION_SIZE = boardSizes.controlBarItem;
 const DOCK_TOGGLE_SIZE = boardSizes.controlBarItem;
 const DOCK_GAP = 8;
 const DOCK_ACTION_PADDING = 8;
-const DOCK_ICON_STROKE = 4;
-const DOCK_ICON_TOGGLE = boardSizes.controlBarToggleIcon;
-const DOCK_ICON_ACTION = boardSizes.controlBarIcon;
-const DOCK_ICON_ROW = 17;
+const DOCK_ICON_STROKE = 2;
+const DOCK_ICON_TOGGLE = boardSizes.controlBarToggleIcon; // 22
+const DOCK_ICON_ACTION = boardSizes.controlBarIcon;       // 22
+const DOCK_ICON_ROW = boardSizes.controlBarIcon;          // 22
 const DOCK_ROW_LABEL = 14;
 // Coarse tile-cell footprint of a placement — used for collision math
 // and multi-cell highlights. fw=2 → 1 col, fw=3 or 4 → 2 cols, fw=5 or 6 → 3.
@@ -844,64 +848,50 @@ function DockPopover({
         },
       ]}
     >
-      {options.map(opt => (
-        <Pressable
-          key={opt.key}
-          accessibilityRole="menuitem"
-          accessibilityLabel={opt.a11yLabel}
-          accessibilityState={{ selected: Boolean(opt.selected) }}
-          onPress={opt.onPress}
-          // Brief dim on press (opacity feedback) + soft fill — no harsh colour.
-          style={({ pressed }) => [
-            styles.dockPopoverItem,
-            {
-              backgroundColor: pressed
-                ? (t.isDark ? t.colors.input : colors.softBlue)
-                : 'transparent',
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-        >
-          <Text
-            style={[styles.dockPopoverItemLabel, { color: t.colors.text }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.75}
-            maxFontSizeMultiplier={1.4}
+      {options.map((opt, idx) => (
+        <React.Fragment key={opt.key}>
+          {idx > 0 && (
+            <View style={[styles.dockPopoverDivider, { backgroundColor: t.colors.symbolOutline }]} />
+          )}
+          <Pressable
+            accessibilityRole="menuitem"
+            accessibilityLabel={opt.a11yLabel}
+            accessibilityState={{ selected: Boolean(opt.selected) }}
+            onPress={opt.onPress}
+            style={({ pressed }) => [
+              styles.dockPopoverItem,
+              {
+                backgroundColor: pressed
+                  ? (t.isDark ? t.colors.input : colors.softBlue)
+                  : 'transparent',
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
           >
-            {opt.label}
-          </Text>
-          {/* Selected state does not rely on colour alone — checkmark glyph. */}
-          <View style={styles.dockPopoverCheck}>
-            {opt.selected ? (
-              <Icon name="checkmark" size={18} color={t.colors.primary} strokeWidth={3} />
-            ) : null}
-          </View>
-        </Pressable>
+            <Text
+              style={[styles.dockPopoverItemLabel, { color: t.colors.text }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              maxFontSizeMultiplier={1.4}
+            >
+              {opt.label}
+            </Text>
+            <View style={styles.dockPopoverCheck}>
+              {opt.selected ? (
+                <Icon name="checkmark" size={18} color={t.colors.primary} strokeWidth={2.5} />
+              ) : null}
+            </View>
+          </Pressable>
+        </React.Fragment>
       ))}
     </RNAnimated.View>
   );
 }
 
-// ── Quick tag badge ──────────────────────────────────────────────────────
-// Small circular lightning badge overlaid on Quick-tagged symbols
-// (assets/symbol/quick_tag_for_quick_control_bar_selected.svg, inlined so
-// it renders through react-native-svg like every other glyph). Rendered
-// at 0.4 opacity while the Manage bar is open ("already tagged, editable").
-const QuickTagBadge = React.memo(function QuickTagBadge({
-  size = 16,
-  dimmed = false,
-}: { size?: number; dimmed?: boolean }) {
-  return (
-    <View style={[styles.quickBadge, dimmed && { opacity: 0.4 }]} pointerEvents="none">
-      <Svg width={size} height={size} viewBox="0 0 16.1328 15.7715">
-        <SvgPath fill="#FFFFFF" d="M7.88086 14.2773C4.3457 14.2773 1.49414 11.416 1.49414 7.88086C1.49414 4.3457 4.3457 1.48438 7.88086 1.48438C11.416 1.48438 14.2773 4.3457 14.2773 7.88086C14.2773 11.416 11.416 14.2773 7.88086 14.2773Z" />
-        <SvgPath fill="#0A84FF" d="M7.88086 15.7617C12.2363 15.7617 15.7715 12.2363 15.7715 7.88086C15.7715 3.52539 12.2363 0 7.88086 0C3.53516 0 0 3.52539 0 7.88086C0 12.2363 3.53516 15.7617 7.88086 15.7617ZM7.88086 14.2773C4.3457 14.2773 1.49414 11.416 1.49414 7.88086C1.49414 4.3457 4.3457 1.48438 7.88086 1.48438C11.416 1.48438 14.2773 4.3457 14.2773 7.88086C14.2773 11.416 11.416 14.2773 7.88086 14.2773Z" />
-        <SvgPath fill="#0A84FF" d="M4.55078 8.37891C4.55078 8.58398 4.7168 8.74023 4.93164 8.74023L7.4707 8.74023L6.12305 12.373C5.92773 12.9004 6.48438 13.1836 6.83594 12.7637L10.957 7.58789C11.0449 7.49023 11.0938 7.37305 11.0938 7.26562C11.0938 7.06055 10.918 6.9043 10.7129 6.9043L8.16406 6.9043L9.51172 3.28125C9.7168 2.75391 9.15039 2.46094 8.80859 2.89062L4.67773 8.05664C4.59961 8.1543 4.55078 8.27148 4.55078 8.37891Z" />
-      </Svg>
-    </View>
-  );
-});
+// ── Quick tag badge — REMOVED ─────────────────────────────────────────────
+// QuickTagBadge has been removed. Quick tags are no longer visually badged
+// on tiles; the Quick/Manage flow remains but without the persistent badge.
 
 // ── DockPeekPill ─────────────────────────────────────────────────────────
 // Persistent "way back" while the control bar is hidden. A soft blob pill
@@ -2624,10 +2614,6 @@ const BoardTileCell = React.memo(function BoardTileCell({
   );
 });
 
-// Animated Ionicons wrapper so the glyph colour rides the SAME running
-// animation as the label — icon and text tint crossfade together instead
-// of the icon snapping between two static colours.
-const AnimatedIonicons = RNAnimated.createAnimatedComponent(Ionicons);
 
 const TopNavTab = React.memo(function TopNavTab({
   tab,
@@ -2719,10 +2705,10 @@ const TopNavTab = React.memo(function TopNavTab({
           ]}
         />
         <View style={styles.topTabIconMount}>
-          <AnimatedIonicons
+          <Ionicons
             name={meta.icon}
             size={boardSizes.topNavIcon}
-            style={{ color: tintColor }}
+            color={active ? activeColor : idleColor}
           />
         </View>
         <RNAnimated.Text style={[styles.topTabLabel, { color: tintColor }]}>
@@ -2785,6 +2771,81 @@ const TopNav = React.memo(function TopNav({
       />
     </View>
   );
+});
+
+// ── Ngram suggestion chips ────────────────────────────────────────────────
+// Horizontal scrollable row of next-word prediction chips. Tapping a chip
+// calls onSelect with the suggested word so the parent can appendWord/speak.
+const NgramSuggestionRow = React.memo(function NgramSuggestionRow({
+  suggestions,
+  onSelect,
+}: {
+  suggestions: { word: string; score: number }[];
+  onSelect: (word: string) => void;
+}) {
+  const t = useTheme();
+  if (suggestions.length === 0) return null;
+  return (
+    <View
+      style={ngramStyles.row}
+      accessibilityRole="menu"
+      accessibilityLabel="Word suggestions"
+    >
+      <FlatList
+        data={suggestions}
+        horizontal
+        keyExtractor={item => item.word}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={ngramStyles.listContent}
+        renderItem={({ item }) => (
+          <Pressable
+            onPress={() => onSelect(item.word)}
+            style={({ pressed }) => [
+              ngramStyles.chip,
+              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+              pressed && { opacity: 0.7 },
+            ]}
+            accessibilityRole="menuitem"
+            accessibilityLabel={item.word}
+            accessibilityHint="Double-tap to add this word"
+          >
+            <Text
+              style={[ngramStyles.chipText, { color: t.colors.text }]}
+              allowFontScaling
+              numberOfLines={1}
+            >
+              {item.word}
+            </Text>
+          </Pressable>
+        )}
+      />
+    </View>
+  );
+});
+
+const ngramStyles = StyleSheet.create({
+  row: {
+    height: 44,
+    justifyContent: 'center',
+  },
+  listContent: {
+    paddingHorizontal: 8,
+    gap: 8,
+    alignItems: 'center',
+  },
+  chip: {
+    minWidth: 44,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chipText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
 });
 
 export default function TalkScreen() {
@@ -2917,11 +2978,11 @@ export default function TalkScreen() {
   // (and favourites, and any tiles hidden by a delete). Session-scoped:
   // cleared when the Edit Control Bar opens and when the board changes.
   const [undoStack, setUndoStack] = useState<BoardUndoEntry[]>([]);
-  // ── Favourites (Phase 3) ────────────────────────────────────────────────
+  // ── Favourites — lifted into AppContext (persisted to hot AsyncStorage) ──
   // Per-board ordered list of favourited tile ids — favourites are pinned
   // to the top of the board (first slots) until unfavourited. Sort keeps
   // them pinned. Unfavouriting returns a tile to its remembered position.
-  const [favouritesByMode, setFavouritesByMode] = useState<Partial<Record<BoardMode, string[]>>>({});
+  const favouritesByMode = state.favouritesByMode;
   const favouriteReturnIndexRef = useRef<Map<string, number>>(new Map());
   // Anchors for the Select / Move vertical pop-ups in the edit bar.
   const [selectAnchor, setSelectAnchor] = useState({ x: 0, width: 0 });
@@ -2956,6 +3017,103 @@ export default function TalkScreen() {
     });
   }, [state.customBoardTiles]);
 
+  // Hydration filter — runs once after customBoardTiles are loaded.
+  // Scrubs stale tile IDs from favouritesByMode that no longer exist in any
+  // board (e.g. tiles deleted after being favourited). Stale IDs cause silent
+  // broken favourites; scrubbing on load is safer than scrubbing on delete.
+  const favouritesScrubDoneRef = useRef(false);
+  useEffect(() => {
+    if (favouritesScrubDoneRef.current) return;
+    if (Object.keys(state.favouritesByMode).length === 0) return; // nothing to scrub
+    favouritesScrubDoneRef.current = true;
+    const allValidIds = new Set<string>([
+      ...Object.values(BOARD_TILES).flat().map(t => t.id),
+      ...state.customBoardTiles.map(t => t.id),
+    ]);
+    const cleaned: Partial<Record<string, string[]>> = {};
+    let dirty = false;
+    for (const [board, ids] of Object.entries(state.favouritesByMode)) {
+      if (!ids) continue;
+      const valid = ids.filter(id => allValidIds.has(id));
+      if (valid.length !== ids.length) dirty = true;
+      if (valid.length > 0) cleaned[board] = valid;
+    }
+    if (dirty) dispatch({ type: 'SET_ALL_FAVOURITES', payload: cleaned });
+  }, [state.customBoardTiles, state.favouritesByMode, dispatch]);
+
+  // ── Folder salvage migration ─────────────────────────────────────────────
+  // Pre-Phase-3 builds stored folder/group tiles only in `userTilesRef` (a
+  // module-level mutable map) and mutated `BOARD_TILES` — both ephemeral.
+  // On the first launch after this update, `boardPlacements` may reference
+  // `folder_*` tile IDs that aren't yet in `customBoardTiles`. Scan for
+  // orphans and create minimal CustomBoardTile salvage entries so existing
+  // boards render rather than showing blank placeholders.
+  const folderSalvageDoneRef = useRef(false);
+  useEffect(() => {
+    if (folderSalvageDoneRef.current) return;
+    folderSalvageDoneRef.current = true;
+    const existingIds = new Set(state.customBoardTiles.map(t => t.id));
+    const salvage: import('../../src/context/types').CustomBoardTile[] = [];
+    for (const [boardKey, placements] of Object.entries(state.boardPlacements)) {
+      if (!placements) continue;
+      for (const p of placements) {
+        // Folder tile IDs follow the pattern folder_<boardKey>
+        if (!p.id.startsWith('folder_') && !p.id.startsWith('back-')) continue;
+        if (existingIds.has(p.id)) continue;
+        const isBackTile = p.id.startsWith('back-');
+        const targetBoard = isBackTile ? 'home' : p.id.replace(/^folder_/, '');
+        // Synthesize a minimal CustomBoardTile. Label/color/symbol are lost —
+        // the user can rename from settings. Structure (navigation) is restored.
+        salvage.push({
+          id: p.id,
+          board: boardKey,
+          label: isBackTile ? 'Home' : 'Folder',
+          color: '#1DCDFF',
+          kind: 'folder',
+          target: targetBoard,
+          mulberrySymbolId: isBackTile ? 'mulberry_house_1ice1xp' : undefined,
+        });
+        existingIds.add(p.id);
+      }
+    }
+    salvage.forEach(tile => dispatch({ type: 'UPSERT_CUSTOM_BOARD_TILE', payload: tile }));
+  }, [state.customBoardTiles, state.boardPlacements, dispatch]);
+
+  // Pre-built set of all known vocabulary labels (lowercase). Passed to
+  // buildMessageUtterances so known AAC words always speak directly —
+  // never letter-spelled — regardless of the spellingModeEnabled preference.
+  const knownVocabSet = useMemo<Set<string>>(() => {
+    const set = new Set<string>();
+    Object.values(BOARD_TILES).flat().forEach(t => {
+      set.add(t.label.toLowerCase());
+      if (t.speech) set.add(t.speech.toLowerCase());
+    });
+    state.customBoardTiles.forEach(t => {
+      set.add(t.label.toLowerCase());
+      if (t.speech) set.add(t.speech.toLowerCase());
+    });
+    return set;
+  }, [state.customBoardTiles]);
+
+  // Expose knownVocabSet to the speakChained callback via ref so the
+  // callback dep array stays stable across board-state changes.
+  const knownVocabSetRef = useRef(knownVocabSet);
+  knownVocabSetRef.current = knownVocabSet;
+
+  // ── N-gram next-word suggestions ────────────────────────────────────────
+  const lastWord = state.messageWords.at(-1)?.label;
+
+  const ngramSuggestions = useMemo(() => {
+    if (!lastWord) return [];
+    return predictSuggestions({
+      lastWord,
+      model: state.ngramModel,
+      coreVocab: undefined,    // uses built-in CORE_VOCAB list
+      exclude: state.messageWords.map(w => w.label),
+      limit: 5,
+    });
+  }, [lastWord, state.ngramModel, state.messageWords]);
+
   const folderPlacementOptions = useMemo<FolderPlacementOption[]>(() => {
     const options = new Map<string, string>();
     options.set(activeMode, activeMode === 'home' ? 'Current board' : 'Current folder');
@@ -2983,9 +3141,49 @@ export default function TalkScreen() {
   // rapid re-taps on the strip never overlap audio (board_speech_rules.md).
   const speakRunIdRef = useRef(0);
   const speakGapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Speech FIFO queue (Bug #7) ────────────────────────────────────────────
+  // In word-by-word mode each tile tap enqueues; the queue drains sequentially
+  // so rapid taps are heard in order instead of cancelling each other.
+  const speechQueueRef = useRef<string[]>([]);
+  const isSpeakingQueueRef = useRef(false);
   const hapticIfEnabled = useCallback(() => {
     if (state.accessibility.hapticsEnabled !== false) hapticSelection();
   }, [state.accessibility.hapticsEnabled]);
+
+  // drainSpeechQueue — speak the next item; schedules itself via onDone.
+  // Must be stable so it can be referenced from the onDone closure without
+  // stale-closure bugs (reads refs, not closed-over state).
+  const speechRateRef = useRef(state.accessibility.speechRate);
+  const speechPitchRef = useRef(state.accessibility.speechPitch);
+  speechRateRef.current = state.accessibility.speechRate;
+  speechPitchRef.current = state.accessibility.speechPitch;
+
+  const drainSpeechQueue = useCallback(() => {
+    const next = speechQueueRef.current.shift();
+    if (!next) {
+      isSpeakingQueueRef.current = false;
+      return;
+    }
+    isSpeakingQueueRef.current = true;
+    speak(next, {
+      rate: speechRateRef.current,
+      pitch: speechPitchRef.current,
+      onDone: () => drainSpeechQueue(),
+      onStopped: () => { isSpeakingQueueRef.current = false; },
+    });
+  }, [speak]);
+
+  const enqueueSpeech = useCallback((text: string) => {
+    speechQueueRef.current.push(text);
+    if (!isSpeakingQueueRef.current) drainSpeechQueue();
+  }, [drainSpeechQueue]);
+
+  const flushSpeechQueue = useCallback(() => {
+    speechQueueRef.current = [];
+    isSpeakingQueueRef.current = false;
+    stopSpeech();
+  }, [stopSpeech]);
 
   // ── Hydrate local layouts from persisted boardPlacements on mount ─────────
   // Seeds the in-memory `layouts` state with any previously saved variable-size
@@ -3003,7 +3201,15 @@ export default function TalkScreen() {
       const stored = persisted[rawKey];
       if (!stored || stored.length === 0) continue;
       const boardTiles = BOARD_TILES[key];
-      if (!boardTiles) continue;
+      // Custom boards (folders/groups created at runtime) have no entry in the
+      // static BOARD_TILES constant — restore their layout directly from the
+      // stored placements without trying to append new static tiles.
+      if (!boardTiles) {
+        seeded[key] = reflowLayoutSlots(
+          stored.map(p => ({ id: p.id, slot: p.slot, fw: p.fw, fh: p.fh })),
+        );
+        continue;
+      }
       // Start from stored placements (id migration: back-animals → back-places)
       const layout: BoardLayout = reflowLayoutSlots(
         stored.map(p => ({
@@ -3276,32 +3482,68 @@ export default function TalkScreen() {
   }) => {
     setAddFolderModalVisible(false);
     const tileId = `folder_${result.boardKey}`;
+    const backId = `back-${result.boardKey}`;
     const parentBoard = (result.parentBoardKey ?? activeMode) as BoardMode;
-    setLayouts(prev => {
-      const current: BoardLayout = prev[parentBoard]
-        ?? (BOARD_TILES[parentBoard] ?? []).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
-      const maxSlot = current.reduce((max, p) => Math.max(max, p.slot + 1), 0);
-      return { ...prev, [parentBoard]: [...current, { id: tileId, slot: maxSlot, fw: 2, fh: 2 }] };
-    });
-    const newTile: BoardTile = {
+
+    // Compute the updated parent layout synchronously so we can persist it now
+    // without waiting for the user to open edit mode and hit Save.
+    const parentBase: BoardLayout = layouts[parentBoard]
+      ?? (BOARD_TILES[parentBoard] ?? []).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+    const maxParentSlot = parentBase.reduce((max, p) => Math.max(max, p.slot + 1), 0);
+    const newParentLayout: BoardLayout = [...parentBase, { id: tileId, slot: maxParentSlot, fw: 2, fh: 2 }];
+
+    // Initial child board layout — just the back-navigation tile.
+    const childLayout: BoardLayout = [{ id: backId, slot: 0, fw: 2, fh: 2 }];
+
+    setLayouts(prev => ({
+      ...prev,
+      [parentBoard]: newParentLayout,
+      [result.boardKey]: childLayout,
+    }));
+
+    // Folder tile on the parent board.
+    const folderCustomTile: import('../../src/context/types').CustomBoardTile = {
       id: tileId,
+      board: parentBoard,
       label: result.label,
-      kind: 'folder',
       color: result.color,
-      target: result.boardKey as BoardMode,
+      kind: 'folder',
+      target: result.boardKey,
       mulberrySymbolId: result.mulberrySymbolId,
       customImageUri: result.customImageUri,
     };
-    userTilesRef.current.set(tileId, newTile);
-    // Register the empty child board
-    if (!BOARD_TILES[result.boardKey as BoardMode]) {
-      (BOARD_TILES as Record<string, BoardTile[]>)[result.boardKey] = [
-        { id: `back-${result.boardKey}`, label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
-      ];
-    }
+    // Back-navigation tile on the child board.
+    const backCustomTile: import('../../src/context/types').CustomBoardTile = {
+      id: backId,
+      board: result.boardKey,
+      label: 'Home',
+      color: '#1DCDFF',
+      kind: 'folder',
+      target: 'home',
+      mulberrySymbolId: 'mulberry_house_1ice1xp',
+    };
+
+    // Keep userTilesRef in sync for immediate rendering this session.
+    userTilesRef.current.set(tileId, boardTileFromCustomTile(folderCustomTile));
+    userTilesRef.current.set(backId, boardTileFromCustomTile(backCustomTile));
+
+    // Persist folder definitions through AppContext → AsyncStorage.
+    dispatch({ type: 'UPSERT_CUSTOM_BOARD_TILE', payload: folderCustomTile });
+    dispatch({ type: 'UPSERT_CUSTOM_BOARD_TILE', payload: backCustomTile });
+
+    // Persist layouts immediately — don't wait for an edit-mode Save.
+    dispatch({
+      type: 'SET_BOARD_PLACEMENTS',
+      payload: { board: parentBoard, placements: newParentLayout },
+    });
+    dispatch({
+      type: 'SET_BOARD_PLACEMENTS',
+      payload: { board: result.boardKey, placements: childLayout },
+    });
+
     setLayoutDirty(true);
     hapticIfEnabled();
-  }, [activeMode, hapticIfEnabled]);
+  }, [activeMode, dispatch, hapticIfEnabled, layouts]);
 
   // Collapse handlers were removed with the board_control_bar restructure —
   // the expanded bar (Add + | Sort | Fullscreen | Hide) is now the default,
@@ -3428,7 +3670,7 @@ export default function TalkScreen() {
     hapticIfEnabled();
     setUndoStack(prev => prev.slice(0, -1));
     setLayouts(entry.layouts);
-    setFavouritesByMode(prev => ({ ...prev, [entry.board]: entry.favourites }));
+    dispatch({ type: 'SET_FAVOURITES_BY_MODE', payload: { board: entry.board, ids: entry.favourites } });
     // Deletes also hid tiles persistently — bring them back.
     entry.restoreTileIds?.forEach(id => dispatch({ type: 'RESTORE_TILE', payload: id }));
     setSelectedTileIds(new Set());
@@ -3573,10 +3815,7 @@ export default function TalkScreen() {
     setSelectedTileIds(new Set());
     setActiveEditTool('select');
     // Moved tiles leave this board — they can't stay pinned here.
-    setFavouritesByMode(prev => ({
-      ...prev,
-      [activeMode]: (prev[activeMode] ?? []).filter(id => !moveable.includes(id)),
-    }));
+    dispatch({ type: 'SET_FAVOURITES_BY_MODE', payload: { board: activeMode, ids: (state.favouritesByMode[activeMode] ?? []).filter(id => !moveable.includes(id)) } });
     AccessibilityInfo.announceForAccessibility?.(
       moveable.length === 1
         ? 'Item moved'
@@ -3653,50 +3892,67 @@ export default function TalkScreen() {
     }
     pushUndo('group');
     const boardKey = `group_${Date.now()}` as BoardMode;
-    // Register the new child board (Home/back tile first, like Add Folder).
-    (BOARD_TILES as Record<string, BoardTile[]>)[boardKey] = [
-      { id: `back-${boardKey}`, label: 'Home', kind: 'folder', target: 'home', color: '#1DCDFF', mulberrySymbolId: 'mulberry_house_1ice1xp' },
-    ];
+    const backId = `back-${boardKey}`;
     const folderId = `folder_${boardKey}`;
-    const folderTile: BoardTile = {
+
+    // Compute layouts synchronously so we can persist them immediately.
+    const source: BoardLayout = layouts[activeMode]
+      ?? (BOARD_TILES[activeMode] ?? []).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+    const moving = [...source]
+      .sort((a, b) => a.slot - b.slot)
+      .filter(p => groupable.includes(p.id));
+    const anchorSlot = moving[0]?.slot ?? source.length;
+    const rest = source.filter(p => !groupable.includes(p.id));
+    const newParentLayout: BoardLayout = [...rest, { id: folderId, slot: anchorSlot, fw: 2, fh: 2 }]
+      .sort((a, b) => a.slot - b.slot)
+      .map((p, i) => ({ ...p, slot: i }));
+    const childLayout: BoardLayout = [
+      { id: backId, slot: 0, fw: 2, fh: 2 },
+      ...moving.map((p, i) => ({ ...p, slot: i + 1 })),
+    ];
+
+    setLayouts(prev => ({ ...prev, [activeMode]: newParentLayout, [boardKey]: childLayout }));
+
+    // Persist the folder tile and back tile through AppContext → AsyncStorage.
+    const folderCustomTile: import('../../src/context/types').CustomBoardTile = {
       id: folderId,
+      board: activeMode,
       label: `Group (${groupable.length})`,
-      kind: 'folder',
       color: '#1DCDFF',
+      kind: 'folder',
       target: boardKey,
       mulberrySymbolId: 'mulberry_group_work_14prpc8',
     };
-    userTilesRef.current.set(folderId, folderTile);
-    setLayouts(prev => {
-      const source: BoardLayout = prev[activeMode]
-        ?? BOARD_TILES[activeMode].map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
-      const moving = [...source]
-        .sort((a, b) => a.slot - b.slot)
-        .filter(p => groupable.includes(p.id));
-      const anchorSlot = moving[0]?.slot ?? source.length;
-      const rest = source.filter(p => !groupable.includes(p.id));
-      // Folder takes the first selected tile's place; the board reflows.
-      const withFolder = [...rest, { id: folderId, slot: anchorSlot, fw: 2, fh: 2 }]
-        .sort((a, b) => a.slot - b.slot)
-        .map((p, i) => ({ ...p, slot: i }));
-      const childSeed: BoardLayout = [
-        { id: `back-${boardKey}`, slot: 0, fw: 2, fh: 2 },
-        ...moving.map((p, i) => ({ ...p, slot: i + 1 })),
-      ];
-      return { ...prev, [activeMode]: withFolder, [boardKey]: childSeed };
-    });
+    const backCustomTile: import('../../src/context/types').CustomBoardTile = {
+      id: backId,
+      board: boardKey,
+      label: 'Home',
+      color: '#1DCDFF',
+      kind: 'folder',
+      target: 'home',
+      mulberrySymbolId: 'mulberry_house_1ice1xp',
+    };
+
+    // Keep userTilesRef in sync for immediate rendering this session.
+    userTilesRef.current.set(folderId, boardTileFromCustomTile(folderCustomTile));
+    userTilesRef.current.set(backId, boardTileFromCustomTile(backCustomTile));
+
+    dispatch({ type: 'UPSERT_CUSTOM_BOARD_TILE', payload: folderCustomTile });
+    dispatch({ type: 'UPSERT_CUSTOM_BOARD_TILE', payload: backCustomTile });
+
+    // Persist layouts immediately — don't wait for an edit-mode Save.
+    dispatch({ type: 'SET_BOARD_PLACEMENTS', payload: { board: activeMode, placements: newParentLayout } });
+    dispatch({ type: 'SET_BOARD_PLACEMENTS', payload: { board: boardKey, placements: childLayout } });
+
     setLayoutDirty(true);
     setSelectedTileIds(new Set());
     setActiveEditTool('select');
     // Grouped tiles leave this board — they can't stay pinned here.
-    setFavouritesByMode(prev => ({
-      ...prev,
-      [activeMode]: (prev[activeMode] ?? []).filter(id => !groupable.includes(id)),
-    }));
+    dispatch({ type: 'SET_FAVOURITES_BY_MODE', payload: { board: activeMode, ids: (state.favouritesByMode[activeMode] ?? []).filter(id => !groupable.includes(id)) } });
     AccessibilityInfo.announceForAccessibility?.(
       `${groupable.length} item${groupable.length === 1 ? '' : 's'} grouped into a new folder`,
     );
-  }, [activeMode, hapticIfEnabled, pushUndo, resolveTileById, selectedTileIds]);
+  }, [activeMode, dispatch, hapticIfEnabled, layouts, pushUndo, resolveTileById, selectedTileIds, state.favouritesByMode]);
 
   // ── Favourite / Unfavourite (Phase 3) ──────────────────────────────────
   // Favourites pin to the top of the board (first slots) until toggled
@@ -3770,11 +4026,11 @@ export default function TalkScreen() {
         selected.length === 1 ? 'Added to favourites' : `${selected.length} items added to favourites`,
       );
     }
-    setFavouritesByMode(prev => ({ ...prev, [activeMode]: nextFavs }));
+    dispatch({ type: 'SET_FAVOURITES_BY_MODE', payload: { board: activeMode, ids: nextFavs } });
     setLayouts(prev => ({ ...prev, [activeMode]: nextLayout }));
     setLayoutDirty(true);
     setSelectedTileIds(new Set());
-  }, [activeMode, favouriteIds, hapticIfEnabled, layouts, pushUndo, rebuildWithFavourites, selectedAllFavourites, selectedTileIds]);
+  }, [activeMode, dispatch, favouriteIds, hapticIfEnabled, layouts, pushUndo, rebuildWithFavourites, selectedAllFavourites, selectedTileIds]);
 
   // ── Select / Unselect toggle (Phase 2) ─────────────────────────────────
   // With a selection: clears it (button reads "Unselect"). Without one:
@@ -4537,22 +4793,7 @@ export default function TalkScreen() {
     setSortMenuVisible(false);
     setHideMenuVisible(false);
 
-    // NEWCOMER PATH: no Quick symbols tagged yet — open Manage directly,
-    // calmly, so the user can pin symbols or create one.
-    if (quickTaggedIds.size === 0) {
-      setQuickDockMode('hidden');
-      // Selection reflects the desired final Quick set — preseeded with
-      // what's already tagged (empty for newcomers).
-      setManageSelectedIds(new Set(quickTaggedIds));
-      setManageCreatedTag(false);
-      setQuickManageOpen(true);
-      AccessibilityInfo.announceForAccessibility?.(
-        'Manage Quick. Tap symbols to pin them, or Create a new one.',
-      );
-      return;
-    }
-
-    // EXPERIENCED USER PATH — toggle the Quick view.
+    // Toggle the Quick view.
     if (quickViewActive) {
       if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setQuickViewActive(false);
@@ -4564,17 +4805,14 @@ export default function TalkScreen() {
 
     if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setQuickViewActive(true);
-    // Auto-scroll to top — one-time per activation; skipped if already there.
     if (!hasAutoScrolledRef.current) {
       if ((scrollPositions.current[activeMode] ?? 0) > 1) {
         scrollRef.current?.scrollTo({ y: 0, animated: true });
       }
       hasAutoScrolledRef.current = true;
     }
-    AccessibilityInfo.announceForAccessibility?.(
-      `Quick view on. ${quickTaggedIds.size} Quick symbol${quickTaggedIds.size !== 1 ? 's' : ''} at the top.`,
-    );
-  }, [activeMode, hapticIfEnabled, quickTaggedIds.size, quickViewActive, reduceMotion]);
+    AccessibilityInfo.announceForAccessibility?.('Quick view on');
+  }, [activeMode, hapticIfEnabled, quickViewActive, reduceMotion]);
 
   // Manage pill → open the Manage Control Bar (replaces the dock row).
   // Symbols already tagged with Quick enter Manage PRESELECTED so it's
@@ -4585,15 +4823,13 @@ export default function TalkScreen() {
     setSortMenuVisible(false);
     setHideMenuVisible(false);
     setQuickDockMode('hidden');
-    setManageSelectedIds(new Set(quickTaggedIds));
+    setManageSelectedIds(new Set());
     setManageCreatedTag(false);
     setQuickManageOpen(true);
     AccessibilityInfo.announceForAccessibility?.(
-      quickTaggedIds.size > 0
-        ? `Manage Quick. ${quickTaggedIds.size} symbol${quickTaggedIds.size === 1 ? ' is' : 's are'} already selected. Tap symbols to add or remove them, then Done.`
-        : 'Manage Quick. Tap symbols to pin them, or Create a new one, then Done.',
+      'Manage. Tap symbols to select them, then Done.',
     );
-  }, [hapticIfEnabled, quickTaggedIds]);
+  }, [hapticIfEnabled]);
 
   const closeQuickManage = useCallback(() => {
     setManageSelectedIds(new Set());
@@ -4602,43 +4838,25 @@ export default function TalkScreen() {
     setQuickDockMode('hidden');
   }, []);
 
-  // Dirty when the desired final set differs from what's currently tagged
-  // (or a symbol was just created via Create +).
+  // Dirty when any symbols are selected or a symbol was just created.
   const manageDirty = useMemo(() => {
-    if (manageCreatedTag) return true;
-    if (manageSelectedIds.size !== quickTaggedIds.size) return true;
-    for (const id of manageSelectedIds) {
-      if (!quickTaggedIds.has(id)) return true;
-    }
-    return false;
-  }, [manageCreatedTag, manageSelectedIds, quickTaggedIds]);
+    return manageCreatedTag || manageSelectedIds.size > 0;
+  }, [manageCreatedTag, manageSelectedIds]);
 
-  // Back — prompt when there are unsaved selection changes.
   const handleQuickManageBack = useCallback(() => {
     hapticIfEnabled();
-    if (manageDirty) {
-      Alert.alert('Discard changes?', undefined, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: closeQuickManage },
-      ]);
-      return;
-    }
     closeQuickManage();
-  }, [closeQuickManage, hapticIfEnabled, manageDirty]);
+  }, [closeQuickManage, hapticIfEnabled]);
 
-  // Select / Unselect — with pending changes: reverts the selection to the
-  // symbols already tagged (button reads "Unselect", red). Without pending
-  // changes: reminds how selection works.
+  // Unselect — clears all selected symbols when any are selected.
   const handleQuickSelectToggle = useCallback(() => {
     hapticIfEnabled();
-    if (manageDirty) {
-      setManageSelectedIds(new Set(quickTaggedIds));
+    if (manageSelectedIds.size > 0) {
+      setManageSelectedIds(new Set());
       setManageCreatedTag(false);
-      AccessibilityInfo.announceForAccessibility?.('Selection reset to your current Quick symbols');
-      return;
+      AccessibilityInfo.announceForAccessibility?.('All symbols unselected');
     }
-    AccessibilityInfo.announceForAccessibility?.('Tap symbols on the board to select them');
-  }, [hapticIfEnabled, manageDirty, quickTaggedIds]);
+  }, [hapticIfEnabled, manageSelectedIds.size]);
 
   // Create — shared custom symbol editor; the confirm handler auto-tags the
   // new tile as Quick while the Manage bar is open.
@@ -4646,8 +4864,7 @@ export default function TalkScreen() {
     handleOpenCustomSymbolEditor();
   }, [handleOpenCustomSymbolEditor]);
 
-  // Done — the selection IS the desired final Quick set (tagged symbols
-  // enter Manage preselected). Then jump straight into Quick view.
+  // Done — save selected symbols as Quick, jump to Quick view.
   const handleQuickManageDone = useCallback(() => {
     hapticIfEnabled();
     const next = new Set(manageSelectedIds);
@@ -4656,16 +4873,16 @@ export default function TalkScreen() {
     if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     if (next.size > 0) {
       setQuickViewActive(true);
-      hasAutoScrolledRef.current = true; // Done already lands you at the list
+      hasAutoScrolledRef.current = true;
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       AccessibilityInfo.announceForAccessibility?.(
-        `Quick updated. ${next.size} Quick symbol${next.size !== 1 ? 's' : ''}.`,
+        `Quick updated. ${next.size} symbol${next.size !== 1 ? 's' : ''}.`,
       );
     } else {
       setQuickViewActive(false);
-      AccessibilityInfo.announceForAccessibility?.('All Quick symbols removed');
+      AccessibilityInfo.announceForAccessibility?.('Quick cleared');
     }
-  }, [closeQuickManage, hapticIfEnabled, manageSelectedIds, quickTaggedIds, reduceMotion]);
+  }, [closeQuickManage, hapticIfEnabled, manageSelectedIds, reduceMotion]);
 
   // Done is conditional — only when there are pending changes to save
   // (selection differs from the tagged set, or a symbol was just created
@@ -4847,6 +5064,10 @@ export default function TalkScreen() {
       text,
       state.accessibility.speechRate,
       state.accessibility.speechPitch,
+      {
+        spellingModeEnabled: state.accessibility.spellingModeEnabled,
+        knownVocabSet: knownVocabSetRef.current,
+      },
     );
     if (utterances.length === 0) return;
     const run = speakRunIdRef.current;
@@ -4868,7 +5089,7 @@ export default function TalkScreen() {
     };
 
     speakNext(0);
-  }, [speak, stopSpeech, state.accessibility.speechRate, state.accessibility.speechPitch]);
+  }, [speak, stopSpeech, state.accessibility.speechRate, state.accessibility.speechPitch, state.accessibility.spellingModeEnabled]);
 
   // Never leave a chain running when the screen unmounts.
   useEffect(() => () => {
@@ -4920,13 +5141,34 @@ export default function TalkScreen() {
         source: 'board',
       },
     });
-    // When silent=true the caller already called speak() immediately on press;
-    // don't call it again here or the word would be said twice (and late).
-    if (!silent) {
-      speak(label, { rate: state.accessibility.speechRate, pitch: state.accessibility.speechPitch });
+    // When silent=true the caller handles speech (via enqueueSpeech in
+    // startGhostToMessage). When false — e.g. direct appendWord call — enqueue
+    // so the word joins the FIFO queue rather than cancelling what's playing.
+    if (!silent && state.accessibility.wordSpeechMode !== 'sentence') {
+      enqueueSpeech(label);
     }
     announce(`Added ${label}`);
-  }, [announce, dispatch, speak, state.accessibility.speechRate, state.accessibility.speechPitch]);
+  }, [announce, dispatch, enqueueSpeech, state.accessibility.wordSpeechMode]);
+
+  // Tap on an ngram suggestion chip — appends the word exactly like a tile tap.
+  // The suggestion word may not correspond to any board tile, so we synthesise a
+  // minimal AACWord directly rather than going through appendWord (which expects
+  // a BoardTile). Speech fires immediately in word-by-word mode.
+  const handleNgramSelect = useCallback((word: string) => {
+    dispatch({
+      type: 'APPEND_WORD',
+      payload: {
+        id: `suggestion-${word}-${Date.now()}`,
+        label: word,
+        wordType: 'core',
+        source: 'suggestion',
+      },
+    });
+    if (state.accessibility.wordSpeechMode !== 'sentence') {
+      enqueueSpeech(word);
+    }
+    announce(`Added ${word}`);
+  }, [announce, dispatch, enqueueSpeech, state.accessibility.wordSpeechMode]);
 
   const addGhost = useCallback((ghost: GhostTile) => {
     ghostsRef.current = [...ghostsRef.current, ghost];
@@ -4962,7 +5204,8 @@ export default function TalkScreen() {
       clearTimeout(speakGapTimerRef.current);
       speakGapTimerRef.current = null;
     }
-    stopSpeech();
+    // Flush the word-by-word FIFO queue as well (Bug #7).
+    flushSpeechQueue();
     ghostsRef.current = [];
     setGhosts([]);
     if (messageWordsRef.current.length > 0) {
@@ -4971,21 +5214,18 @@ export default function TalkScreen() {
     }
     dispatch({ type: 'CLEAR_WORDS' });
     announce('Message cleared');
-  }, [announce, dispatch, stopSpeech]);
+  }, [announce, dispatch, flushSpeechQueue]);
 
   const startGhostToMessage = useCallback((tile: BoardTile, fromRect: WindowRect | null) => {
-    // Speak immediately on press — don't wait for the 430ms ghost animation
-    // to complete. This eliminates the perceived delay between tapping and hearing.
-    // Stop first so rapid tile taps replace the previous word instead of
-    // queueing/overlapping (board_speech_rules.md — cancel before a new run).
-    stopSpeech();
-    speak(tile.speech ?? tile.label, {
-      rate: state.accessibility.speechRate,
-      pitch: state.accessibility.speechPitch,
-    });
+    const label = tile.speech ?? tile.label;
+    // word-by-word: enqueue for FIFO playback so rapid taps are heard in order.
+    // sentence: tile taps are silent — full message speaks on Send.
+    if (state.accessibility.wordSpeechMode !== 'sentence') {
+      enqueueSpeech(label);
+    }
 
     if (!fromRect) {
-      appendWord(tile, true); // silent — already spoken above
+      appendWord(tile, true); // silent — speech handled above
       return;
     }
 
@@ -4996,7 +5236,7 @@ export default function TalkScreen() {
     const targetRef = messageSlotRefs.current[targetIndex];
 
     if (!targetRef || !rootRef.current) {
-      appendWord(tile, true); // silent — already spoken above
+      appendWord(tile, true); // silent — speech handled above
       return;
     }
 
@@ -5021,7 +5261,7 @@ export default function TalkScreen() {
         });
       });
     });
-  }, [addGhost, appendWord, speak, stopSpeech, state.accessibility.speechPitch, state.accessibility.speechRate, tileSize]);
+  }, [addGhost, appendWord, enqueueSpeech, state.accessibility.wordSpeechMode, tileSize]);
 
   useEffect(() => {
     prewarmMulberryAssets({
@@ -5069,15 +5309,8 @@ export default function TalkScreen() {
           else next.add(tile.id);
           return next;
         });
-        const isTagged = quickTaggedIds.has(tile.id);
         AccessibilityInfo.announceForAccessibility?.(
-          wasSelected
-            ? isTagged
-              ? `${tile.label} will be removed from Quick`
-              : `${tile.label} deselected`
-            : isTagged
-              ? `${tile.label} kept in Quick`
-              : `${tile.label} will be added to Quick`,
+          wasSelected ? `${tile.label} deselected` : `${tile.label} selected`,
         );
         return;
       }
@@ -5147,7 +5380,7 @@ export default function TalkScreen() {
       return;
     }
     startGhostToMessage(tile, rect);
-  }, [activeEditTool, announce, clearMessage, dispatch, editControlsOpen, handleMoveToDestination, hapticIfEnabled, manageSelectedIds, navigateTo, previousMode, quickManageOpen, quickTaggedIds, repeatMessage, startGhostToMessage, toggleTileSelection]);
+  }, [activeEditTool, announce, clearMessage, dispatch, editControlsOpen, handleMoveToDestination, hapticIfEnabled, manageSelectedIds, navigateTo, previousMode, quickManageOpen, repeatMessage, startGhostToMessage, toggleTileSelection]);
 
   // Folder dock Back reuses the tile-press navigation logic.
   const handleDockBack = useCallback(() => handleTilePress(BACK_TILE, null), [handleTilePress]);
@@ -5260,6 +5493,16 @@ export default function TalkScreen() {
           onTabPress={handleTopTab}
         />
 
+        {/* N-gram next-word prediction chips — hidden during edit mode so they
+            don't distract from layout editing. Only shown when the message strip
+            has at least one word (lastWord is defined). */}
+        {!editMode && (
+          <NgramSuggestionRow
+            suggestions={ngramSuggestions}
+            onSelect={handleNgramSelect}
+          />
+        )}
+
         {/* Tap-outside overlay exits a clean edit session; when dirty it is a
             no-op so changes are never silently discarded (use Cancel/Save). */}
         {editMode ? (
@@ -5342,18 +5585,8 @@ export default function TalkScreen() {
                     const row = Math.floor(placement.slot / BOARD_COLUMNS);
                     const w = placement.fw * fineUnit;
                     const h = placement.fh * fineUnit;
-                    // ── Quick view / Manage visual treatment ────────────
-                    // In Manage, the selection is the desired FINAL Quick
-                    // set: tagged symbols start selected. Removal intent =
-                    // tagged but deselected; addition = untagged but selected.
-                    const isQuick = quickTaggedIds.has(tile.id);
+                    // ── Manage visual treatment ──────────────────────────
                     const manageSel = quickManageOpen && manageSelectedIds.has(tile.id);
-                    const removalIntent = quickManageOpen && isQuick && !manageSel;
-                    const additionIntent = manageSel && !isQuick;
-                    // Quick view chrome only outside Manage/editing.
-                    const quickChrome =
-                      quickViewActive && !quickManageOpen && !editMode && !editControlsOpen;
-                    const dimmed = quickChrome && quickTaggedIds.size > 0 && !isQuick;
                     return (
                       <View
                         key={tile.id}
@@ -5363,8 +5596,6 @@ export default function TalkScreen() {
                           top: row * rowStep,
                           width: w,
                           height: h,
-                          // Clear-but-not-harsh dimming of non-Quick tiles.
-                          opacity: dimmed ? 0.38 : 1,
                         }}
                       >
                         <BoardTileCell
@@ -5420,47 +5651,8 @@ export default function TalkScreen() {
                             </Text>
                           </View>
                         )}
-                        {/* Quick view — dashed blue outline + light tint on
-                            each Quick tile (per tile, not a group box). */}
-                        {quickChrome && isQuick ? (
-                          <View
-                            pointerEvents="none"
-                            style={[styles.quickTileOverlay, {
-                              borderStyle: 'dashed',
-                              borderWidth: 2,
-                              borderColor: 'rgba(10, 132, 255, 0.75)',
-                              backgroundColor: 'rgba(10, 132, 255, 0.10)',
-                            }]}
-                          />
-                        ) : null}
-                        {/* Manage — already-tagged tiles that STAY selected
-                            wear a calm solid border ("part of Quick"). */}
-                        {quickManageOpen && isQuick && manageSel ? (
-                          <View
-                            pointerEvents="none"
-                            style={[styles.quickTileOverlay, {
-                              borderStyle: 'solid',
-                              borderWidth: 1.5,
-                              borderColor: 'rgba(10, 132, 255, 0.9)',
-                            }]}
-                          />
-                        ) : null}
-                        {/* Manage — removal intent: red tint + strike. */}
-                        {removalIntent ? (
-                          <View
-                            pointerEvents="none"
-                            style={[styles.quickTileOverlay, {
-                              borderStyle: 'dashed',
-                              borderWidth: 2,
-                              borderColor: '#FF3B30',
-                              backgroundColor: 'rgba(255, 59, 48, 0.12)',
-                            }]}
-                          >
-                            <View style={styles.quickRemoveStrike} />
-                          </View>
-                        ) : null}
-                        {/* Manage — addition intent: blue selection tint. */}
-                        {additionIntent ? (
+                        {/* Manage — selected tiles wear a blue selection tint. */}
+                        {manageSel ? (
                           <View
                             pointerEvents="none"
                             style={[styles.quickTileOverlay, {
@@ -5471,9 +5663,6 @@ export default function TalkScreen() {
                             }]}
                           />
                         ) : null}
-                        {/* Quick tag badge — visible at ALL times on tagged
-                            tiles; 0.4 opacity while Manage is editing. */}
-                        {isQuick ? <QuickTagBadge dimmed={quickManageOpen} /> : null}
                       </View>
                     );
                   })}
@@ -5689,16 +5878,12 @@ export default function TalkScreen() {
                 },
               ]}
             />
-            {/* Quick "Manage" sub-option — green pill floating directly
-                above the Quick button. Springs in from below; pulses once
-                (scale 1 → 1.06) on the newcomer nudge to draw the eye. */}
-            {manageVisible ? (
+            {/* Manage sub-option — REMOVED: Manage is now a dock button. */}
+            {false ? (
               <Reanimated.View
                 style={[
                   styles.manageSubOption,
                   {
-                    // Sub-option sits directly above its parent control and
-                    // matches the parent's visual width (Manage above Quick).
                     left: quickAnchor.x,
                     width: Math.max(quickAnchor.width, DOCK_ACTION_SIZE),
                   },
@@ -5768,23 +5953,26 @@ export default function TalkScreen() {
                     <Reanimated.View style={quickShakeStyle}>
                       <BoardDockAction
                         icon="quick" label="Quick"
-                        a11yLabel="Quick — jump to your pinned symbols"
-                        a11yHint={quickTaggedIds.size === 0
-                          ? 'Tap Manage to pin symbols first'
-                          : 'Scrolls to top and highlights your Quick symbols'}
+                        a11yLabel="Quick view"
+                        a11yHint="Scrolls to top and shows your Quick symbols"
                         onPress={handleQuickPress}
                         kind="neutral"
                         isToggle
                         isActive={quickViewActive}
                       />
-                      {/* Faint red error tint (newcomer nudge) — an overlay
-                          blend, never a hard switch to red. */}
                       <Reanimated.View
                         pointerEvents="none"
                         style={[styles.quickErrorTint, quickTintStyle]}
                       />
                     </Reanimated.View>
                   </View>
+                  <BoardDockAction
+                    icon="select" label="Manage"
+                    a11yLabel="Manage Quick symbols"
+                    a11yHint="Select symbols to add to Quick view, then tap Done"
+                    onPress={handleManagePress}
+                    kind="neutral"
+                  />
                   <View onLayout={handleHideAnchorLayout}>
                     <BoardDockAction
                       icon="hide" label="Hide"
@@ -5821,18 +6009,18 @@ export default function TalkScreen() {
                   <Reanimated.View style={unselectBlinkStyle}>
                     <BoardDockAction
                       icon="select"
-                      label={manageDirty ? 'Unselect' : 'Select'}
-                      a11yLabel={manageDirty
-                        ? 'Unselect — reset pending Quick changes'
+                      label={manageSelectedIds.size > 0 ? 'Unselect' : 'Select'}
+                      a11yLabel={manageSelectedIds.size > 0
+                        ? `Unselect all ${manageSelectedIds.size} selected`
                         : 'Select symbols'}
-                      a11yHint={manageDirty
-                        ? 'Resets the selection to your current Quick symbols'
-                        : 'Tap symbols on the board to add or remove them from Quick'}
+                      a11yHint={manageSelectedIds.size > 0
+                        ? 'Clears all selected symbols'
+                        : 'Tap symbols on the board to select them'}
                       onPress={handleQuickSelectToggle}
                       kind="neutral"
-                      tint={manageDirty ? t.colors.danger : undefined}
+                      tint={manageSelectedIds.size > 0 ? t.colors.danger : undefined}
                       isToggle
-                      isActive
+                      isActive={manageSelectedIds.size > 0}
                     />
                   </Reanimated.View>
                   <BoardDockAction
@@ -5900,10 +6088,8 @@ export default function TalkScreen() {
                     <Reanimated.View style={quickShakeStyle}>
                       <BoardDockAction
                         icon="quick" label="Quick"
-                        a11yLabel="Quick — jump to your pinned symbols"
-                        a11yHint={quickTaggedIds.size === 0
-                          ? 'Tap Manage to pin symbols first'
-                          : 'Scrolls to top and highlights your Quick symbols'}
+                        a11yLabel="Quick view"
+                        a11yHint="Scrolls to top and shows your Quick symbols"
                         onPress={handleQuickPress}
                         kind="neutral"
                         isToggle
@@ -5915,6 +6101,13 @@ export default function TalkScreen() {
                       />
                     </Reanimated.View>
                   </View>
+                  <BoardDockAction
+                    icon="select" label="Manage"
+                    a11yLabel="Manage Quick symbols"
+                    a11yHint="Select symbols to add to Quick view, then tap Done"
+                    onPress={handleManagePress}
+                    kind="neutral"
+                  />
                   <View onLayout={handleHideAnchorLayout}>
                     <BoardDockAction
                       icon="hide" label="Hide"
@@ -6255,11 +6448,11 @@ const styles = StyleSheet.create({
     height: TOP_NAV_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 24,
+    justifyContent: 'space-between',
     paddingTop: 6,
     paddingBottom: 6,
-    paddingHorizontal: 20,
+    paddingLeft: 16,
+    paddingRight: 16,
   },
   // Full-width bottom border of the top nav. Rendered as a view rather than
   // a border so it isn't clipped by the animated slot's overflow:hidden.
@@ -6273,10 +6466,11 @@ const styles = StyleSheet.create({
   // 68×52 sits inside the 50–56 target range while trimming the previous
   // 72×57 footprint. Press feedback is the animated scale, not opacity.
   topTab: {
-    width: boardSizes.topNavItemWidth,
+    minWidth: 52,
     height: boardSizes.topNavItemHeight,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   topTabContent: {
     alignItems: 'center',
@@ -6489,9 +6683,14 @@ const styles = StyleSheet.create({
     bottom: DOCK_BOTTOM_GAP + DOCK_ACTION_SIZE + spacing.sm,
     borderRadius: 14,
     borderWidth: 1.6,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
     overflow: 'hidden',
+    minWidth: 110,
+  },
+  dockPopoverDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 4,
   },
   dockPopoverItem: {
     minHeight: boardSizes.subOptionMinHeight,
@@ -6503,12 +6702,13 @@ const styles = StyleSheet.create({
   },
   dockPopoverItemLabel: {
     flexShrink: 1,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
+    letterSpacing: -0.2,
   },
   dockPopoverCheck: {
-    width: 20,
-    height: 20,
+    width: 22,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -6669,20 +6869,20 @@ const styles = StyleSheet.create({
   },
   dockIconRowGlyph: {
     width: DOCK_ICON_ROW + 2,
-    height: DOCK_ROW_LABEL + 2,
+    height: DOCK_ICON_ROW + 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dockRowLabel: {
-    fontSize: DOCK_ROW_LABEL,
-    lineHeight: DOCK_ROW_LABEL + 3,
+    fontSize: boardSizes.controlBarLabel,
+    lineHeight: boardSizes.controlBarLabel + 3,
     fontWeight: '700',
     textAlign: 'left',
   },
   dockIconStack: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 1,
+    gap: 2,
   },
   dockIconStackGlyph: {
     width: DOCK_ICON_ACTION + 2,

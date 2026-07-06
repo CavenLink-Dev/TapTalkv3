@@ -27,6 +27,7 @@ export type HotPersistedState = Pick<
   | 'tileTapCounts'
   | 'tileLastTappedAt'
   | 'ngramModel'
+  | 'favouritesByMode'
 >;
 
 export type ColdPersistedState = Pick<
@@ -70,6 +71,7 @@ export function splitAppState(state: AppState): {
       tileTapCounts: state.tileTapCounts,
       tileLastTappedAt: state.tileLastTappedAt,
       ngramModel: state.ngramModel,
+      favouritesByMode: state.favouritesByMode,
     },
     cold: {
       onboardingComplete: state.onboardingComplete,
@@ -122,6 +124,8 @@ export function persistenceTargetForAction(type: Action['type']): PersistenceTar
     case 'PUSH_SENTENCE_HISTORY':
     case 'INCREMENT_TILE_TAP':
     case 'UPDATE_NGRAM_MODEL':
+    case 'SET_FAVOURITES_BY_MODE':
+    case 'SET_ALL_FAVOURITES':
       return 'hot';
     case 'SET_USER':
     case 'SET_PARENT':

@@ -538,7 +538,10 @@ export default function MemoryMatchScreen() {
             <Animated.View
               style={[
                 styles.levelPill,
-                levelPillFlash && { backgroundColor: '#D6F0DD' },
+                { backgroundColor: t.colors.selectionBg },
+                levelPillFlash && {
+                  backgroundColor: t.isDark ? 'rgba(48,209,88,0.28)' : '#D6F0DD',
+                },
                 { transform: [{ scale: levelPillScale }] },
               ]}
             >
@@ -652,11 +655,15 @@ export default function MemoryMatchScreen() {
       {/* ── Try Again toast — soft amber, auto-dismiss (§4.2) ─────────── */}
       {tryAgainVisible ? (
         <Animated.View
-          style={[styles.tryAgain, { bottom: insets.bottom + 90, opacity: tryAgainFade }]}
+          style={[
+            styles.tryAgain,
+            { backgroundColor: t.isDark ? 'rgba(255,149,0,0.20)' : '#FFF4E0' },
+            { bottom: insets.bottom + 90, opacity: tryAgainFade },
+          ]}
           pointerEvents="none"
         >
-          <Ionicons name="refresh-circle-outline" size={20} color="#A65900" />
-          <Text style={styles.tryAgainText}>Try Again</Text>
+          <Ionicons name="refresh-circle-outline" size={20} color={t.isDark ? t.colors.warning : '#A65900'} />
+          <Text style={[styles.tryAgainText, { color: t.isDark ? t.colors.warning : '#A65900' }]}>Try Again</Text>
         </Animated.View>
       ) : null}
 

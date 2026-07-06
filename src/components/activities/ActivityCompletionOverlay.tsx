@@ -184,11 +184,12 @@ export function ActivityCompletionOverlay({
             accessibilityLabel="Next activity"
             style={({ pressed }) => [
               styles.btnNext,
-              { backgroundColor: SOFT_BLUE_TINT },
+              // Theme-aware soft tint — the light-only blue glared in dark mode.
+              { backgroundColor: t.isDark ? t.colors.selectionBg : SOFT_BLUE_TINT },
               pressed && { opacity: 0.85 },
             ]}
           >
-            <Text style={[styles.btnNextText, { color: colors.primaryDark }]}>
+            <Text style={[styles.btnNextText, { color: t.isDark ? t.colors.primary : colors.primaryDark }]}>
               Next Activity
             </Text>
           </Pressable>

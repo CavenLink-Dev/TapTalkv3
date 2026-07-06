@@ -345,6 +345,7 @@ function Slot({
   onPress: () => void;
   onMeasure: (rect: Rect) => void;
 }) {
+  const t = useTheme();
   // Pulse hint animation
   const pulse = useRef(new Animated.Value(0)).current;
 
@@ -405,9 +406,9 @@ function Slot({
       }}
       style={[
         styles.slot,
-        { width: size, height: size },
-        hinted && styles.slotHinted,
-        selectedShapeId && !placed && styles.slotAwaiting,
+        { width: size, height: size, backgroundColor: t.colors.inputBg },
+        hinted && { backgroundColor: t.isDark ? 'rgba(255,149,0,0.20)' : '#FFF4E0' },
+        selectedShapeId && !placed && { backgroundColor: t.colors.selectionBg },
       ]}
     >
       {/* Outline (always visible, pulses on hint) */}
@@ -455,6 +456,7 @@ function DraggableShape({
   onTap: () => void;
   onDragRelease: (dropX: number, dropY: number, shapeId: string) => void;
 }) {
+  const t = useTheme();
   // Pan + shake live on the JS thread (pan requires useNativeDriver:false)
   const pan    = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const shakeX = useRef(new Animated.Value(0)).current;
@@ -568,8 +570,8 @@ function DraggableShape({
           accessibilityState={{ selected }}
           style={[
             styles.shapePressable,
-            { width: size, height: size, borderRadius: 18 },
-            selected && styles.shapeSelected,
+            { width: size, height: size, borderRadius: 18, backgroundColor: t.colors.inputBg },
+            selected && [styles.shapeSelected, { backgroundColor: t.colors.selectionBg, borderColor: t.colors.primary }],
           ]}
         >
           <ShapeArt kind={shape.kind} color={shape.color} size={artSize} />
@@ -637,7 +639,7 @@ function StartOverlay({
               onPress={onCancel}
               accessibilityRole="button"
               accessibilityLabel="Cancel"
-              style={({ pressed }) => [styles.btnGhost, { backgroundColor: '#F1F5F9' }, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.btnGhost, { backgroundColor: t.colors.input }, pressed && { opacity: 0.85 }]}
             >
               <Text style={[styles.btnGhostText, { color: t.colors.text }]}>Cancel</Text>
             </Pressable>
@@ -1011,7 +1013,10 @@ export default function ShapeMatchScreen() {
             <Animated.View
               style={[
                 styles.levelPill,
-                levelPillFlash && { backgroundColor: '#D6F0DD' },
+                { backgroundColor: t.colors.selectionBg },
+                levelPillFlash && {
+                  backgroundColor: t.isDark ? 'rgba(48,209,88,0.28)' : '#D6F0DD',
+                },
                 { transform: [{ scale: levelPillScale }] },
               ]}
             >
@@ -1086,7 +1091,7 @@ export default function ShapeMatchScreen() {
               accessibilityLabel={canGoBack ? `Back to level ${level - 1}` : 'No previous level'}
               accessibilityState={{ disabled: !canGoBack }}
               style={({ pressed }) => [
-                styles.footerBtn, styles.footerGhost,
+                styles.footerBtn, { backgroundColor: t.colors.selectionBg },
                 !canGoBack && styles.footerBtnDisabled,
                 pressed && canGoBack && { opacity: 0.85 },
               ]}
@@ -1099,7 +1104,7 @@ export default function ShapeMatchScreen() {
               onPress={onReset}
               accessibilityRole="button"
               accessibilityLabel="Reset level"
-              style={({ pressed }) => [styles.footerBtn, styles.footerReset, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.footerBtn, { backgroundColor: t.colors.input }, pressed && { opacity: 0.85 }]}
             >
               <Ionicons name="refresh" size={20} color={t.colors.textMuted} />
               <Text style={[styles.footerBtnText, { color: t.colors.textMuted }]}>Reset</Text>
@@ -1125,11 +1130,15 @@ export default function ShapeMatchScreen() {
           {/* Try-again toast */}
           {tryAgainVisible ? (
             <Animated.View
-              style={[styles.tryAgain, { bottom: insets.bottom + 90, opacity: tryAgainFade }]}
+              style={[
+                styles.tryAgain,
+                { backgroundColor: t.isDark ? 'rgba(255,149,0,0.20)' : '#FFF4E0' },
+                { bottom: insets.bottom + 90, opacity: tryAgainFade },
+              ]}
               pointerEvents="none"
             >
-              <Ionicons name="refresh-circle-outline" size={20} color="#A65900" />
-              <Text style={[styles.tryAgainText, { color: '#A65900' }]}>Try Again</Text>
+              <Ionicons name="refresh-circle-outline" size={20} color={t.isDark ? t.colors.warning : '#A65900'} />
+              <Text style={[styles.tryAgainText, { color: t.isDark ? t.colors.warning : '#A65900' }]}>Try Again</Text>
             </Animated.View>
           ) : null}
 

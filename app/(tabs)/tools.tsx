@@ -17,14 +17,18 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
 import { Href, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/native/Screen';
 import { animation as anim, radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
-import {
-  hapticLight,
-  hapticSelection,
-} from '../../src/utils/haptics';
+import { hapticLight, hapticSelection } from '../../src/utils/haptics';
 import {
   ToolId,
   toggleFavourite,
@@ -215,32 +219,47 @@ function StarParticles({ trigger }: { trigger: number }) {
 function ToolCard({
   tool,
   favourite,
-  showReorderControls,
   index,
-  canMoveUp,
-  canMoveDown,
   onOpen,
-  onRevealReorderControls,
-  onMoveUp,
-  onMoveDown,
+  onDragEnd,
   onToggleStar,
 }: {
   tool: Tool;
   favourite: boolean;
-  showReorderControls: boolean;
   index: number;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
   onOpen: () => void;
-  onRevealReorderControls: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
+  onDragEnd: (index: number, translationY: number) => void;
   onToggleStar: () => void;
 }) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
   const reduceSensory = useReduceSensoryLoad();
-  const suppressOpenAfterLongPress = useRef(false);
+
+  // Drag-to-reorder (Reanimated)
+  const translateY = useSharedValue(0);
+  const isDragging = useSharedValue(false);
+
+  const panGesture = Gesture.Pan()
+    .onBegin(() => {
+      isDragging.value = true;
+    })
+    .onUpdate((e) => {
+      translateY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      runOnJS(onDragEnd)(index, e.translationY);
+      translateY.value = withSpring(0, { damping: 22, stiffness: 300 });
+      isDragging.value = false;
+    })
+    .onFinalize(() => {
+      translateY.value = withSpring(0, { damping: 22, stiffness: 300 });
+      isDragging.value = false;
+    });
+
+  const dragAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    zIndex: isDragging.value ? 100 : 0,
+  }));
 
   // Staggered entrance
   const mountProgress = useRef(new Animated.Value(0)).current;
@@ -387,12 +406,6 @@ function ToolCard({
     ]).start();
   };
 
-  const revealReorderControls = () => {
-    suppressOpenAfterLongPress.current = true;
-    hapticSelection();
-    onRevealReorderControls();
-  };
-
   // Interpolations
   const mountTranslateY = mountProgress.interpolate({
     inputRange: [0, 1],
@@ -412,38 +425,29 @@ function ToolCard({
   });
 
   return (
-    <Animated.View
-      style={{
-        opacity: mountProgress,
-        transform: [
-          { translateY: mountTranslateY },
-          { scale: pressScale },
-        ],
-        borderRadius:  radii.card,
-        shadowColor:   favourite ? t.colors.favouriteGold : t.colors.favouriteGlow,
-        shadowOffset:  { width: 0, height: favourite ? 3 : 0 },
-        shadowOpacity: favourite ? 0.10 : 0,
-        shadowRadius:  favourite ? 6 : 0,
-        elevation:     0,
-      }}
-    >
+    <Reanimated.View style={dragAnimStyle}>
+      <Animated.View
+        style={{
+          opacity: mountProgress,
+          transform: [
+            { translateY: mountTranslateY },
+            { scale: pressScale },
+          ],
+          borderRadius:  radii.card,
+          shadowColor:   favourite ? t.colors.favouriteGold : t.colors.favouriteGlow,
+          shadowOffset:  { width: 0, height: favourite ? 3 : 0 },
+          shadowOpacity: favourite ? 0.10 : 0,
+          shadowRadius:  favourite ? 6 : 0,
+          elevation:     0,
+        }}
+      >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open ${tool.title}. ${tool.subtitle}`}
-        accessibilityHint={
-          showReorderControls
-            ? 'Use the up and down buttons to reorder this tool.'
-            : 'Press and hold to show reorder controls.'
-        }
-        onLongPress={revealReorderControls}
-        delayLongPress={260}
+        accessibilityHint="Drag the handle on the right to reorder."
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={() => {
-          if (suppressOpenAfterLongPress.current) {
-            suppressOpenAfterLongPress.current = false;
-            return;
-          }
           hapticSelection();
           onOpen();
         }}
@@ -518,54 +522,6 @@ function ToolCard({
           ]}
         >
           <View style={styles.cardContentRow}>
-
-            {showReorderControls ? (
-              <View
-                accessible
-                accessibilityRole="toolbar"
-                accessibilityLabel={`Reorder ${tool.title}`}
-                style={styles.reorderControls}
-              >
-                <Ionicons name="reorder-three" size={22} color={t.colors.textMuted} />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Move ${tool.title} up`}
-                  accessibilityState={{ disabled: !canMoveUp }}
-                  disabled={!canMoveUp}
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    hapticSelection();
-                    onMoveUp();
-                  }}
-                  style={({ pressed }) => [
-                    styles.reorderButton,
-                    { backgroundColor: t.colors.inputBg },
-                    (!canMoveUp || pressed) && { opacity: !canMoveUp ? 0.35 : 0.75 },
-                  ]}
-                >
-                  <Ionicons name="chevron-up" size={20} color={t.colors.textMuted} />
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Move ${tool.title} down`}
-                  accessibilityState={{ disabled: !canMoveDown }}
-                  disabled={!canMoveDown}
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    hapticSelection();
-                    onMoveDown();
-                  }}
-                  style={({ pressed }) => [
-                    styles.reorderButton,
-                    { backgroundColor: t.colors.inputBg },
-                    (!canMoveDown || pressed) && { opacity: !canMoveDown ? 0.35 : 0.75 },
-                  ]}
-                >
-                  <Ionicons name="chevron-down" size={20} color={t.colors.textMuted} />
-                </Pressable>
-              </View>
-            ) : null}
-
             <View style={styles.copy}>
               <Text style={[styles.name, { color: t.colors.text }]}>{tool.title}</Text>
               <Text style={[styles.description, { color: t.colors.textMuted }]} numberOfLines={2}>
@@ -598,10 +554,22 @@ function ToolCard({
                 />
               </Pressable>
             </View>
+
+            {/* Drag handle — iOS-style reorder grip on the right */}
+            <GestureDetector gesture={panGesture}>
+              <View
+                style={styles.dragHandle}
+                accessibilityRole="adjustable"
+                accessibilityLabel={`Drag to reorder ${tool.title}`}
+              >
+                <Ionicons name="reorder-three" size={26} color={t.colors.textMuted} />
+              </View>
+            </GestureDetector>
           </View>
         </View>
       </Pressable>
-    </Animated.View>
+      </Animated.View>
+    </Reanimated.View>
   );
 }
 
@@ -671,8 +639,6 @@ export default function ToolsScreen() {
   const { refreshing, onRefresh } = usePullRefresh();
   const savedOrder = useToolOrder();
 
-  const [showReorderControls, setShowReorderControls] = useState(false);
-
   const orderedTools  = savedOrder
     .map(id => TOOL_BY_ID.get(id))
     .filter((tool): tool is Tool => Boolean(tool));
@@ -684,29 +650,30 @@ export default function ToolsScreen() {
     router.push(tool.route);
   };
 
-  const moveTool = useCallback((toolId: ToolId, direction: -1 | 1) => {
-    const fromIndex = savedOrder.indexOf(toolId);
-    const toIndex = fromIndex + direction;
-    if (fromIndex < 0 || toIndex < 0 || toIndex >= savedOrder.length) return;
-    setToolOrder(moveItem(savedOrder, fromIndex, toIndex));
+  const handleDragEnd = useCallback((fromIndex: number, translationY: number) => {
+    const CARD_TOTAL_HEIGHT = CARD_HEIGHT + CARD_GAP;
+    const delta = Math.round(translationY / CARD_TOTAL_HEIGHT);
+    const toIndex = Math.max(0, Math.min(savedOrder.length - 1, fromIndex + delta));
+    if (toIndex !== fromIndex) {
+      hapticSelection();
+      setToolOrder(moveItem(savedOrder, fromIndex, toIndex));
+    }
   }, [savedOrder]);
 
-  const renderToolCard = (tool: Tool, index: number) => (
-    <ToolCard
-      key={tool.id}
-      tool={tool}
-      favourite={favs.includes(tool.id)}
-      showReorderControls={showReorderControls}
-      index={index}
-      canMoveUp={index > 0}
-      canMoveDown={index < orderedTools.length - 1}
-      onOpen={() => open(tool)}
-      onRevealReorderControls={() => setShowReorderControls(true)}
-      onMoveUp={() => moveTool(tool.id, -1)}
-      onMoveDown={() => moveTool(tool.id, 1)}
-      onToggleStar={() => toggleFavourite(tool.id)}
-    />
-  );
+  const renderToolCard = (tool: Tool, _sectionIndex: number) => {
+    const orderedIndex = savedOrder.indexOf(tool.id);
+    return (
+      <ToolCard
+        key={tool.id}
+        tool={tool}
+        favourite={favs.includes(tool.id)}
+        index={orderedIndex}
+        onOpen={() => open(tool)}
+        onDragEnd={handleDragEnd}
+        onToggleStar={() => toggleFavourite(tool.id)}
+      />
+    );
+  };
 
   return (
     <Screen
@@ -718,29 +685,7 @@ export default function ToolsScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      {/* Reorder mode banner — Law #25: edit mode with a clear exit */}
-      {showReorderControls ? (
-        <Pressable
-          onPress={() => { hapticLight(); setShowReorderControls(false); }}
-          accessibilityRole="button"
-          accessibilityLabel="Done reordering tools"
-          style={[styles.doneBar, { backgroundColor: t.colors.surface, borderColor: withAlpha(t.colors.primary, 0.2) }]}
-        >
-          <Ionicons name="reorder-three" size={18} color={t.colors.primary} />
-          <Text style={[styles.doneBarText, { color: t.colors.textMuted }]}>Reordering</Text>
-          <View style={[styles.doneChip, { backgroundColor: t.colors.primary }]}>
-            <Text style={[styles.doneChipText, { color: t.colors.textOnDark }]}>Done</Text>
-          </View>
-        </Pressable>
-      ) : null}
-
-      {showReorderControls ? (
-        <View style={styles.section}>
-          <View style={styles.list}>
-            {orderedTools.map(renderToolCard)}
-          </View>
-        </View>
-      ) : favouriteTools.length > 0 ? (
+      {favouriteTools.length > 0 ? (
         <View
           style={[
             styles.section,
@@ -759,7 +704,7 @@ export default function ToolsScreen() {
         </View>
       ) : null}
 
-      {!showReorderControls && regularTools.length > 0 ? (
+      {regularTools.length > 0 ? (
         <View style={styles.section}>
           {favouriteTools.length > 0 ? (
             <SectionHeader
@@ -850,17 +795,9 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center'},
-  reorderControls: {
-    minWidth: 44,
-    minHeight: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  reorderButton: {
+  dragHandle: {
     width: 44,
-    height: 44,
-    borderRadius: 22,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -901,36 +838,6 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     letterSpacing: 1,
     textTransform: 'uppercase',
-  },
-  // Reorder mode banner — Law #25: clear edit-mode entry/exit
-  doneBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-
-    borderRadius: radii.button,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 0.5},
-  doneBarText: {
-    flex: 1,
-    fontFamily: fonts.body,
-    fontSize: typography.caption,
-    fontWeight: '600',
-  },
-  doneChip: {
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    minHeight: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  doneChipText: {
-    fontFamily: fonts.displayBold,
-    fontSize: typography.caption,
-    letterSpacing: 0.2,
   },
   name: {
     fontFamily: fonts.displayHeavy,

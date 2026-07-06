@@ -20,11 +20,19 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
 import { Href, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/native/Screen';
 import { animation as anim, radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 import { hapticLight, hapticSelection } from '../../src/utils/haptics';
+
 import {
   ActivityId,
   toggleFavourite,
@@ -265,26 +273,16 @@ function SectionHeader({
 function ActivityCard({
   activity,
   favourite,
-  showReorderControls,
   index,
-  canMoveUp,
-  canMoveDown,
   onPress,
-  onRevealReorderControls,
-  onMoveUp,
-  onMoveDown,
+  onDragEnd,
   onToggleStar,
 }: {
   activity: Activity;
   favourite: boolean;
-  showReorderControls: boolean;
   index: number;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
   onPress: () => void;
-  onRevealReorderControls: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
+  onDragEnd: (index: number, translationY: number) => void;
   onToggleStar: () => void;
 }) {
   const t = useTheme();
@@ -298,7 +296,32 @@ function ActivityCard({
   const starScale       = useRef(new Animated.Value(1)).current;
   const starGlow        = useRef(new Animated.Value(favourite ? 1 : 0)).current;
   const [particleTrigger, setParticleTrigger] = useState(0);
-  const suppressOpenAfterLongPress = useRef(false);
+
+  // Drag-to-reorder (Reanimated)
+  const translateY = useSharedValue(0);
+  const isDragging = useSharedValue(false);
+
+  const panGesture = Gesture.Pan()
+    .onBegin(() => {
+      isDragging.value = true;
+    })
+    .onUpdate((e) => {
+      translateY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      runOnJS(onDragEnd)(index, e.translationY);
+      translateY.value = withSpring(0, { damping: 22, stiffness: 300 });
+      isDragging.value = false;
+    })
+    .onFinalize(() => {
+      translateY.value = withSpring(0, { damping: 22, stiffness: 300 });
+      isDragging.value = false;
+    });
+
+  const dragAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    zIndex: isDragging.value ? 100 : 0,
+  }));
 
   // Mount entrance
   useEffect(() => {
@@ -428,44 +451,27 @@ function ActivityCard({
   const heroBackground = t.isDark ? `${activity.accent}33` : activity.heroBg;
   const cardBorderColor = withAlpha(t.colors.border, 0.75);
 
-  const revealReorderControls = () => {
-    suppressOpenAfterLongPress.current = true;
-    hapticSelection();
-    onRevealReorderControls();
-  };
-
   return (
-    <Animated.View
-      style={{
-        opacity:   mountProgress,
-        transform: [{ translateY: mountTranslateY }, { scale: pressScale }],
-        borderRadius:  radii.card,
-        shadowColor:   favourite ? t.colors.favouriteGold : t.colors.favouriteGlow,
-        shadowOffset:  { width: 0, height: favourite ? 3 : 0 },
-        shadowOpacity: favourite ? 0.10 : 0,
-        shadowRadius:  favourite ? 6 : 0,
-        elevation:     0,
-      }}
-    >
+    <Reanimated.View style={dragAnimStyle}>
+      <Animated.View
+        style={{
+          opacity:   mountProgress,
+          transform: [{ translateY: mountTranslateY }, { scale: pressScale }],
+          borderRadius:  radii.card,
+          shadowColor:   favourite ? t.colors.favouriteGold : t.colors.favouriteGlow,
+          shadowOffset:  { width: 0, height: favourite ? 3 : 0 },
+          shadowOpacity: favourite ? 0.10 : 0,
+          shadowRadius:  favourite ? 6 : 0,
+          elevation:     0,
+        }}
+      >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open ${activity.title}. ${activity.subtitle}`}
-        accessibilityHint={
-          showReorderControls
-            ? 'Use the up and down buttons to reorder this activity.'
-            : 'Press and hold to show reorder controls.'
-        }
-        onLongPress={revealReorderControls}
-        delayLongPress={260}
+        accessibilityHint="Drag the handle on the right to reorder."
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        onPress={() => {
-          if (suppressOpenAfterLongPress.current) {
-            suppressOpenAfterLongPress.current = false;
-            return;
-          }
-          onPress();
-        }}
+        onPress={() => { onPress(); }}
         style={[styles.card, { backgroundColor: t.colors.surface, borderColor: cardBorderColor }]}
       >
         {/* Hero image band */}
@@ -538,52 +544,6 @@ function ActivityCard({
           ]}
         >
           <View style={styles.cardContentRow}>
-            {showReorderControls ? (
-              <View
-                accessible
-                accessibilityRole="toolbar"
-                accessibilityLabel={`Reorder ${activity.title}`}
-                style={styles.reorderControls}
-              >
-                <Ionicons name="reorder-three" size={22} color={t.colors.textMuted} />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Move ${activity.title} up`}
-                  accessibilityState={{ disabled: !canMoveUp }}
-                  disabled={!canMoveUp}
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    hapticSelection();
-                    onMoveUp();
-                  }}
-                  style={({ pressed }) => [
-                    styles.reorderButton,
-                    { backgroundColor: t.colors.inputBg },
-                    (!canMoveUp || pressed) && { opacity: !canMoveUp ? 0.35 : 0.75 },
-                  ]}
-                >
-                  <Ionicons name="chevron-up" size={20} color={t.colors.textMuted} />
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Move ${activity.title} down`}
-                  accessibilityState={{ disabled: !canMoveDown }}
-                  disabled={!canMoveDown}
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    hapticSelection();
-                    onMoveDown();
-                  }}
-                  style={({ pressed }) => [
-                    styles.reorderButton,
-                    { backgroundColor: t.colors.inputBg },
-                    (!canMoveDown || pressed) && { opacity: !canMoveDown ? 0.35 : 0.75 },
-                  ]}
-                >
-                  <Ionicons name="chevron-down" size={20} color={t.colors.textMuted} />
-                </Pressable>
-              </View>
-            ) : null}
             <View style={styles.copy}>
               <Text style={[styles.cardName, { color: t.colors.text }]}>{activity.title}</Text>
               <Text style={[styles.cardSubtitle, { color: t.colors.textMuted }]} numberOfLines={2}>
@@ -616,10 +576,22 @@ function ActivityCard({
                 />
               </Pressable>
             </View>
+
+            {/* Drag handle — iOS-style reorder grip on the right */}
+            <GestureDetector gesture={panGesture}>
+              <View
+                style={styles.dragHandle}
+                accessibilityRole="adjustable"
+                accessibilityLabel={`Drag to reorder ${activity.title}`}
+              >
+                <Ionicons name="reorder-three" size={26} color={t.colors.textMuted} />
+              </View>
+            </GestureDetector>
           </View>
         </View>
       </Pressable>
-    </Animated.View>
+      </Animated.View>
+    </Reanimated.View>
   );
 }
 
@@ -631,8 +603,6 @@ export default function ActivitiesScreen() {
   const favs   = useFavouriteActivities();
   const savedOrder = useActivityOrder();
   const { refreshing, onRefresh } = usePullRefresh();
-  const [showReorderControls, setShowReorderControls] = useState(false);
-
   const orderedActivities = savedOrder
     .map(id => ACTIVITY_BY_ID.get(id))
     .filter((activity): activity is Activity => Boolean(activity));
@@ -644,29 +614,30 @@ export default function ActivitiesScreen() {
     router.push(activity.route);
   };
 
-  const moveActivity = useCallback((activityId: ActivityId, direction: -1 | 1) => {
-    const fromIndex = savedOrder.indexOf(activityId);
-    const toIndex = fromIndex + direction;
-    if (fromIndex < 0 || toIndex < 0 || toIndex >= savedOrder.length) return;
-    setActivityOrder(moveItem(savedOrder, fromIndex, toIndex));
+  const handleDragEnd = useCallback((fromIndex: number, translationY: number) => {
+    const CARD_TOTAL_HEIGHT = CARD_HEIGHT + CARD_GAP;
+    const delta = Math.round(translationY / CARD_TOTAL_HEIGHT);
+    const toIndex = Math.max(0, Math.min(savedOrder.length - 1, fromIndex + delta));
+    if (toIndex !== fromIndex) {
+      hapticSelection();
+      setActivityOrder(moveItem(savedOrder, fromIndex, toIndex));
+    }
   }, [savedOrder]);
 
-  const renderActivityCard = (activity: Activity, index: number) => (
-    <ActivityCard
-      key={activity.id}
-      activity={activity}
-      favourite={favs.includes(activity.id)}
-      showReorderControls={showReorderControls}
-      index={index}
-      canMoveUp={index > 0}
-      canMoveDown={index < orderedActivities.length - 1}
-      onPress={() => open(activity)}
-      onRevealReorderControls={() => setShowReorderControls(true)}
-      onMoveUp={() => moveActivity(activity.id, -1)}
-      onMoveDown={() => moveActivity(activity.id, 1)}
-      onToggleStar={() => toggleFavourite(activity.id)}
-    />
-  );
+  const renderActivityCard = (activity: Activity, _sectionIndex: number) => {
+    const orderedIndex = savedOrder.indexOf(activity.id);
+    return (
+      <ActivityCard
+        key={activity.id}
+        activity={activity}
+        favourite={favs.includes(activity.id)}
+        index={orderedIndex}
+        onPress={() => open(activity)}
+        onDragEnd={handleDragEnd}
+        onToggleStar={() => toggleFavourite(activity.id)}
+      />
+    );
+  };
 
   return (
     <Screen
@@ -678,27 +649,7 @@ export default function ActivitiesScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      {showReorderControls ? (
-        <>
-          <Pressable
-            onPress={() => { hapticLight(); setShowReorderControls(false); }}
-            accessibilityRole="button"
-            accessibilityLabel="Done reordering activities"
-            style={[styles.doneBar, { backgroundColor: t.colors.surface, borderColor: withAlpha(t.colors.primary, 0.2) }]}
-          >
-            <Ionicons name="reorder-three" size={18} color={t.colors.primary} />
-            <Text style={[styles.doneBarText, { color: t.colors.textMuted }]}>Reordering</Text>
-            <View style={[styles.doneChip, { backgroundColor: t.colors.primary }]}>
-              <Text style={[styles.doneChipText, { color: t.colors.textOnDark }]}>Done</Text>
-            </View>
-          </Pressable>
-          <View style={styles.section}>
-            <View style={styles.list}>
-              {orderedActivities.map(renderActivityCard)}
-            </View>
-          </View>
-        </>
-      ) : favouriteActivities.length > 0 ? (
+      {favouriteActivities.length > 0 ? (
         <View
           style={[
             styles.section,
@@ -717,7 +668,7 @@ export default function ActivitiesScreen() {
         </View>
       ) : null}
 
-      {!showReorderControls && regularActivities.length > 0 ? (
+      {regularActivities.length > 0 ? (
         <View style={styles.section}>
           {favouriteActivities.length > 0 ? (
             <SectionHeader
@@ -900,53 +851,11 @@ const styles = StyleSheet.create({
     height:          34,
     borderRadius:    17},
 
-  reorderControls: {
-    minWidth: 44,
-    minHeight: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-
-  reorderButton: {
+  dragHandle: {
     width: 44,
-    height: 44,
-    borderRadius: 22,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  doneBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: radii.button,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 0.5,
-  },
-
-  doneBarText: {
-    flex: 1,
-    fontFamily: fonts.body,
-    fontSize: typography.caption,
-    fontWeight: '600',
-  },
-
-  doneChip: {
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    minHeight: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  doneChipText: {
-    fontFamily: fonts.displayBold,
-    fontSize: typography.caption,
-    letterSpacing: 0.2,
   },
 
   playButton: {

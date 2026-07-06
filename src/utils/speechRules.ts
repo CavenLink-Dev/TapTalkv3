@@ -75,25 +75,73 @@ export function tokeniseClauses(text: string): Clause[] {
 }
 
 /**
+ * Returns true when `word` is present in the board vocabulary set.
+ * Comparison is case-insensitive. A known word always speaks directly —
+ * it should never be spelled out letter-by-letter regardless of the user's
+ * spelling-mode preference (emergency communication safety requirement).
+ *
+ * @param word        - The single word to test (no spaces).
+ * @param knownLabels - Pre-built Set of lowercase label strings from
+ *                      BOARD_TILES + customBoardTiles. Build this once per
+ *                      board state change (not on every utterance call).
+ */
+export function isKnownVocabWord(word: string, knownLabels: Set<string>): boolean {
+  return knownLabels.has(word.toLowerCase().trim());
+}
+
+export interface BuildMessageUtterancesOptions {
+  /**
+   * When true, single unknown words are spelled letter-by-letter before
+   * being spoken whole. Defaults to false — speak directly.
+   * Known vocab words (present in `knownVocabSet`) ALWAYS speak directly
+   * regardless of this flag.
+   */
+  spellingModeEnabled?: boolean;
+  /**
+   * Set of lowercase board vocabulary labels used to bypass the spell path
+   * for known words. Built from BOARD_TILES + customBoardTiles.
+   */
+  knownVocabSet?: Set<string>;
+}
+
+/**
  * Build the utterance chain for a full-message read.
  * `rate`/`pitch` are the user's stored voice preferences.
  */
-export function buildMessageUtterances(text: string, rate: number, pitch: number): Utterance[] {
+export function buildMessageUtterances(
+  text: string,
+  rate: number,
+  pitch: number,
+  opts?: BuildMessageUtterancesOptions,
+): Utterance[] {
   const trimmed = text.trim();
   if (!trimmed) return [];
 
-  // Single word (no spaces, no punctuation) → spell-and-speak.
-  // Spelling uses the ORIGINAL letters; the final spoken word uses the
-  // pronunciation override so a name is spelled out then said correctly.
+  // Single word (no spaces, no punctuation):
+  //   • If it is a known vocab word → speak directly (always, regardless of
+  //     spellingModeEnabled — a user tapping "HELP" must not wait for H…E…L…P).
+  //   • Otherwise, if spellingModeEnabled is explicitly true → spell-and-speak.
+  //   • Default (spellingModeEnabled falsy) → speak directly.
   if (!/[\s.,!?]/.test(trimmed)) {
-    const letters: Utterance[] = [...trimmed].map(letter => ({
-      text: letter,
-      rate: rate * 0.95,
-      pitch,
-      gapAfter: 80,
-    }));
-    letters.push({ text: applyPronunciations(trimmed), rate, pitch, gapAfter: 0 });
-    return letters;
+    const spellingOn = opts?.spellingModeEnabled === true;
+    const isKnown = opts?.knownVocabSet
+      ? isKnownVocabWord(trimmed, opts.knownVocabSet)
+      : false;
+
+    if (spellingOn && !isKnown) {
+      // Opt-in spell-and-speak: letters first, then the whole word.
+      const letters: Utterance[] = [...trimmed].map(letter => ({
+        text: letter,
+        rate: rate * 0.95,
+        pitch,
+        gapAfter: 80,
+      }));
+      letters.push({ text: applyPronunciations(trimmed), rate, pitch, gapAfter: 0 });
+      return letters;
+    }
+
+    // Direct-speak: known vocab word OR spelling mode disabled.
+    return [{ text: applyPronunciations(trimmed), rate, pitch, gapAfter: 0 }];
   }
 
   const out: Utterance[] = [];

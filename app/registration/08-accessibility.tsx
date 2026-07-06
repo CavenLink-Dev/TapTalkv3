@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Appearance,
   AccessibilityInfo,
   Pressable,
   StyleSheet,
@@ -56,6 +57,11 @@ export default function RegStep8Accessibility() {
   const a11y = data.accessibility;
 
   const [voiceOverOn, setVoiceOverOn] = useState(false);
+  // Live system dark-mode state — initialised from Appearance so the first
+  // render is already correct, then kept in sync via addChangeListener.
+  const [systemIsDark, setSystemIsDark] = useState(
+    () => Appearance.getColorScheme() === 'dark',
+  );
 
   // ── VoiceOver detection ──
   useEffect(() => {
@@ -72,6 +78,14 @@ export default function RegStep8Accessibility() {
     };
   }, []);
 
+  // ── System appearance listener ──
+  useEffect(() => {
+    const sub = Appearance.addChangeListener(({ colorScheme }) => {
+      setSystemIsDark(colorScheme === 'dark');
+    });
+    return () => sub.remove();
+  }, []);
+
   // Persist every change immediately to app-wide storage.
   useEffect(() => {
     dispatch({ type: 'SET_ACCESSIBILITY', payload: a11y });
@@ -80,7 +94,7 @@ export default function RegStep8Accessibility() {
   const textScale = TEXT_SIZES.find((s) => s.id === a11y.textSize)?.scale ?? 1;
   const buttonHeight = BUTTON_SIZES.find((b) => b.id === a11y.buttonSize)?.height ?? 56;
   const isDark =
-    a11y.theme === 'dark' || (a11y.theme === 'system' && false /* live system check would go here */);
+    a11y.theme === 'dark' || (a11y.theme === 'system' && systemIsDark);
   const preview = SCHEME_PREVIEW[a11y.colorScheme];
 
   const previewSurface = isDark ? '#1A1F26' : colors.surface;

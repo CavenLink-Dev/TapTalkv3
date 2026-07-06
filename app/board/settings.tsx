@@ -32,6 +32,7 @@ import { hapticSelection } from '../../src/utils/haptics';
 import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { useTheme } from '../../src/theme/useTheme';
 import { useAppContext } from '../../src/hooks/useAppContext';
+import { VocabularyBackupSection } from '../../src/components/settings/VocabularyBackupSection';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -398,6 +399,12 @@ export default function BoardSettingsScreen() {
             a later update.
           </Text>
         </DisclosureSection>
+
+        {/* ── Vocabulary Backup ── */}
+        <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>BACKUP & RESTORE</Text>
+        <View style={[styles.card, { backgroundColor: t.colors.surface, paddingHorizontal: spacing.lg }]}>
+          <VocabularyBackupSection />
+        </View>
 
         {/* ── Board Health ── */}
         <Text style={[styles.eyebrow, { color: t.colors.textMuted }]}>DIAGNOSTICS</Text>

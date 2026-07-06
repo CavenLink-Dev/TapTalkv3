@@ -11,6 +11,12 @@ import { useSession } from '../src/hooks/useSession';
 import { useTapTalkFonts } from '../src/theme/fonts';
 import { useTheme } from '../src/theme/useTheme';
 import { colorsLight, typography } from '../src/theme/tokens';
+import {
+  ScanningProvider,
+  SwitchInputCapture,
+  useScanning,
+  useSwitchInput,
+} from '../src/features/scanning';
 
 const DefaultText = Text as typeof Text & { defaultProps?: { style?: unknown } };
 const DefaultTextInput = TextInput as typeof TextInput & { defaultProps?: { style?: unknown } };
@@ -45,8 +51,23 @@ function ThemeShell() {
     <>
       <Stack screenOptions={{ headerShown: false }} />
       <StatusBar style={t.isDark ? 'light' : 'dark'} />
+      {/* Invisible key capture + switch-input listener. Only render the
+          listener bridge when scanning is on — but the components
+          themselves gate internally so this stays cheap either way. */}
+      <SwitchInputCapture />
+      <SwitchInputBridge />
     </>
   );
+}
+
+/**
+ * A wrapper that hooks up the switch-input event stream to the current
+ * ScanningController. Lives inside the provider so it can call `useScanning`.
+ */
+function SwitchInputBridge(): null {
+  const controller = useScanning();
+  useSwitchInput(controller);
+  return null;
 }
 
 export default function RootLayout() {
@@ -64,7 +85,12 @@ export default function RootLayout() {
       <ErrorBoundary>
         <SafeAreaProvider>
           <AppProvider>
-            <ThemeShell />
+            {/* ScanningProvider must live INSIDE AppProvider — it reads
+                accessibility flags via useAppSelector. It sits OUTSIDE the
+                Stack so scan state survives navigation transitions. */}
+            <ScanningProvider>
+              <ThemeShell />
+            </ScanningProvider>
           </AppProvider>
         </SafeAreaProvider>
       </ErrorBoundary>

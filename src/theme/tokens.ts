@@ -298,14 +298,14 @@ export const boardSizes = {
   topNavItemHeight: 52,
   /** Top navigation icon size (proportional to the 52pt tab). */
   topNavIcon: 26,
-  /** Bottom control bar item edge (50–56 range; was 68). */
-  controlBarItem: 56,
-  /** Bottom control bar action icon (proportional to the 56pt item). */
-  controlBarIcon: 20,
-  /** Bottom control bar collapse/expand toggle glyph (was 39 — calmer now). */
-  controlBarToggleIcon: 28,
-  /** Bottom control bar label size (proportional to the 56pt item). */
-  controlBarLabel: 12,
+  /** Bottom control bar item edge (64pt — larger for easy access). */
+  controlBarItem: 64,
+  /** Bottom control bar action icon — unified size for all icons. */
+  controlBarIcon: 22,
+  /** Bottom control bar collapse/expand toggle glyph — same as action icon. */
+  controlBarToggleIcon: 22,
+  /** Bottom control bar label size (proportional to the 64pt item). */
+  controlBarLabel: 13,
   /** Sub-option rows stacked above a control bar item. */
   subOptionMinHeight: 50,
   /** Board tile floor — tiles never render smaller than this. */

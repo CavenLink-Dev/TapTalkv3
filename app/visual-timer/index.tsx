@@ -47,6 +47,7 @@ import { useReduceMotion } from '../../src/hooks/useReduceMotion';
 import { radii, spacing, typography } from '../../src/theme/tokens';
 import { fonts } from '../../src/theme/fonts';
 import { hapticSelection, hapticSuccess } from '../../src/utils/haptics';
+import { playSound, type SoundKey } from '../../src/utils/sounds';
 import { useTheme } from '../../src/theme/useTheme';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -74,13 +75,22 @@ interface SoundOption {
   label: string;
 }
 
+// Only 'none' and 'haptic' are fully functional today.  The named audio
+// variants ('soft-chime', 'bell', 'beep', 'tin') will be enabled when
+// dedicated timer-sound assets ship; until then they are hidden from the UI.
 const SOUND_OPTIONS: SoundOption[] = [
-  { id: 'soft-chime', label: 'Soft chime' },
-  { id: 'bell',       label: 'Bell' },
-  { id: 'beep',       label: 'Beep' },
-  { id: 'tin',        label: 'Tin' },
-  { id: 'none',       label: 'None' },
+  { id: 'haptic', label: 'Haptic' },
+  { id: 'none',   label: 'None' },
 ];
+
+// Maps a sound-option id to the nearest existing bundled asset key.
+// 'haptic' has no audio key — it falls through to the haptic-only branch.
+const SOUND_ASSET_MAP: Partial<Record<string, SoundKey>> = {
+  'soft-chime': 'confirm_selection',
+  bell:         'level_complete',
+  beep:         'correct',
+  tin:          'denied',
+};
 
 const PRESET_DURATIONS: { label: string; total: Duration }[] = [
   { label: '1 min',  total: { h: 0, m: 1,  s: 0 } },
@@ -116,14 +126,20 @@ function describeDelay(d: DelayDuration): string {
   return parts.join(' ');
 }
 
-// ─── Sound stub ─────────────────────────────────────────────────────────────
-// Real audio assets will be wired in a follow-up; for now the chime is a
-// short haptic burst so the rest of the timer behaviour can be tested.
+// ─── Sound player ───────────────────────────────────────────────────────────
+// Plays the timer chime using a bundled audio asset when one is mapped,
+// and always fires a haptic pulse so blind users get tactile end-of-timer
+// feedback even when the device is silent.  'none' skips both.
 function playChime(sound: string): void {
   if (sound === 'none') return;
-  // eslint-disable-next-line no-console
-  console.log(`[VisualTimer] chime → ${sound}`);
+  // Haptic fires for every non-none option — this is the auditory-independent
+  // fallback required by WCAG 1.4.2 / iOS accessibility guidelines.
   hapticSuccess();
+  const assetKey = SOUND_ASSET_MAP[sound];
+  if (assetKey) {
+    // fire-and-forget; playSound never throws (errors caught internally)
+    playSound(assetKey, true);
+  }
 }
 
 // ─── Modern digital face ────────────────────────────────────────────────────
@@ -365,11 +381,11 @@ export default function VisualTimerScreen() {
   const [duration, setDuration] = useState<Duration>({ h: 0, m: 0, s: 0 });
   const [delay, setDelay] = useState<DelayDuration>({ m: 0, s: 0 });
   const [chimeEveryMin, setChimeEveryMin] = useState<number>(0); // 0 = off
-  const [chimeSound, setChimeSound] = useState<string>('soft-chime');
+  const [chimeSound, setChimeSound] = useState<string>('haptic');
   const [soundAtStart, setSoundAtStart] = useState<boolean>(false);
-  const [startSound, setStartSound] = useState<string>('bell');
+  const [startSound, setStartSound] = useState<string>('haptic');
   const [soundAtEnd, setSoundAtEnd] = useState<boolean>(false);
-  const [endSound, setEndSound] = useState<string>('bell');
+  const [endSound, setEndSound] = useState<string>('haptic');
   const [locked, setLocked] = useState<boolean>(false);
   const [face, setFace] = useState<Face>('modern');
 
