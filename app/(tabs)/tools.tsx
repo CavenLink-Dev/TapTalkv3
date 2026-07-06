@@ -21,8 +21,11 @@ import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
+  useDerivedValue,
   withSpring,
+  withTiming,
   runOnJS,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { Href, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/native/Screen';
@@ -91,6 +94,28 @@ const TOOLS: Tool[] = [
 const TOOL_BY_ID = new Map<ToolId, Tool>(TOOLS.map(t => [t.id, t]));
 const CARD_GAP = spacing.xxl;
 const CARD_HEIGHT = 188;
+const CARD_TOTAL_HEIGHT = CARD_HEIGHT + CARD_GAP;
+
+// Phase 4 — Tools Reorder Interaction Refinement.
+// Two-tier spring physics for the drag-to-reorder gesture:
+//   • NEIGHBOUR_SPRING — controls how surrounding cards slide out of the
+//     way as the dragged card crosses into their slot. Moderate damping,
+//     no overshoot, gentle stiffness so displacement reads as a settle,
+//     not a snap.
+//   • RELEASE_SPRING   — controls the dragged card's own settle after the
+//     user lifts their finger. Heavily damped with `overshootClamping` so
+//     the card lands on its final row with zero visible bounce.
+const NEIGHBOUR_SPRING = { damping: 30, stiffness: 260, mass: 1 };
+const RELEASE_SPRING = {
+  damping: 34,
+  stiffness: 380,
+  mass: 0.9,
+  overshootClamping: true,
+};
+// Reduce Motion budget — the release still needs *some* duration so the
+// dragged card doesn't jump under the user's finger, but well below the
+// spring's perceptual settle time.
+const RM_RELEASE_MS = 120;
 
 // Six evenly-spaced angles for the star burst particles.
 const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300] as const;
@@ -220,46 +245,139 @@ function ToolCard({
   tool,
   favourite,
   index,
+  totalCount,
+  activeDragIndex,
+  activeDragTranslateY,
   onOpen,
-  onDragEnd,
+  onDragCommit,
   onToggleStar,
 }: {
   tool: Tool;
   favourite: boolean;
   index: number;
+  /** Length of the list — clamps the target index in commit. */
+  totalCount: number;
+  /** Shared with every card — which one is currently being dragged (-1 = none). */
+  activeDragIndex: SharedValue<number>;
+  /** Shared with every card — the dragged card's live translationY. */
+  activeDragTranslateY: SharedValue<number>;
   onOpen: () => void;
-  onDragEnd: (index: number, translationY: number) => void;
+  /** Fires once, after the release spring settles, with the resolved target index. */
+  onDragCommit: (fromIndex: number, toIndex: number) => void;
   onToggleStar: () => void;
 }) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
   const reduceSensory = useReduceSensoryLoad();
 
-  // Drag-to-reorder (Reanimated)
-  const translateY = useSharedValue(0);
-  const isDragging = useSharedValue(false);
-
+  // ── Drag-to-reorder (Phase 4 — Reorder Interaction Refinement) ───────
+  // The dragged card's translationY lives on shared values owned by the
+  // parent (`activeDragIndex`, `activeDragTranslateY`) so every sibling
+  // card can react in real time. Non-active cards derive their own
+  // displacement — the neighbours immediately step aside as the finger
+  // crosses their slot instead of waiting for release. Release settles
+  // the dragged card into its final row with a tight, damped spring
+  // (no visible bounce) before committing the reorder in one JS hop.
   const panGesture = Gesture.Pan()
+    .activateAfterLongPress(0)
     .onBegin(() => {
-      isDragging.value = true;
+      activeDragIndex.value = index;
+      activeDragTranslateY.value = 0;
     })
     .onUpdate((e) => {
-      translateY.value = e.translationY;
+      activeDragTranslateY.value = e.translationY;
     })
     .onEnd((e) => {
-      runOnJS(onDragEnd)(index, e.translationY);
-      translateY.value = withSpring(0, { damping: 22, stiffness: 300 });
-      isDragging.value = false;
+      // Snap to the nearest whole-row offset before committing so the
+      // user sees the card land exactly where it will end up.
+      const steps = Math.round(e.translationY / CARD_TOTAL_HEIGHT);
+      const clampedSteps = Math.max(-index, Math.min(totalCount - 1 - index, steps));
+      const targetY = clampedSteps * CARD_TOTAL_HEIGHT;
+
+      if (reduceMotion) {
+        // Minimal animation — a short linear settle. Skipping the spring
+        // entirely can read as a jump if the finger is mid-way between rows.
+        activeDragTranslateY.value = withTiming(
+          targetY,
+          { duration: RM_RELEASE_MS },
+          (finished) => {
+            if (finished) runOnJS(onDragCommit)(index, index + clampedSteps);
+          },
+        );
+      } else {
+        activeDragTranslateY.value = withSpring(
+          targetY,
+          RELEASE_SPRING,
+          (finished) => {
+            if (finished) runOnJS(onDragCommit)(index, index + clampedSteps);
+          },
+        );
+      }
     })
-    .onFinalize(() => {
-      translateY.value = withSpring(0, { damping: 22, stiffness: 300 });
-      isDragging.value = false;
+    .onFinalize((_, success) => {
+      // Interrupted gesture (e.g., another gesture won) — spring straight
+      // back to 0 and drop the active-drag lock without committing.
+      if (!success) {
+        if (reduceMotion) {
+          activeDragTranslateY.value = 0;
+          activeDragIndex.value = -1;
+        } else {
+          activeDragTranslateY.value = withSpring(0, RELEASE_SPRING, (finished) => {
+            if (finished) {
+              activeDragIndex.value = -1;
+            }
+          });
+        }
+      }
     });
 
-  const dragAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-    zIndex: isDragging.value ? 100 : 0,
-  }));
+  // Per-card displacement derived from the shared drag state.
+  //   • If this card IS being dragged → follow the finger 1:1.
+  //   • If a sibling is being dragged and this card sits between the
+  //     dragged card's original slot and the current hover slot → shift
+  //     one full row in the opposite direction so the drop target reads
+  //     as an obvious gap.
+  //   • Otherwise → 0.
+  const displaceY = useDerivedValue(() => {
+    const dragged = activeDragIndex.value;
+    if (dragged === -1) return 0;
+    if (dragged === index) return activeDragTranslateY.value;
+    const steps = Math.round(activeDragTranslateY.value / CARD_TOTAL_HEIGHT);
+    const hoverIndex = dragged + steps;
+    if (steps > 0 && index > dragged && index <= hoverIndex) return -CARD_TOTAL_HEIGHT;
+    if (steps < 0 && index < dragged && index >= hoverIndex) return CARD_TOTAL_HEIGHT;
+    return 0;
+  }, [index]);
+
+  const dragAnimStyle = useAnimatedStyle(() => {
+    const dragged = activeDragIndex.value;
+    const isActive = dragged === index;
+    // Three branches, in priority order:
+    //   • Active card — follow the finger directly (no spring).
+    //   • No active drag (post-commit) — snap displacement to 0 INSTANTLY.
+    //     If we let a spring interpolate here, a card that was re-indexed
+    //     one row up in the same JS hop would appear to fly past its
+    //     final position while the phantom spring drains — a visible
+    //     jump. Instant reset means the render-frame that re-indexes the
+    //     card cancels its old translateY perfectly.
+    //   • Non-active mid-drag — spring to the step-quantised displacement
+    //     so neighbours read as a controlled settle, not a snap. Under
+    //     Reduce Motion the displacement is instant.
+    let translateY;
+    if (isActive) {
+      translateY = displaceY.value;
+    } else if (dragged === -1 || reduceMotion) {
+      translateY = displaceY.value;
+    } else {
+      translateY = withSpring(displaceY.value, NEIGHBOUR_SPRING);
+    }
+    return {
+      transform: [{ translateY }],
+      // Keep the dragged card elevated over its neighbours until the
+      // parent commits and releases the active-drag lock.
+      zIndex: isActive ? 100 : 0,
+    };
+  });
 
   // Staggered entrance
   const mountProgress = useRef(new Animated.Value(0)).current;
@@ -650,15 +768,28 @@ export default function ToolsScreen() {
     router.push(tool.route);
   };
 
-  const handleDragEnd = useCallback((fromIndex: number, translationY: number) => {
-    const CARD_TOTAL_HEIGHT = CARD_HEIGHT + CARD_GAP;
-    const delta = Math.round(translationY / CARD_TOTAL_HEIGHT);
-    const toIndex = Math.max(0, Math.min(savedOrder.length - 1, fromIndex + delta));
-    if (toIndex !== fromIndex) {
+  // Phase 4 — shared drag state owned by the screen so every ToolCard
+  // reacts to the same active-drag stream and neighbouring cards can
+  // step aside in real time.
+  const activeDragIndex = useSharedValue(-1);
+  const activeDragTranslateY = useSharedValue(0);
+
+  // Commit fires from the release spring's completion callback, so the
+  // reorder happens exactly once per gesture — after the settle animation
+  // finishes, not on `onEnd`. Resetting the shared values in the same JS
+  // hop as `setToolOrder` prevents a visible snap: the card was rendered
+  // at `fromIndex` with translateY = targetY (i.e. sitting at the
+  // toIndex row); the render commit relocates it to `toIndex` and clears
+  // translateY, so the two paint frames line up pixel-for-pixel.
+  const commitReorder = useCallback((fromIndex: number, toIndex: number) => {
+    const clampedTo = Math.max(0, Math.min(savedOrder.length - 1, toIndex));
+    if (clampedTo !== fromIndex) {
       hapticSelection();
-      setToolOrder(moveItem(savedOrder, fromIndex, toIndex));
+      setToolOrder(moveItem(savedOrder, fromIndex, clampedTo));
     }
-  }, [savedOrder]);
+    activeDragIndex.value = -1;
+    activeDragTranslateY.value = 0;
+  }, [activeDragIndex, activeDragTranslateY, savedOrder]);
 
   const renderToolCard = (tool: Tool, _sectionIndex: number) => {
     const orderedIndex = savedOrder.indexOf(tool.id);
@@ -668,8 +799,11 @@ export default function ToolsScreen() {
         tool={tool}
         favourite={favs.includes(tool.id)}
         index={orderedIndex}
+        totalCount={savedOrder.length}
+        activeDragIndex={activeDragIndex}
+        activeDragTranslateY={activeDragTranslateY}
         onOpen={() => open(tool)}
-        onDragEnd={handleDragEnd}
+        onDragCommit={commitReorder}
         onToggleStar={() => toggleFavourite(tool.id)}
       />
     );

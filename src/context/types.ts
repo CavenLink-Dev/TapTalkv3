@@ -186,7 +186,14 @@ export interface AppState {
   tileLastTappedAt: Record<string, string>;
   showUsageHeatmap: boolean;
 
-  // Talk — N-gram next-word prediction model
+  /**
+   * Talk — N-gram next-word prediction model.
+   *
+   * @deprecated Phase 3 removed the suggestion chip row that consumed
+   * this field. Kept in the schema so persisted user data hydrates
+   * without a migration; new writes no longer happen (see the removed
+   * `UPDATE_NGRAM_MODEL` dispatches in Talk).
+   */
   ngramModel: Record<string, Record<string, number>>;
 
   // Speech — user pronunciation overrides ("say it like this")
@@ -373,6 +380,7 @@ export type Action =
   | { type: 'PUSH_SENTENCE_HISTORY'; payload: { words: AACWord[] } }
   | { type: 'INCREMENT_TILE_TAP'; payload: { tileId: string } }
   | { type: 'SET_SHOW_USAGE_HEATMAP'; payload: boolean }
+  /** @deprecated Phase 3 — the suggestion row was removed. Reducer case is still handled for older builds, but no code path dispatches this action any more. */
   | { type: 'UPDATE_NGRAM_MODEL'; payload: { words: string[] } }
   | { type: 'ADD_PRONUNCIATION'; payload: PronunciationRule }
   | { type: 'DELETE_PRONUNCIATION'; payload: string }

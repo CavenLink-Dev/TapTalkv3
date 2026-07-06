@@ -28,7 +28,7 @@ import { MulberrySymbol } from '../symbols/MulberrySymbol';
 import { searchSymbols, resolveSymbolById } from '../../features/symbol-brain/symbolSearchService';
 import { SearchResult } from '../../features/symbol-brain/types';
 import { SymbolPackBrowser } from './SymbolPackBrowser';
-import { SymbolPackSymbol } from '../../data/symbolPacks';
+import { SymbolPackFolder, SymbolPackSymbol } from '../../data/symbolPacks';
 import { ThemedText } from '../native/ThemedText';
 import { ColorPickerSheet } from '../native/ColorPickerSheet';
 import { Icon } from '../native/Icon';
@@ -50,6 +50,13 @@ interface Props {
   onDismiss: () => void;
   onAdd: (result: AddSymbolResult) => void;
   onCreateCustom?: () => void;
+  /**
+   * Bulk-import hook (Phase 1). When provided, the Symbol Pack browser
+   * surfaces "Import folder" affordances. The host is responsible for
+   * spinning up boards, folder tiles, and symbol tiles from the tree.
+   * The single-symbol tap path (`onAdd`) remains untouched.
+   */
+  onAddPack?: (folder: SymbolPackFolder) => void;
 }
 
 // ── Fitzgerald word-type → colour mapping (Rule 9 — picker sets both) ──
@@ -81,7 +88,7 @@ function wordTypeFor(partOfSpeech: string | undefined): WordTypeOption {
   return match ?? WORD_TYPES[2]!; // default: Thing / noun
 }
 
-export function AddSymbolModal({ visible, onDismiss, onAdd, onCreateCustom }: Props) {
+export function AddSymbolModal({ visible, onDismiss, onAdd, onCreateCustom, onAddPack }: Props) {
   const t = useTheme();
   const reduceMotion = useReduceMotion();
   const [step, setStep] = useState<'find' | 'customise'>('find');
@@ -207,6 +214,15 @@ export function AddSymbolModal({ visible, onDismiss, onAdd, onCreateCustom }: Pr
       setLoading(false);
     }
   }, [goToCustomise]);
+
+  // Bulk import — hand the tree to the host and dismiss so the user lands
+  // back on the board with the new folder in place.
+  const handleImportPack = useCallback((folder: SymbolPackFolder) => {
+    if (!onAddPack) return;
+    hapticSelection();
+    onAddPack(folder);
+    onDismiss();
+  }, [onAddPack, onDismiss]);
 
   const handleRecentTap = useCallback(async (recent: RecentSymbol) => {
     hapticSelection();
@@ -415,6 +431,7 @@ export function AddSymbolModal({ visible, onDismiss, onAdd, onCreateCustom }: Pr
             onFolderPathChange={setPackFolderPath}
             onSelectSymbol={handlePackSymbolSelect}
             reduceMotion={reduceMotion}
+            onImportFolder={onAddPack ? handleImportPack : undefined}
           />
         </ScrollView>
       )}

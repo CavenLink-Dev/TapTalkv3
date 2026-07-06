@@ -75,13 +75,15 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  // Bulky tab bar — substantially taller to give the big icons plenty of
-  // room and to make the tap zone very generous for motor-impaired users.
-  // paddingBottom is above the automatic home-indicator safe-area inset.
+  // Compact tab bar — reduced from 100 → 80pt to hand back board space
+  // for the Talk grid while keeping icons vertically centred and touch
+  // targets ≥ 44pt (Phase 1 Quick Win). paddingBottom sits above the
+  // automatic home-indicator safe-area inset so this still reads clear
+  // of the indicator on iPhones with a home bar.
   tabBar: {
-    height: 100,
-    paddingTop: 12,
-    paddingBottom: 28,
+    height: 80,
+    paddingTop: 6,
+    paddingBottom: 14,
     borderTopWidth: CHROME_SEPARATOR_WIDTH,
   },
   tabBarItem: {

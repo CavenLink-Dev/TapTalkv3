@@ -18,6 +18,7 @@
  */
 
 import * as Haptics from 'expo-haptics';
+import { shouldFireHaptic } from '../features/accessibility/sensory';
 
 export type HapticStrength = 'gentle' | 'standard' | 'strong';
 
@@ -51,7 +52,7 @@ function impactFor(base: Haptics.ImpactFeedbackStyle): Haptics.ImpactFeedbackSty
 }
 
 export function hapticSelection(): Promise<void> {
-  if (!hapticsEnabled) return noop;
+  if (!hapticsEnabled || !shouldFireHaptic('selection')) return noop;
   if (hapticStrength === 'strong') {
     return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined) as Promise<void>;
   }
@@ -59,26 +60,26 @@ export function hapticSelection(): Promise<void> {
 }
 
 export function hapticLight(): Promise<void> {
-  if (!hapticsEnabled) return noop;
+  if (!hapticsEnabled || !shouldFireHaptic('impact')) return noop;
   return Haptics.impactAsync(impactFor(Haptics.ImpactFeedbackStyle.Light)).catch(() => undefined) as Promise<void>;
 }
 
 export function hapticMedium(): Promise<void> {
-  if (!hapticsEnabled) return noop;
+  if (!hapticsEnabled || !shouldFireHaptic('impact')) return noop;
   return Haptics.impactAsync(impactFor(Haptics.ImpactFeedbackStyle.Medium)).catch(() => undefined) as Promise<void>;
 }
 
 export function hapticSuccess(): Promise<void> {
-  if (!hapticsEnabled) return noop;
+  if (!hapticsEnabled || !shouldFireHaptic('notification')) return noop;
   return Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined) as Promise<void>;
 }
 
 export function hapticWarning(): Promise<void> {
-  if (!hapticsEnabled) return noop;
+  if (!hapticsEnabled || !shouldFireHaptic('notification')) return noop;
   return Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined) as Promise<void>;
 }
 
 export function hapticError(): Promise<void> {
-  if (!hapticsEnabled) return noop;
+  if (!hapticsEnabled || !shouldFireHaptic('notification')) return noop;
   return Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined) as Promise<void>;
 }

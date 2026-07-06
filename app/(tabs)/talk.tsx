@@ -64,7 +64,30 @@ import {
   ResolvedSymbol,
 } from '../../src/features/symbol-brain/resolveSymbolForKeyword';
 import { setTabBarHidden } from '../../src/features/board/chromeVisibility';
-import { predictSuggestions } from '../../src/utils/ngram';
+// N-gram next-word suggestions were removed in Phase 3 — the suggestion
+// chip row is no longer rendered and no dispatches update the model.
+// The underlying schema (`state.ngramModel`) is kept @deprecated so
+// persisted user data still hydrates without a migration.
+import { SymbolPackFolder, SymbolPackNode } from '../../src/data/symbolPacks';
+
+// ─── TODO: Board Chrome Overcrowding (Phase 4) ─────────────────────────────
+// Documented, NOT yet redesigned. The Talk screen currently competes with the
+// four-column board across six overlapping chrome surfaces:
+//   1. TalkMessageStrip (top) — sentence buffer + speech controls
+//   2. Backspace / clear controls anchored to the strip
+//   3. TopNav (toggled) — EDIT / LAYOUT / SAVED / SETTINGS
+//   4. Bottom tab bar (see `_layout.tsx`, Phase 1 reduced to 80pt)
+//   5. Contextual dock — one row per DockMode (see `dockRenderers`)
+//   6. DockSubControls — square sub-buttons above dock anchors (Phase 2)
+// Combined, these five stacked layers can consume 240–300pt of the viewport
+// on a 393×852 iPhone, leaving under 55% of the screen for the tile grid
+// itself. Phase 3 clawed back some of that (tab bar 100→80pt, tile gap 8→4pt,
+// n-gram row removed, tile hierarchy tightened), but the chrome is still
+// heavier than an ideal AAC board should feel. Future work — merge redundant
+// affordances (e.g. fold Hide + Collapse into a single peek pill), consider
+// gesture-driven chrome hiding on scroll, and reconsider whether TopNav is
+// worth its permanent vertical cost when three of its actions overlap the
+// dock. Do NOT redesign inline — capture as a follow-up ticket.
 
 type TileKind = 'folder' | 'word' | 'action';
 // `places` was previously (incorrectly) named `animals` while holding
@@ -168,11 +191,15 @@ const BOARD_COLUMNS = 4;
 // Target number of tile rows visible in the board viewport. Tiles are sized so
 // roughly this many rows fit vertically (big, readable symbols/folders).
 const VISIBLE_ROWS = 4;
-// 8pt uniform gap between columns and rows — outer spacing, not inner.
+// 4pt uniform gap between columns and rows (Phase 3 — Board Density Pass,
+// 50% reduction from the previous 8pt) — outer spacing, not inner. The
+// side padding is capped at 8pt per spec; we sit at 4pt today so tiles
+// grow by ~3pt each side without breaking the 4-column layout or the
+// ≥44pt touch target floor (tiles are still ≥ boardSizes.tileMin).
 const TILE_CORNER_RADIUS = 5;
-const TILE_GAP = 8;
-const TILE_V_GAP = 8;
-// 4pt side gutter, added on top of the safe-area inset. 4 columns on a 393pt iPhone.
+const TILE_GAP = 4;
+const TILE_V_GAP = 4;
+// 4pt side gutter (≤ 8pt cap), added on top of the safe-area inset.
 const TILE_LEFT_PADDING = 4;
 const BOARD_TOP_GAP = 32;
 // Absolute max tile edge (pt). Actual size is the lesser of this, what fits the
@@ -317,6 +344,26 @@ const SYMBOL_YELLOW = '#FFD60A';
 const SYMBOL_GREEN  = '#34C759';
 const SYMBOL_BLUE   = '#0A84FF';
 const SYMBOL_PURPLE = '#BF5AF2';
+
+// Fitzgerald word-type → tile colour. Mirrors the palette in AddSymbolModal
+// so a bulk pack import lands with the same colours as a single Add Symbol
+// tap (Rule 23 — colour is never the only signal, but it must stay
+// consistent across entry points). Unknown wordTypes fall back to noun.
+const WORD_TYPE_COLOR: Record<string, string> = {
+  person:       SYMBOL_YELLOW,
+  verb:         SYMBOL_GREEN,
+  noun:         SYMBOL_ORANGE,
+  emotion:      SYMBOL_RED,
+  adjective:    SYMBOL_BLUE,
+  social:       SYMBOL_PURPLE,
+  interjection: SYMBOL_PURPLE,
+  question:     SYMBOL_PURPLE,
+  adverb:       SYMBOL_BLUE,
+  number:       SYMBOL_ORANGE,
+  letter:       SYMBOL_ORANGE,
+};
+const wordTypeColour = (wt?: string): string =>
+  (wt && WORD_TYPE_COLOR[wt]) || WORD_TYPE_COLOR.noun!;
 
 // Mulberry symbols selected to match the existing tile labels. Asset-map
 // IDs (production-quality bundled SVGs) are preferred; curated `name`
@@ -893,6 +940,115 @@ function DockPopover({
 // QuickTagBadge has been removed. Quick tags are no longer visually badged
 // on tiles; the Quick/Manage flow remains but without the persistent badge.
 
+// ── DockSubControls ──────────────────────────────────────────────────────
+// Reusable "above-button" sub-option layer for the bottom control bar.
+// Renders one or more square sub-controls stacked vertically directly above
+// a specific dock button (anchor rect in dock-row coord space). Any dock
+// control can adopt this to expose contextual actions without adding
+// another row — Phase 2 uses it for Quick → Manage; future callers (Add,
+// Sort, Hide) can pass their own control list without touching the layer
+// itself. Springs in from below with a subtle settle; instant under
+// Reduce Motion. Sub-controls inherit the same touch target size as
+// BoardDockAction so hit zones stay ≥ 44pt.
+type DockSubControlSpec = {
+  key: string;
+  icon: string;
+  label: string;
+  a11yLabel: string;
+  a11yHint?: string;
+  onPress: () => void;
+  kind?: DockActionKind;
+  tint?: string;
+  disabled?: boolean;
+};
+
+function DockSubControls({
+  visible,
+  anchorX,
+  anchorWidth,
+  controls,
+  a11yLabel,
+}: {
+  visible: boolean;
+  anchorX: number;
+  anchorWidth: number;
+  controls: DockSubControlSpec[];
+  a11yLabel: string;
+}) {
+  const reduceMotion = useReduceMotion();
+  const { width: screenW } = useWindowDimensions();
+  const anim = useRef(new RNAnimated.Value(0)).current;
+  const [mounted, setMounted] = useState(visible);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      if (reduceMotion) { anim.setValue(1); return; }
+      anim.setValue(0);
+      RNAnimated.spring(anim, {
+        toValue: 1,
+        friction: 8,
+        tension: 110,
+        useNativeDriver: true,
+      }).start();
+    } else if (reduceMotion) {
+      anim.setValue(0);
+      setMounted(false);
+    } else {
+      RNAnimated.timing(anim, {
+        toValue: 0,
+        duration: 130,
+        useNativeDriver: true,
+      }).start(({ finished }) => { if (finished) setMounted(false); });
+    }
+  }, [anim, reduceMotion, visible]);
+
+  if (!mounted || controls.length === 0) return null;
+
+  // Match the anchor button's width so the sub-controls read as a stack
+  // sitting directly above their parent. Floor at DOCK_ACTION_SIZE so a
+  // narrow anchor doesn't crush the sub-control below its touch target.
+  const width = Math.max(anchorWidth, DOCK_ACTION_SIZE);
+  const left = Math.min(
+    Math.max(anchorX + anchorWidth / 2 - width / 2, spacing.sm),
+    screenW - width - spacing.sm,
+  );
+
+  return (
+    <RNAnimated.View
+      accessibilityRole="menu"
+      accessibilityLabel={a11yLabel}
+      pointerEvents="box-none"
+      style={[
+        styles.dockSubControls,
+        {
+          left,
+          width,
+          opacity: anim,
+          transform: [{
+            translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }),
+          }],
+        },
+      ]}
+    >
+      {controls.map(c => (
+        <View key={c.key} style={styles.dockSubControlSlot}>
+          <BoardDockAction
+            icon={c.icon}
+            label={c.label}
+            a11yLabel={c.a11yLabel}
+            a11yHint={c.a11yHint}
+            onPress={c.onPress}
+            kind={c.kind ?? 'neutral'}
+            tint={c.tint}
+            disabled={c.disabled}
+          />
+        </View>
+      ))}
+    </RNAnimated.View>
+  );
+}
+
 // ── DockPeekPill ─────────────────────────────────────────────────────────
 // Persistent "way back" while the control bar is hidden. A soft blob pill
 // hugging the left edge, vertically centred where the dock used to sit,
@@ -998,7 +1154,12 @@ function TileSymbol({ tile, width, height, resolved, horizontal }: {
       </View>
     );
   }
-  const size = Math.round(Math.min(width * 0.85, height * 0.72));
+  // Phase 3 — Tile Symbol/Text Hierarchy: symbols dominate the tile; the
+  // label sits in a small band at the bottom. Ratios bumped from
+  // (0.85, 0.72) to (0.90, 0.70) — a hair narrower vertically to leave
+  // clean space for the smaller bottom label, wider horizontally so
+  // narrow tiles still read as symbol-first.
+  const size = Math.round(Math.min(width * 0.90, height * 0.70));
   return (
     <View style={styles.symbolMount} pointerEvents="none">
       <MulberrySymbol symbolId={symbolId} name={symbolName} size={size} />
@@ -1008,7 +1169,11 @@ function TileSymbol({ tile, width, height, resolved, horizontal }: {
 
 function BoardFolderTile({ tile, width, height, resolved }: { tile: BoardTile; width: number; height: number; resolved?: ResolvedSymbol }) {
   const t = useTheme();
-  const edgeColor = t.isDark ? t.colors.border : t.colors.primary;
+  // Phase 3 — Folder Outline Pass: make the outline barely visible so the
+  // board grid reads as a field of symbols first, folders second. Uses the
+  // theme's `border` (never `primary`) so the outline sits in the same
+  // muted family as other chrome dividers regardless of light/dark mode.
+  const edgeColor = t.colors.border;
   // When the tile is much wider than tall (aspect > 1.5), use a
   // horizontal layout: symbol on the left, label on the right. This
   // keeps the symbol readable on landscape resized tiles instead of
@@ -2773,80 +2938,10 @@ const TopNav = React.memo(function TopNav({
   );
 });
 
-// ── Ngram suggestion chips ────────────────────────────────────────────────
-// Horizontal scrollable row of next-word prediction chips. Tapping a chip
-// calls onSelect with the suggested word so the parent can appendWord/speak.
-const NgramSuggestionRow = React.memo(function NgramSuggestionRow({
-  suggestions,
-  onSelect,
-}: {
-  suggestions: { word: string; score: number }[];
-  onSelect: (word: string) => void;
-}) {
-  const t = useTheme();
-  if (suggestions.length === 0) return null;
-  return (
-    <View
-      style={ngramStyles.row}
-      accessibilityRole="menu"
-      accessibilityLabel="Word suggestions"
-    >
-      <FlatList
-        data={suggestions}
-        horizontal
-        keyExtractor={item => item.word}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={ngramStyles.listContent}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => onSelect(item.word)}
-            style={({ pressed }) => [
-              ngramStyles.chip,
-              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
-              pressed && { opacity: 0.7 },
-            ]}
-            accessibilityRole="menuitem"
-            accessibilityLabel={item.word}
-            accessibilityHint="Double-tap to add this word"
-          >
-            <Text
-              style={[ngramStyles.chipText, { color: t.colors.text }]}
-              allowFontScaling
-              numberOfLines={1}
-            >
-              {item.word}
-            </Text>
-          </Pressable>
-        )}
-      />
-    </View>
-  );
-});
-
-const ngramStyles = StyleSheet.create({
-  row: {
-    height: 44,
-    justifyContent: 'center',
-  },
-  listContent: {
-    paddingHorizontal: 8,
-    gap: 8,
-    alignItems: 'center',
-  },
-  chip: {
-    minWidth: 44,
-    height: 36,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  chipText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-});
+// N-gram suggestion chips REMOVED (Phase 3 — Suggested Next Word Removal).
+// The horizontal chip row previously rendered next-word predictions from
+// `state.ngramModel`. Sentence history (`PUSH_SENTENCE_HISTORY`) remains
+// active; only the suggestion UI and its dispatches were pulled.
 
 export default function TalkScreen() {
   const { width, height: screenHeight } = useWindowDimensions();
@@ -2948,11 +3043,12 @@ export default function TalkScreen() {
   // One auto-scroll-to-top per Quick activation.
   const hasAutoScrolledRef = useRef(false);
   const [quickAnchor, setQuickAnchor] = useState({ x: 0, width: 0 });
-  // Reanimated shared values for the Quick button feedback + Manage pill.
+  // Reanimated shared values for the Quick button feedback. The old
+  // Manage-pill entrance/pulse shared values were removed with the pill —
+  // the Manage sub-control now lives in DockSubControls (Phase 2), which
+  // owns its own animation state.
   const quickButtonShake = useSharedValue(0);
   const quickButtonErrorTint = useSharedValue(0);
-  const manageAttentionPulse = useSharedValue(0);
-  const manageEntrance = useSharedValue(0);
   const manageDoneEntrance = useSharedValue(0);
   const unselectBlink = useSharedValue(1);
 
@@ -3100,19 +3196,8 @@ export default function TalkScreen() {
   const knownVocabSetRef = useRef(knownVocabSet);
   knownVocabSetRef.current = knownVocabSet;
 
-  // ── N-gram next-word suggestions ────────────────────────────────────────
-  const lastWord = state.messageWords.at(-1)?.label;
-
-  const ngramSuggestions = useMemo(() => {
-    if (!lastWord) return [];
-    return predictSuggestions({
-      lastWord,
-      model: state.ngramModel,
-      coreVocab: undefined,    // uses built-in CORE_VOCAB list
-      exclude: state.messageWords.map(w => w.label),
-      limit: 5,
-    });
-  }, [lastWord, state.ngramModel, state.messageWords]);
+  // N-gram next-word suggestions removed (Phase 3). See notes at import
+  // site above; sentence history dispatch below is unaffected.
 
   const folderPlacementOptions = useMemo<FolderPlacementOption[]>(() => {
     const options = new Map<string, string>();
@@ -3544,6 +3629,135 @@ export default function TalkScreen() {
     setLayoutDirty(true);
     hapticIfEnabled();
   }, [activeMode, dispatch, hapticIfEnabled, layouts]);
+
+  // ── Bulk Symbol Pack import (Phase 1 — Symbol Pack Bulk Add Pipeline) ──
+  // Recursively materialises a curated SymbolPackFolder into real boards,
+  // folder tiles, back tiles, and symbol tiles. Preserves the nested
+  // structure, assigns Fitzgerald word-type colours, and guarantees
+  // collision-free board & tile IDs even against existing user tiles.
+  // Single-symbol flow (handleAddSymbolConfirm) is unaffected.
+  const handleAddSymbolPack = useCallback((root: SymbolPackFolder) => {
+    hapticIfEnabled();
+
+    // Union of every key that could collide with a freshly minted board or
+    // tile ID — static board modes, current boardPlacements keys, and every
+    // existing custom board tile ID.
+    const usedKeys = new Set<string>([
+      ...Object.keys(BOARD_TILES),
+      ...Object.keys(state.boardPlacements),
+      ...Object.keys(layouts),
+      ...state.customBoardTiles.map(t => t.id),
+    ]);
+
+    let seq = 0;
+    const stamp = Date.now();
+    const sanitize = (s: string) =>
+      s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'pack';
+    const mint = (prefix: string, hint: string) => {
+      let key = `${prefix}_${sanitize(hint)}_${stamp}_${seq++}`;
+      while (usedKeys.has(key)) key = `${prefix}_${sanitize(hint)}_${stamp}_${seq++}`;
+      usedKeys.add(key);
+      return key;
+    };
+
+    const tilesToUpsert: import('../../src/context/types').CustomBoardTile[] = [];
+    const layoutBatch: Record<string, BoardLayout> = {};
+    let folderCount = 0;
+    let symbolCount = 0;
+
+    // Walks a pack folder → returns the parent-side folder-tile shape and
+    // the child board key it navigates into. All tiles/layouts for the
+    // subtree are pushed into the outer batches.
+    const buildFolder = (
+      folder: SymbolPackFolder,
+      parentBoardKey: string,
+    ): { folderTile: import('../../src/context/types').CustomBoardTile } => {
+      const childBoardKey = mint('pack', folder.id);
+      const folderTileId  = mint('packfolder', folder.id);
+      const backId        = mint('back', childBoardKey);
+      folderCount += 1;
+
+      const folderTile: import('../../src/context/types').CustomBoardTile = {
+        id: folderTileId,
+        board: parentBoardKey,
+        label: folder.label,
+        color: '#1DCDFF',
+        kind: 'folder',
+        target: childBoardKey,
+        mulberrySymbolId: folder.iconId,
+      };
+      const backTile: import('../../src/context/types').CustomBoardTile = {
+        id: backId,
+        board: childBoardKey,
+        label: 'Home',
+        color: '#1DCDFF',
+        kind: 'folder',
+        target: 'home',
+        mulberrySymbolId: 'mulberry_house_1ice1xp',
+      };
+      tilesToUpsert.push(folderTile, backTile);
+
+      const placements: BoardLayout = [{ id: backId, slot: 0, fw: 2, fh: 2 }];
+      let slot = 1;
+
+      for (const child of folder.children as SymbolPackNode[]) {
+        if (child.type === 'folder') {
+          const built = buildFolder(child, childBoardKey);
+          placements.push({ id: built.folderTile.id, slot: slot++, fw: 2, fh: 2 });
+        } else {
+          const symId = mint('packsym', child.label);
+          const label = labelForBoardTile(child.label);
+          const wt = child.wordType ?? 'noun';
+          const symTile: import('../../src/context/types').CustomBoardTile = {
+            id: symId,
+            board: childBoardKey,
+            label,
+            speech: child.speech ?? child.label,
+            color: wordTypeColour(wt),
+            wordType: wt,
+            mulberrySymbolId: child.symbolId,
+            backgroundOpacity: 0.3,
+            outlineOpacity: 0,
+          };
+          tilesToUpsert.push(symTile);
+          placements.push({ id: symId, slot: slot++, fw: 2, fh: 2 });
+          symbolCount += 1;
+        }
+      }
+      layoutBatch[childBoardKey] = placements;
+      return { folderTile };
+    };
+
+    // Place the root pack folder onto the currently viewed board.
+    const parentBoard = activeMode;
+    const parentBase: BoardLayout = layouts[parentBoard]
+      ?? (BOARD_TILES[parentBoard] ?? []).map((tt, i) => ({ id: tt.id, slot: i, fw: 2, fh: 2 }));
+    const maxParentSlot = parentBase.reduce((max, p) => Math.max(max, p.slot + 1), 0);
+    const built = buildFolder(root, parentBoard);
+    const newParentLayout: BoardLayout = [
+      ...parentBase,
+      { id: built.folderTile.id, slot: maxParentSlot, fw: 2, fh: 2 },
+    ];
+    layoutBatch[parentBoard] = newParentLayout;
+
+    // Local render state — commit all boards in one setState so we don't
+    // paint intermediate half-built boards.
+    setLayouts(prev => ({ ...prev, ...layoutBatch }));
+    tilesToUpsert.forEach(t => userTilesRef.current.set(t.id, boardTileFromCustomTile(t)));
+
+    // Persist through AppContext → AsyncStorage. Batch order: tiles first
+    // (definitions), then layouts (references), so a reload never sees a
+    // placement pointing at an undefined tile.
+    tilesToUpsert.forEach(t => dispatch({ type: 'UPSERT_CUSTOM_BOARD_TILE', payload: t }));
+    Object.entries(layoutBatch).forEach(([board, placements]) => {
+      dispatch({ type: 'SET_BOARD_PLACEMENTS', payload: { board, placements } });
+    });
+
+    setLayoutDirty(true);
+    AccessibilityInfo.announceForAccessibility?.(
+      `Imported ${root.label}: ${folderCount} folder${folderCount === 1 ? '' : 's'} and ${symbolCount} symbol${symbolCount === 1 ? '' : 's'} added`,
+    );
+  }, [activeMode, dispatch, hapticIfEnabled, layouts, state.boardPlacements, state.customBoardTiles]);
 
   // Collapse handlers were removed with the board_control_bar restructure —
   // the expanded bar (Add + | Sort | Fullscreen | Hide) is now the default,
@@ -4889,10 +5103,12 @@ export default function TalkScreen() {
   // via Create +). Same dirty-state gating pattern as editDirty/editClean.
   const manageDoneVisible = quickManageOpen && manageDirty;
 
-  // The green Manage pill floats above the dock while the Quick view is
-  // active (experienced users' path into editing) or right after the
-  // newcomer nudge — never while the Manage bar itself is open.
-  const manageVisible =
+  // Manage sub-control visibility (Phase 2 — Quick Manage Entry). Manage
+  // now surfaces ONLY as a square sub-control anchored directly above the
+  // Quick dock button, and only while Quick is on / has just been armed.
+  // The old floating pill and the dock-row Manage button both went away
+  // with the sub-control layer — this is the single source of truth.
+  const manageSubControlVisible =
     !quickManageOpen &&
     (quickDockMode === 'manage' || quickViewActive) &&
     (dockMode === 'homeExpanded' || dockMode === 'folderExpanded');
@@ -4905,13 +5121,6 @@ export default function TalkScreen() {
   const quickTintStyle = useAnimatedStyle(() => ({
     opacity: quickButtonErrorTint.value * 0.25,
   }));
-  const manageAnimStyle = useAnimatedStyle(() => ({
-    opacity: manageEntrance.value,
-    transform: [
-      { translateY: (1 - manageEntrance.value) * 14 },
-      { scale: 1 + manageAttentionPulse.value * 0.06 },
-    ],
-  }));
   const manageDoneStyle = useAnimatedStyle(() => ({
     opacity: manageDoneEntrance.value,
     transform: [{ scale: 0.7 + manageDoneEntrance.value * 0.3 }],
@@ -4919,17 +5128,6 @@ export default function TalkScreen() {
   const unselectBlinkStyle = useAnimatedStyle(() => ({
     opacity: unselectBlink.value,
   }));
-
-  // Manage pill springs in from below and settles gently.
-  useEffect(() => {
-    if (manageVisible) {
-      manageEntrance.value = reduceMotion
-        ? 1
-        : withSpring(1, { damping: 16, stiffness: 190 });
-    } else {
-      manageEntrance.value = 0;
-    }
-  }, [manageEntrance, manageVisible, reduceMotion]);
 
   // Done springs in when it first appears; disappears instantly.
   useEffect(() => {
@@ -5107,7 +5305,8 @@ export default function TalkScreen() {
     }
     if (messageWordsRef.current.length > 0) {
       dispatch({ type: 'PUSH_SENTENCE_HISTORY', payload: { words: messageWordsRef.current } });
-      dispatch({ type: 'UPDATE_NGRAM_MODEL', payload: { words: messageWordsRef.current.map(w => w.label) } });
+      // UPDATE_NGRAM_MODEL dispatch removed (Phase 3 — Suggested Next
+      // Word Removal). Sentence history push above is preserved.
     }
     speakChained(messageText);
     announce(`Speaking: ${messageText}`);
@@ -5150,25 +5349,8 @@ export default function TalkScreen() {
     announce(`Added ${label}`);
   }, [announce, dispatch, enqueueSpeech, state.accessibility.wordSpeechMode]);
 
-  // Tap on an ngram suggestion chip — appends the word exactly like a tile tap.
-  // The suggestion word may not correspond to any board tile, so we synthesise a
-  // minimal AACWord directly rather than going through appendWord (which expects
-  // a BoardTile). Speech fires immediately in word-by-word mode.
-  const handleNgramSelect = useCallback((word: string) => {
-    dispatch({
-      type: 'APPEND_WORD',
-      payload: {
-        id: `suggestion-${word}-${Date.now()}`,
-        label: word,
-        wordType: 'core',
-        source: 'suggestion',
-      },
-    });
-    if (state.accessibility.wordSpeechMode !== 'sentence') {
-      enqueueSpeech(word);
-    }
-    announce(`Added ${word}`);
-  }, [announce, dispatch, enqueueSpeech, state.accessibility.wordSpeechMode]);
+  // handleNgramSelect removed (Phase 3). The suggestion chip row is gone;
+  // there is no path left in the UI that would fire this handler.
 
   const addGhost = useCallback((ghost: GhostTile) => {
     ghostsRef.current = [...ghostsRef.current, ghost];
@@ -5210,7 +5392,7 @@ export default function TalkScreen() {
     setGhosts([]);
     if (messageWordsRef.current.length > 0) {
       dispatch({ type: 'PUSH_SENTENCE_HISTORY', payload: { words: messageWordsRef.current } });
-      dispatch({ type: 'UPDATE_NGRAM_MODEL', payload: { words: messageWordsRef.current.map(w => w.label) } });
+      // UPDATE_NGRAM_MODEL dispatch removed (Phase 3).
     }
     dispatch({ type: 'CLEAR_WORDS' });
     announce('Message cleared');
@@ -5447,6 +5629,363 @@ export default function TalkScreen() {
     [activeMode],
   );
 
+  // ── Default Bottom Control Bar configuration (Phase 2 — Default Dock
+  // Configuration Isolation) ─────────────────────────────────────────────
+  // Every dock mode's control list lives inside its own renderer entry.
+  // Renaming a button, adding a control, or reordering a mode NEVER
+  // requires editing any of the other modes — the render tree below is a
+  // single dispatch call `dockRenderers[dockMode]?.()`. Exhaustiveness is
+  // enforced by the Record<DockMode, ...> type — adding a new DockMode
+  // union member will fail the type-check until its renderer is defined
+  // here. Anchor refs (Sort/Quick/Hide/Select/Move) stay next to their
+  // owning BoardDockAction so measurement wiring lives with the button.
+  const dockRenderers: Record<DockMode, () => React.ReactNode> = {
+    homeCollapsed: () => (
+      <View style={styles.collapsedDockMount}>
+        <View style={styles.collapsedDockPeek}>
+          <BoardDockAction
+            icon="toggle-bar"
+            iconOnly
+            size={DOCK_TOGGLE_SIZE}
+            a11yLabel="Expand controls"
+            a11yHint="Shows the board controls"
+            onPress={handleHomeDockExpand}
+            isToggle
+          />
+        </View>
+      </View>
+    ),
+    homeExpanded: () => (
+      <>
+        <BoardDockAction
+          icon="dock-add" label="Add"
+          a11yLabel="Add"
+          a11yHint="Opens add options for the board"
+          onPress={handleDockAddPlus}
+          kind="neutral"
+        />
+        <View onLayout={handleSortAnchorLayout}>
+          <BoardDockAction
+            icon="sort" label="Sort"
+            a11yLabel="Sort tiles"
+            a11yHint="Opens sort options above this button"
+            onPress={toggleSortMenu}
+            kind="neutral"
+            isToggle
+            isActive={sortMenuVisible}
+          />
+        </View>
+        <View onLayout={handleQuickAnchorLayout}>
+          <Reanimated.View style={quickShakeStyle}>
+            <BoardDockAction
+              icon="quick" label="Quick"
+              a11yLabel="Quick view"
+              a11yHint="Scrolls to top and shows your Quick symbols. Manage appears above this button once Quick is on."
+              onPress={handleQuickPress}
+              kind="neutral"
+              isToggle
+              isActive={quickViewActive}
+            />
+            <Reanimated.View
+              pointerEvents="none"
+              style={[styles.quickErrorTint, quickTintStyle]}
+            />
+          </Reanimated.View>
+        </View>
+        {/* Manage moved to DockSubControls above Quick (Phase 2). */}
+        <View onLayout={handleHideAnchorLayout}>
+          <BoardDockAction
+            icon="hide" label="Hide"
+            a11yLabel="Hide controls"
+            a11yHint="Choose to hide the nav bar, the control bar, or all"
+            onPress={toggleHideMenu}
+            kind="neutral"
+            isToggle
+            isActive={hideMenuVisible || navHidden}
+          />
+        </View>
+        <BoardDockAction
+          icon="untoggle-bar"
+          iconOnly
+          size={boardSizes.touchTargetMin}
+          a11yLabel="Collapse controls"
+          a11yHint="Leaves a small expand control on the left edge"
+          onPress={() => {
+            hapticIfEnabled();
+            setHomeDockExpanded(false);
+          }}
+          kind="neutral"
+        />
+      </>
+    ),
+    quickManage: () => (
+      <>
+        <BoardDockAction
+          icon="back-out" label="Back"
+          a11yLabel="Back"
+          a11yHint="Close Quick manage"
+          onPress={handleQuickManageBack}
+          kind="neutral"
+        />
+        <Reanimated.View style={unselectBlinkStyle}>
+          <BoardDockAction
+            icon="select"
+            label={manageSelectedIds.size > 0 ? 'Unselect' : 'Select'}
+            a11yLabel={manageSelectedIds.size > 0
+              ? `Unselect all ${manageSelectedIds.size} selected`
+              : 'Select symbols'}
+            a11yHint={manageSelectedIds.size > 0
+              ? 'Clears all selected symbols'
+              : 'Tap symbols on the board to select them'}
+            onPress={handleQuickSelectToggle}
+            kind="neutral"
+            tint={manageSelectedIds.size > 0 ? t.colors.danger : undefined}
+            isToggle
+            isActive={manageSelectedIds.size > 0}
+          />
+        </Reanimated.View>
+        <BoardDockAction
+          icon="symbol-add" label="Create"
+          a11yLabel="Create a new Quick symbol"
+          a11yHint="Opens the custom symbol editor. The new symbol is pinned to Quick automatically"
+          onPress={handleQuickCreate}
+          kind="neutral"
+        />
+        {manageDoneVisible ? (
+          <Reanimated.View style={manageDoneStyle}>
+            <BoardDockAction
+              icon="checkmark" label="Done"
+              a11yLabel="Done — save Quick changes"
+              a11yHint="Saves your Quick symbols and shows the Quick view"
+              onPress={handleQuickManageDone}
+              kind="primary"
+            />
+          </Reanimated.View>
+        ) : null}
+      </>
+    ),
+    addExpanded: () => (
+      <>
+        <BoardDockAction
+          icon="back-out" label="Back"
+          a11yLabel="Back" a11yHint="Close add options"
+          onPress={handleAddFlowClose} kind="neutral"
+        />
+        <BoardDockAction
+          icon="symbol-add" label="Symbol" a11yLabel="Add symbol"
+          onPress={handleDockSymbol} kind="neutral"
+        />
+        <BoardDockAction
+          icon="folder-add" label="Folder" a11yLabel="Add folder"
+          onPress={handleDockAddFolder} kind="neutral"
+        />
+      </>
+    ),
+    folderExpanded: () => (
+      <>
+        <BoardDockAction
+          icon="back-out" label="Back"
+          a11yLabel="Back"
+          a11yHint="Go back one board"
+          onPress={handleDockBack} kind="neutral"
+        />
+        <BoardDockAction
+          icon="dock-add" label="Add"
+          a11yLabel="Add item"
+          a11yHint="Opens add options"
+          onPress={handleDockAddToggle}
+          isToggle
+        />
+        <View onLayout={handleSortAnchorLayout}>
+          <BoardDockAction
+            icon="sort" label="Sort"
+            a11yLabel="Sort tiles"
+            a11yHint="Opens sort options above this button"
+            onPress={toggleSortMenu}
+            kind="neutral"
+            isToggle
+            isActive={sortMenuVisible}
+          />
+        </View>
+        <View onLayout={handleQuickAnchorLayout}>
+          <Reanimated.View style={quickShakeStyle}>
+            <BoardDockAction
+              icon="quick" label="Quick"
+              a11yLabel="Quick view"
+              a11yHint="Scrolls to top and shows your Quick symbols. Manage appears above this button once Quick is on."
+              onPress={handleQuickPress}
+              kind="neutral"
+              isToggle
+              isActive={quickViewActive}
+            />
+            <Reanimated.View
+              pointerEvents="none"
+              style={[styles.quickErrorTint, quickTintStyle]}
+            />
+          </Reanimated.View>
+        </View>
+        {/* Manage moved to DockSubControls above Quick (Phase 2). */}
+        <View onLayout={handleHideAnchorLayout}>
+          <BoardDockAction
+            icon="hide" label="Hide"
+            a11yLabel="Hide controls"
+            a11yHint="Choose to hide the nav bar, the control bar, or all"
+            onPress={toggleHideMenu}
+            kind="neutral"
+            isToggle
+            isActive={hideMenuVisible || navHidden}
+          />
+        </View>
+      </>
+    ),
+    folderCollapsed: () => (
+      <View style={styles.collapsedDockMount}>
+        <View style={styles.collapsedDockPeek}>
+          <BoardDockAction
+            icon="toggle-bar"
+            iconOnly
+            size={DOCK_TOGGLE_SIZE}
+            a11yLabel="Expand controls"
+            a11yHint="Shows the board controls"
+            onPress={handleFolderExpand}
+            isToggle
+          />
+        </View>
+      </View>
+    ),
+    editControls: () => (
+      <>
+        {/* Back — far left, only inside a folder. Returns to the previous
+            board level WITHOUT exiting edit mode. */}
+        {activeMode !== 'home' ? (
+          <BoardDockAction
+            icon="back-out" label="Back"
+            a11yLabel="Back"
+            a11yHint="Goes back one board without leaving edit mode"
+            onPress={handleDockBack}
+            kind="neutral"
+          />
+        ) : null}
+        {/* Undo — safest recovery action, next (left). */}
+        <BoardDockAction
+          icon="undo" label="Undo"
+          a11yLabel="Undo"
+          a11yHint="Reverses the last board edit"
+          onPress={handleUndoEdit}
+          kind="neutral"
+          disabled={undoStack.length === 0}
+        />
+        {/* Select / Unselect — controls the edit state. */}
+        <View onLayout={handleSelectAnchorLayout}>
+          <BoardDockAction
+            icon="select"
+            label={selectedTileIds.size > 0 ? 'Unselect' : 'Select'}
+            a11yLabel={
+              selectedTileIds.size > 0
+                ? `Unselect ${selectedTileIds.size} selected tiles`
+                : 'Select tiles'
+            }
+            a11yHint={
+              selectedTileIds.size > 0
+                ? 'Clears the current selection'
+                : 'Tap tiles to select them'
+            }
+            onPress={handleEditToolSelectToggle}
+            kind="neutral"
+            isToggle
+            isActive={activeEditTool === 'select'}
+          />
+        </View>
+        {/* All / None — one tap to select or clear every tile on this
+            board view. Only offered while Select is active. */}
+        {activeEditTool === 'select' ? (
+          <BoardDockAction
+            icon="select"
+            label={allTilesSelected ? 'None' : 'All'}
+            a11yLabel={allTilesSelected ? 'Deselect all' : 'Select all'}
+            a11yHint={
+              allTilesSelected
+                ? 'Clears the whole selection'
+                : 'Selects every tile on this board'
+            }
+            onPress={handleSelectAllToggle}
+            kind="neutral"
+            isToggle
+            isActive={allTilesSelected}
+          />
+        ) : null}
+        {/* Move — acts on the selection, after Select. */}
+        <View onLayout={handleMoveAnchorLayout}>
+          <BoardDockAction
+            icon="move" label="Move"
+            a11yLabel="Move selected tiles"
+            a11yHint="Then tap a folder as the destination"
+            onPress={handleEditToolMove}
+            kind="neutral"
+            disabled={selectedTileIds.size === 0}
+            isToggle
+            isActive={activeEditTool === 'move'}
+          />
+        </View>
+        {/* State-aware commit: Save only when there is something to save;
+            otherwise a calm Cancel that just closes. */}
+        {undoStack.length > 0 || layoutDirty ? (
+          <BoardDockAction
+            icon="checkmark" label="Save"
+            a11yLabel="Save changes"
+            a11yHint="Saves the board and closes editing"
+            onPress={handleEditControlsSave} kind="primary"
+          />
+        ) : (
+          <BoardDockAction
+            icon="close" label="Cancel"
+            a11yLabel="Close editing"
+            a11yHint="Closes editing. No changes were made"
+            onPress={handleEditControlsDone} kind="muted"
+          />
+        )}
+      </>
+    ),
+    editDirty: () => (
+      <>
+        <BoardDockAction
+          icon="close" label="Cancel"
+          a11yLabel="Cancel changes"
+          onPress={handleDockCancel} kind="muted"
+        />
+        <BoardDockAction
+          icon="checkmark" label="Save"
+          a11yLabel="Save changes"
+          onPress={handleSaveEdit} kind="primary"
+        />
+      </>
+    ),
+    editClean: () => (
+      <>
+        {editFocusTileId ? (
+          <BoardDockAction
+            icon="remove" label="Delete"
+            a11yLabel="Delete selected tile"
+            onPress={handleDockDelete} kind="muted"
+          />
+        ) : null}
+        <BoardDockAction
+          icon="dock-add" label="Add"
+          a11yLabel="Add item" a11yHint="Opens add options"
+          onPress={handleDockAddPlus} kind="neutral"
+        />
+        {/* No changes yet in this resize session → Cancel, not Done/Save
+            (state-aware commit labels). */}
+        <BoardDockAction
+          icon="close" label="Cancel"
+          a11yLabel="Close layout editing"
+          a11yHint="Closes layout editing. No changes were made"
+          onPress={handleDockDone} kind="muted"
+        />
+      </>
+    ),
+  };
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: t.colors.surface }]} edges={['top']}>
       <View ref={rootRef} style={[styles.screenRoot, { backgroundColor: t.colors.background }]}>
@@ -5493,15 +6032,8 @@ export default function TalkScreen() {
           onTabPress={handleTopTab}
         />
 
-        {/* N-gram next-word prediction chips — hidden during edit mode so they
-            don't distract from layout editing. Only shown when the message strip
-            has at least one word (lastWord is defined). */}
-        {!editMode && (
-          <NgramSuggestionRow
-            suggestions={ngramSuggestions}
-            onSelect={handleNgramSelect}
-          />
-        )}
+        {/* N-gram suggestion chip row REMOVED (Phase 3 — Suggested Next
+            Word Removal). Board space is reclaimed for the tile grid. */}
 
         {/* Tap-outside overlay exits a clean edit session; when dirty it is a
             no-op so changes are never silently discarded (use Cancel/Save). */}
@@ -5878,391 +6410,39 @@ export default function TalkScreen() {
                 },
               ]}
             />
-            {/* Manage sub-option — REMOVED: Manage is now a dock button. */}
-            {false ? (
-              <Reanimated.View
-                style={[
-                  styles.manageSubOption,
-                  {
-                    left: quickAnchor.x,
-                    width: Math.max(quickAnchor.width, DOCK_ACTION_SIZE),
-                  },
-                  manageAnimStyle,
-                ]}
-              >
-                <Pressable
-                  onPress={handleManagePress}
-                  accessibilityRole="button"
-                  accessibilityLabel="Manage Quick symbols"
-                  accessibilityHint="Choose which symbols appear in Quick"
-                  style={({ pressed }) => [
-                    styles.managePill,
-                    {
-                      backgroundColor: pressed ? '#27AE60' : '#2ECC71',
-                      opacity: pressed ? 0.9 : 1,
-                    },
-                  ]}
-                >
-                  <Text style={styles.managePillLabel} maxFontSizeMultiplier={1.4}>
-                    Manage
-                  </Text>
-                </Pressable>
-              </Reanimated.View>
-            ) : null}
+            {/* Quick → Manage sub-control (Phase 2). Square control that
+                sits directly above the Quick dock button after Quick is
+                pressed. Replaces both the old floating green pill and the
+                dock-row Manage button. Uses the reusable DockSubControls
+                layer so any future dock control can adopt the same
+                anchor-and-stack pattern without new plumbing. */}
+            <DockSubControls
+              visible={manageSubControlVisible}
+              anchorX={quickAnchor.x}
+              anchorWidth={quickAnchor.width}
+              a11yLabel="Quick options"
+              controls={[
+                {
+                  key: 'manage',
+                  icon: 'select',
+                  label: 'Manage',
+                  a11yLabel: 'Manage Quick symbols',
+                  a11yHint: 'Choose which symbols appear in Quick, then tap Done',
+                  onPress: handleManagePress,
+                  kind: 'primary',
+                },
+              ]}
+            />
             <View
               style={[
                 styles.dockRow,
                 { paddingLeft: dockPadLeft, paddingRight: dockPadRight },
               ]}
             >
-              {dockMode === 'homeCollapsed' ? (
-                <View style={styles.collapsedDockMount}>
-                  <View style={styles.collapsedDockPeek}>
-                    <BoardDockAction
-                      icon="toggle-bar"
-                      iconOnly
-                      size={DOCK_TOGGLE_SIZE}
-                      a11yLabel="Expand controls"
-                      a11yHint="Shows the board controls"
-                      onPress={handleHomeDockExpand}
-                      isToggle
-                    />
-                  </View>
-                </View>
-              ) : dockMode === 'homeExpanded' ? (
-                <>
-                  <BoardDockAction
-                    icon="dock-add" label="Add"
-                    a11yLabel="Add"
-                    a11yHint="Opens add options for the board"
-                    onPress={handleDockAddPlus}
-                    kind="neutral"
-                  />
-                  <View onLayout={handleSortAnchorLayout}>
-                    <BoardDockAction
-                      icon="sort" label="Sort"
-                      a11yLabel="Sort tiles"
-                      a11yHint="Opens sort options above this button"
-                      onPress={toggleSortMenu}
-                      kind="neutral"
-                      isToggle
-                      isActive={sortMenuVisible}
-                    />
-                  </View>
-                  <View onLayout={handleQuickAnchorLayout}>
-                    <Reanimated.View style={quickShakeStyle}>
-                      <BoardDockAction
-                        icon="quick" label="Quick"
-                        a11yLabel="Quick view"
-                        a11yHint="Scrolls to top and shows your Quick symbols"
-                        onPress={handleQuickPress}
-                        kind="neutral"
-                        isToggle
-                        isActive={quickViewActive}
-                      />
-                      <Reanimated.View
-                        pointerEvents="none"
-                        style={[styles.quickErrorTint, quickTintStyle]}
-                      />
-                    </Reanimated.View>
-                  </View>
-                  <BoardDockAction
-                    icon="select" label="Manage"
-                    a11yLabel="Manage Quick symbols"
-                    a11yHint="Select symbols to add to Quick view, then tap Done"
-                    onPress={handleManagePress}
-                    kind="neutral"
-                  />
-                  <View onLayout={handleHideAnchorLayout}>
-                    <BoardDockAction
-                      icon="hide" label="Hide"
-                      a11yLabel="Hide controls"
-                      a11yHint="Choose to hide the nav bar, the control bar, or all"
-                      onPress={toggleHideMenu}
-                      kind="neutral"
-                      isToggle
-                      isActive={hideMenuVisible || navHidden}
-                    />
-                  </View>
-                  <BoardDockAction
-                    icon="untoggle-bar"
-                    iconOnly
-                    size={boardSizes.touchTargetMin}
-                    a11yLabel="Collapse controls"
-                    a11yHint="Leaves a small expand control on the left edge"
-                    onPress={() => {
-                      hapticIfEnabled();
-                      setHomeDockExpanded(false);
-                    }}
-                    kind="neutral"
-                  />
-                </>
-              ) : dockMode === 'quickManage' ? (
-                <>
-                  <BoardDockAction
-                    icon="back-out" label="Back"
-                    a11yLabel="Back"
-                    a11yHint="Close Quick manage"
-                    onPress={handleQuickManageBack}
-                    kind="neutral"
-                  />
-                  <Reanimated.View style={unselectBlinkStyle}>
-                    <BoardDockAction
-                      icon="select"
-                      label={manageSelectedIds.size > 0 ? 'Unselect' : 'Select'}
-                      a11yLabel={manageSelectedIds.size > 0
-                        ? `Unselect all ${manageSelectedIds.size} selected`
-                        : 'Select symbols'}
-                      a11yHint={manageSelectedIds.size > 0
-                        ? 'Clears all selected symbols'
-                        : 'Tap symbols on the board to select them'}
-                      onPress={handleQuickSelectToggle}
-                      kind="neutral"
-                      tint={manageSelectedIds.size > 0 ? t.colors.danger : undefined}
-                      isToggle
-                      isActive={manageSelectedIds.size > 0}
-                    />
-                  </Reanimated.View>
-                  <BoardDockAction
-                    icon="symbol-add" label="Create"
-                    a11yLabel="Create a new Quick symbol"
-                    a11yHint="Opens the custom symbol editor. The new symbol is pinned to Quick automatically"
-                    onPress={handleQuickCreate}
-                    kind="neutral"
-                  />
-                  {manageDoneVisible ? (
-                    <Reanimated.View style={manageDoneStyle}>
-                      <BoardDockAction
-                        icon="checkmark" label="Done"
-                        a11yLabel="Done — save Quick changes"
-                        a11yHint="Saves your Quick symbols and shows the Quick view"
-                        onPress={handleQuickManageDone}
-                        kind="primary"
-                      />
-                    </Reanimated.View>
-                  ) : null}
-                </>
-              ) : dockMode === 'addExpanded' ? (
-                <>
-                  <BoardDockAction
-                    icon="back-out" label="Back"
-                    a11yLabel="Back" a11yHint="Close add options"
-                    onPress={handleAddFlowClose} kind="neutral"
-                  />
-                  <BoardDockAction
-                    icon="symbol-add" label="Symbol" a11yLabel="Add symbol"
-                    onPress={handleDockSymbol} kind="neutral"
-                  />
-                  <BoardDockAction
-                    icon="folder-add" label="Folder" a11yLabel="Add folder"
-                    onPress={handleDockAddFolder} kind="neutral"
-                  />
-                </>
-              ) : dockMode === 'folderExpanded' ? (
-                <>
-                  <BoardDockAction
-                    icon="back-out" label="Back"
-                    a11yLabel="Back"
-                    a11yHint="Go back one board"
-                    onPress={handleDockBack} kind="neutral"
-                  />
-                  <BoardDockAction
-                    icon="dock-add" label="Add"
-                    a11yLabel="Add item"
-                    a11yHint="Opens add options"
-                    onPress={handleDockAddToggle}
-                    isToggle
-                  />
-                  <View onLayout={handleSortAnchorLayout}>
-                    <BoardDockAction
-                      icon="sort" label="Sort"
-                      a11yLabel="Sort tiles"
-                      a11yHint="Opens sort options above this button"
-                      onPress={toggleSortMenu}
-                      kind="neutral"
-                      isToggle
-                      isActive={sortMenuVisible}
-                    />
-                  </View>
-                  <View onLayout={handleQuickAnchorLayout}>
-                    <Reanimated.View style={quickShakeStyle}>
-                      <BoardDockAction
-                        icon="quick" label="Quick"
-                        a11yLabel="Quick view"
-                        a11yHint="Scrolls to top and shows your Quick symbols"
-                        onPress={handleQuickPress}
-                        kind="neutral"
-                        isToggle
-                        isActive={quickViewActive}
-                      />
-                      <Reanimated.View
-                        pointerEvents="none"
-                        style={[styles.quickErrorTint, quickTintStyle]}
-                      />
-                    </Reanimated.View>
-                  </View>
-                  <BoardDockAction
-                    icon="select" label="Manage"
-                    a11yLabel="Manage Quick symbols"
-                    a11yHint="Select symbols to add to Quick view, then tap Done"
-                    onPress={handleManagePress}
-                    kind="neutral"
-                  />
-                  <View onLayout={handleHideAnchorLayout}>
-                    <BoardDockAction
-                      icon="hide" label="Hide"
-                      a11yLabel="Hide controls"
-                      a11yHint="Choose to hide the nav bar, the control bar, or all"
-                      onPress={toggleHideMenu}
-                      kind="neutral"
-                      isToggle
-                      isActive={hideMenuVisible || navHidden}
-                    />
-                  </View>
-                </>
-              ) : dockMode === 'folderCollapsed' ? (
-                <View style={styles.collapsedDockMount}>
-                  <View style={styles.collapsedDockPeek}>
-                    <BoardDockAction
-                      icon="toggle-bar"
-                      iconOnly
-                      size={DOCK_TOGGLE_SIZE}
-                      a11yLabel="Expand controls"
-                      a11yHint="Shows the board controls"
-                      onPress={handleFolderExpand}
-                      isToggle
-                    />
-                  </View>
-                </View>
-              ) : dockMode === 'editControls' ? (
-                <>
-                  {/* Back — far left, only inside a folder. Returns to the
-                      previous board level WITHOUT exiting edit mode. */}
-                  {activeMode !== 'home' ? (
-                    <BoardDockAction
-                      icon="back-out" label="Back"
-                      a11yLabel="Back"
-                      a11yHint="Goes back one board without leaving edit mode"
-                      onPress={handleDockBack}
-                      kind="neutral"
-                    />
-                  ) : null}
-                  {/* Undo — safest recovery action, next (left). */}
-                  <BoardDockAction
-                    icon="undo" label="Undo"
-                    a11yLabel="Undo"
-                    a11yHint="Reverses the last board edit"
-                    onPress={handleUndoEdit}
-                    kind="neutral"
-                    disabled={undoStack.length === 0}
-                  />
-                  {/* Select / Unselect — controls the edit state. */}
-                  <View onLayout={handleSelectAnchorLayout}>
-                    <BoardDockAction
-                      icon="select"
-                      label={selectedTileIds.size > 0 ? 'Unselect' : 'Select'}
-                      a11yLabel={
-                        selectedTileIds.size > 0
-                          ? `Unselect ${selectedTileIds.size} selected tiles`
-                          : 'Select tiles'
-                      }
-                      a11yHint={
-                        selectedTileIds.size > 0
-                          ? 'Clears the current selection'
-                          : 'Tap tiles to select them'
-                      }
-                      onPress={handleEditToolSelectToggle}
-                      kind="neutral"
-                      isToggle
-                      isActive={activeEditTool === 'select'}
-                    />
-                  </View>
-                  {/* All / None — one tap to select or clear every tile on
-                      this board view. Only offered while Select is active. */}
-                  {activeEditTool === 'select' ? (
-                    <BoardDockAction
-                      icon="select"
-                      label={allTilesSelected ? 'None' : 'All'}
-                      a11yLabel={allTilesSelected ? 'Deselect all' : 'Select all'}
-                      a11yHint={
-                        allTilesSelected
-                          ? 'Clears the whole selection'
-                          : 'Selects every tile on this board'
-                      }
-                      onPress={handleSelectAllToggle}
-                      kind="neutral"
-                      isToggle
-                      isActive={allTilesSelected}
-                    />
-                  ) : null}
-                  {/* Move — acts on the selection, after Select. */}
-                  <View onLayout={handleMoveAnchorLayout}>
-                    <BoardDockAction
-                      icon="move" label="Move"
-                      a11yLabel="Move selected tiles"
-                      a11yHint="Then tap a folder as the destination"
-                      onPress={handleEditToolMove}
-                      kind="neutral"
-                      disabled={selectedTileIds.size === 0}
-                      isToggle
-                      isActive={activeEditTool === 'move'}
-                    />
-                  </View>
-                  {/* State-aware commit: Save only when there is something
-                      to save; otherwise a calm Cancel that just closes. */}
-                  {undoStack.length > 0 || layoutDirty ? (
-                    <BoardDockAction
-                      icon="checkmark" label="Save"
-                      a11yLabel="Save changes"
-                      a11yHint="Saves the board and closes editing"
-                      onPress={handleEditControlsSave} kind="primary"
-                    />
-                  ) : (
-                    <BoardDockAction
-                      icon="close" label="Cancel"
-                      a11yLabel="Close editing"
-                      a11yHint="Closes editing. No changes were made"
-                      onPress={handleEditControlsDone} kind="muted"
-                    />
-                  )}
-                </>
-              ) : dockMode === 'editDirty' ? (
-                <>
-                  <BoardDockAction
-                    icon="close" label="Cancel"
-                    a11yLabel="Cancel changes"
-                    onPress={handleDockCancel} kind="muted"
-                  />
-                  <BoardDockAction
-                    icon="checkmark" label="Save"
-                    a11yLabel="Save changes"
-                    onPress={handleSaveEdit} kind="primary"
-                  />
-                </>
-              ) : dockMode === 'editClean' ? (
-                <>
-                  {editFocusTileId ? (
-                    <BoardDockAction
-                      icon="remove" label="Delete"
-                      a11yLabel="Delete selected tile"
-                      onPress={handleDockDelete} kind="muted"
-                    />
-                  ) : null}
-                  <BoardDockAction
-                    icon="dock-add" label="Add"
-                    a11yLabel="Add item" a11yHint="Opens add options"
-                    onPress={handleDockAddPlus} kind="neutral"
-                  />
-                  {/* No changes yet in this resize session → Cancel, not
-                      Done/Save (state-aware commit labels). */}
-                  <BoardDockAction
-                    icon="close" label="Cancel"
-                    a11yLabel="Close layout editing"
-                    a11yHint="Closes layout editing. No changes were made"
-                    onPress={handleDockDone} kind="muted"
-                  />
-                </>
-              ) : null}
+              {/* Single dispatch — the concrete JSX for every dock mode
+                  lives in `dockRenderers` declared above (Phase 2 —
+                  Default Dock Configuration Isolation). */}
+              {dockRenderers[dockMode]?.() ?? null}
             </View>
           </RNAnimated.View>
 
@@ -6332,6 +6512,7 @@ export default function TalkScreen() {
         onDismiss={() => setAddSymbolModalVisible(false)}
         onAdd={handleAddSymbolConfirm}
         onCreateCustom={handleOpenCustomSymbolEditor}
+        onAddPack={handleAddSymbolPack}
       />
       <CustomSymbolEditor
         visible={customSymbolEditorVisible}
@@ -6571,8 +6752,9 @@ const styles = StyleSheet.create({
     top: 0,
     borderTopLeftRadius: TILE_CORNER_RADIUS,
     borderTopRightRadius: TILE_CORNER_RADIUS,
-    // Folder outline intentionally 20% lighter than word tiles (1.5 → 1.2).
-    borderWidth: 1.2,
+    // Folder outline is now barely visible (Phase 3 — Folder Outline Pass):
+    // hairline stroke so the board reads as a field of symbols first.
+    borderWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: 0,
   },
   folderFace: {
@@ -6581,27 +6763,30 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderRadius: TILE_CORNER_RADIUS,
-    borderWidth: 1.2,
+    borderWidth: StyleSheet.hairlineWidth,
   },
+  // Label sits in a small band at the bottom (Phase 3 — Symbol/Label
+  // Hierarchy). Symbol occupies the top ~75% of the tile; label the
+  // bottom ~22%. adjustsFontSizeToFit still handles long labels.
   folderLabel: {
     position: 'absolute',
-    left: 8,
-    right: 8,
-    top: 10,
-    fontSize: 22,
-    lineHeight: 26,
+    left: 6,
+    right: 6,
+    bottom: 4,
+    fontSize: 14,
+    lineHeight: 16,
     fontWeight: '700',
     textAlign: 'center',
   },
-  // Symbol mount sits below the label and centers the Mulberry pictogram.
-  // Top offset clears the label (16 + 24 line-height + a hair of breathing
-  // room) so glyph + label never overlap on the smallest 88×88 tile.
+  // Symbol mount now claims the top ~75% of the tile so the pictogram
+  // reads as the primary visual (Phase 3). Label lives in the bottom band
+  // (bottom:4 + 16pt line-height + a hair of breathing room = ~22pt).
   symbolMount: {
     position: 'absolute',
     left: 0,
     right: 0,
-    top: 34,
-    bottom: 2,
+    top: 4,
+    bottom: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -6626,14 +6811,15 @@ const styles = StyleSheet.create({
     top: 0,
     borderRadius: TILE_CORNER_RADIUS,
   },
-  // Typography mirrors `folderLabel` so words and folders read as one family.
+  // Typography mirrors `folderLabel` so words and folders read as one
+  // family (Phase 3 — Symbol/Label Hierarchy: label at bottom, small).
   wordLabel: {
     position: 'absolute',
-    left: 8,
-    right: 8,
-    top: 10,
-    fontSize: 22,
-    lineHeight: 26,
+    left: 6,
+    right: 6,
+    bottom: 4,
+    fontSize: 14,
+    lineHeight: 16,
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -6808,28 +6994,18 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     transform: [{ rotate: '-24deg' }],
   },
-  // Green Manage pill — floats directly above the Quick button's slot.
-  manageSubOption: {
+  // Reusable sub-controls layer — one column of square sub-buttons that
+  // hovers directly above whichever dock button owns the anchor. Sized so
+  // each sub-button aligns 1:1 with the parent (Phase 2 sub-control layer).
+  dockSubControls: {
     position: 'absolute',
     bottom: DOCK_BOTTOM_GAP + DOCK_ACTION_SIZE + spacing.sm,
+    alignItems: 'center',
+    gap: spacing.xs,
   },
-  managePill: {
-    minHeight: boardSizes.subOptionMinHeight,
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+  dockSubControlSlot: {
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  managePillLabel: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
   },
   // Faint red blend over the Quick button on the newcomer error shake
   // (animated opacity 0 → 0.25 — never a hard colour switch).
