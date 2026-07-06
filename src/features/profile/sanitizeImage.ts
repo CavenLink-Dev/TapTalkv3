@@ -20,7 +20,7 @@ export class SanitizeImageError extends Error {
 }
 
 export async function sanitizeImage(uri: string): Promise<string> {
-  const info = await FileSystem.getInfoAsync(uri);
+  const info = await FileSystem.getInfoAsync(uri, { size: true });
   if (!info.exists) throw new SanitizeImageError('read_failed', 'Image not found');
   if ((info.size ?? 0) > MAX_BYTES) {
     throw new SanitizeImageError('too_large', 'Image over 8MB');
