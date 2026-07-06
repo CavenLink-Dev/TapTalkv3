@@ -35,6 +35,7 @@ export type ColdPersistedState = Pick<
   | 'onboardingComplete'
   | 'subscriptionComplete'
   | 'signedIn'
+  | 'appMode'
   | 'rememberLogin'
   | 'profilePhotoUri'
   | 'secureMethod'
@@ -77,6 +78,7 @@ export function splitAppState(state: AppState): {
       onboardingComplete: state.onboardingComplete,
       subscriptionComplete: state.subscriptionComplete,
       signedIn: state.signedIn,
+      appMode: state.appMode,
       rememberLogin: state.rememberLogin,
       profilePhotoUri: state.profilePhotoUri,
       secureMethod: state.secureMethod,
@@ -154,7 +156,11 @@ export function persistenceTargetForAction(type: Action['type']): PersistenceTar
     case 'ADD_PRONUNCIATION':
     case 'DELETE_PRONUNCIATION':
     case 'SET_PASSPORT':
+    case 'SET_APP_MODE':
       return 'cold';
+    // Transient runtime flag — never touch disk.
+    case 'SET_SYNC_IN_PROGRESS':
+      return 'none';
     default:
       return 'both';
   }

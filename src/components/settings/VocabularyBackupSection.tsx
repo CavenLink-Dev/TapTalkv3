@@ -29,7 +29,7 @@ import {
   readVocabularyBundle,
   applyVocabularyBundle,
 } from '../../utils/vocabularyExport';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export function VocabularyBackupSection() {
   const { state, dispatch } = useAppContext();

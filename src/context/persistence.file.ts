@@ -14,7 +14,7 @@
  *   - Migrate on first launch: read from AsyncStorage once, saveCold(), then
  *     delete the legacy key.
  */
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import type { ColdPersistedState } from './persistence';
 
 const SCHEMA_VERSION = 3;
@@ -57,11 +57,12 @@ export type BackupEntry = { path: string; savedAt: number; label: 'current' | 'b
 
 export async function listBackups(): Promise<BackupEntry[]> {
   const out: BackupEntry[] = [];
-  for (const [path, label] of [
-    [CURRENT, 'current' as const],
-    [BAK1, 'bak1' as const],
-    [BAK2, 'bak2' as const],
-  ]) {
+  const entries: [string, BackupEntry['label']][] = [
+    [CURRENT, 'current'],
+    [BAK1, 'bak1'],
+    [BAK2, 'bak2'],
+  ];
+  for (const [path, label] of entries) {
     const env = await tryReadEnvelope(path);
     if (env) out.push({ path, label, savedAt: env.savedAt });
   }

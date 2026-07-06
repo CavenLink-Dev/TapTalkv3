@@ -5,7 +5,7 @@
  * Writes are atomic: temp file → rename. Reads survive a partial write by
  * validating JSON shape and rejecting entries older than STALE_MS.
  */
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const PATH = `${FileSystem.documentDirectory}message-buffer.json`;
 const TMP = `${PATH}.tmp`;

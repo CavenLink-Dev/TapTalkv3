@@ -12,7 +12,22 @@
  */
 import * as Speech from 'expo-speech';
 
-type Utter = { id: string; text: string };
+/**
+ * Per-utterance overrides. Callers (e.g. useSpeech → talk.tsx) may pass
+ * rate/pitch/voice for a single utterance, plus lifecycle callbacks. Anything
+ * omitted falls back to the persisted prefs set via setPrefs().
+ */
+export type SayOptions = {
+  rate?: number;
+  pitch?: number;
+  voice?: string;
+  language?: string;
+  onDone?: () => void;
+  onStopped?: () => void;
+  onError?: (error: Error) => void;
+};
+
+type Utter = { id: string; text: string; opts?: SayOptions };
 export type SpeechMode = 'interrupt' | 'enqueue';
 
 class SpeechServiceImpl {
@@ -49,14 +64,18 @@ class SpeechServiceImpl {
     return () => this.listeners.delete(cb);
   }
 
-  say(text: string, mode: SpeechMode = 'interrupt'): void {
+  say(text: string, mode: SpeechMode = 'interrupt', opts?: SayOptions): void {
     const clean = text.trim();
     if (!clean) return;
-    const utter: Utter = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, text: clean };
+    const utter: Utter = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: clean,
+      opts,
+    };
 
     if (mode === 'interrupt') {
       this.queue = [utter];
-      Speech.stop();
+      try { Speech.stop(); } catch { /* noop */ }
     } else {
       this.queue.push(utter);
     }
@@ -69,6 +88,25 @@ class SpeechServiceImpl {
     this.setSpeaking(false);
   }
 
+  /** All installed voices. Best-effort — returns [] if the query fails. */
+  async getVoices(): Promise<Speech.Voice[]> {
+    try {
+      return await Speech.getAvailableVoicesAsync();
+    } catch {
+      return [];
+    }
+  }
+
+  /** Installed Enhanced-quality voices for a language prefix (e.g. 'en'). */
+  async getEnhancedVoices(languagePrefix = 'en'): Promise<Speech.Voice[]> {
+    const voices = await this.getVoices();
+    return voices.filter(
+      (v) =>
+        v.language?.toLowerCase().startsWith(languagePrefix) &&
+        v.quality === Speech.VoiceQuality.Enhanced,
+    );
+  }
+
   private pump(): void {
     const next = this.queue.shift();
     if (!next) {
@@ -76,14 +114,15 @@ class SpeechServiceImpl {
       return;
     }
     this.setSpeaking(true);
+    const opts = next.opts;
     Speech.speak(next.text, {
-      rate: this.prefs.rate,
-      pitch: this.prefs.pitch,
-      voice: this.prefs.voice,
-      language: this.prefs.language,
-      onDone: () => this.pump(),
-      onStopped: () => this.pump(),
-      onError: () => this.pump(),
+      rate: opts?.rate ?? this.prefs.rate,
+      pitch: opts?.pitch ?? this.prefs.pitch,
+      voice: opts?.voice ?? this.prefs.voice,
+      language: opts?.language ?? this.prefs.language,
+      onDone: () => { opts?.onDone?.(); this.pump(); },
+      onStopped: () => { opts?.onStopped?.(); this.pump(); },
+      onError: (e) => { opts?.onError?.(e as Error); this.pump(); },
     });
   }
 

@@ -16,6 +16,8 @@ import {
 import { seedSymbolBrainDatabase } from '../data/sqlite/seedSymbolBrain';
 import { setHapticsEnabled, setHapticStrength } from '../utils/haptics';
 import { setPronunciations } from '../utils/speechRules';
+import { setSensoryProfile } from '../features/accessibility/sensory';
+import { SpeechService } from '../features/speech/SpeechService';
 
 const MAX_SAVE_RETRIES = 2;
 /** Hot slice — board taps, message strip, accessibility tweaks. */
@@ -31,6 +33,8 @@ export const initialState: AppState = {
   profilePhotoUri: null,
   secureMethod: null,
   biometricsEnabled: false,
+  appMode: 'communicate',
+  syncInProgress: false,
   accessibility: {
     textSize: 'default',
     buttonSize: 'standard',
@@ -41,6 +45,9 @@ export const initialState: AppState = {
     speechPitch: 1.0,
     hapticsEnabled: true,
     hapticStrength: 'standard',
+    motorProfile: 'standard',
+    sensoryProfile: 'standard',
+    voice: undefined,
     reduceMotionOverride: false,
     motorAccessMode: false,
     reduceSensoryLoad: false,
@@ -450,6 +457,10 @@ export function appReducer(state: AppState, action: Action): AppState {
       };
     case 'SET_ALL_FAVOURITES':
       return { ...state, favouritesByMode: action.payload };
+    case 'SET_APP_MODE':
+      return { ...state, appMode: action.payload };
+    case 'SET_SYNC_IN_PROGRESS':
+      return { ...state, syncInProgress: action.payload };
     case 'UPDATE_NGRAM_MODEL': {
       const words = action.payload.words;
       if (words.length < 2) return state;
@@ -713,6 +724,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     setPronunciations(state.pronunciations);
   }, [state.pronunciations]);
+
+  // Gate haptics + non-essential sounds through the sensory profile so users
+  // with sensory processing differences get a calmer experience app-wide.
+  useEffect(() => {
+    setSensoryProfile(state.accessibility.sensoryProfile);
+  }, [state.accessibility.sensoryProfile]);
+
+  // Configure the audio session once, and keep the speech engine's rate/pitch/
+  // voice preferences in sync so every SpeechService.say() honours the
+  // caregiver's chosen voice without each caller reading context.
+  useEffect(() => {
+    SpeechService.init();
+  }, []);
+
+  useEffect(() => {
+    SpeechService.setPrefs({
+      rate: state.accessibility.speechRate,
+      pitch: state.accessibility.speechPitch,
+      voice: state.accessibility.voice,
+    });
+  }, [
+    state.accessibility.speechRate,
+    state.accessibility.speechPitch,
+    state.accessibility.voice,
+  ]);
 
   const appContextValue = useMemo(() => ({
     state,

@@ -1,3 +1,6 @@
+import type { MotorProfile } from '../features/accessibility/motor';
+import type { SensoryProfile } from '../features/accessibility/sensory';
+
 export interface AppState {
   onboardingComplete: boolean;
   subscriptionComplete: boolean;
@@ -18,6 +21,19 @@ export interface AppState {
    */
   secureMethod: 'passkey' | 'password' | null;
   biometricsEnabled: boolean;
+  /**
+   * Board interaction mode.
+   * 'learn' — show hints, word-type badges, larger tap targets, celebration
+   *   animations (gated by reduce-motion).
+   * 'communicate' — zero decoration, fastest speech path.
+   * Default 'communicate'. Persisted per profile.
+   */
+  appMode: 'learn' | 'communicate';
+  /**
+   * True while a cloud sync is running. Transient runtime flag — NOT persisted.
+   * Drives the "Sync in progress" banner and disables edits until it resolves.
+   */
+  syncInProgress: boolean;
   accessibility: {
     textSize: 'default' | 'large' | 'xlarge' | 'maximum';
     buttonSize: 'standard' | 'large';
@@ -30,6 +46,23 @@ export interface AppState {
     speechPitch: number;
     /** Whether haptic feedback fires on taps. Default true. */
     hapticsEnabled: boolean;
+    /**
+     * Motor accessibility profile. Cascades to tile gap, tap debounce, dwell
+     * activation, long-press, and minimum touch target. Default 'standard'.
+     * @see src/features/accessibility/motor.ts
+     */
+    motorProfile: MotorProfile;
+    /**
+     * Sensory profile — gates haptics and non-essential sounds for users with
+     * sensory processing differences. Default 'standard'.
+     * @see src/features/accessibility/sensory.ts
+     */
+    sensoryProfile: SensoryProfile;
+    /**
+     * Preferred Expo Speech voice identifier. Undefined = system default voice.
+     * Persisted so the caregiver's chosen voice survives relaunches.
+     */
+    voice: string | undefined;
     /**
      * Strength of haptic feedback when enabled. 'gentle' softens every cue,
      * 'strong' makes impacts firmer for users who need clearer confirmation.
@@ -272,6 +305,10 @@ export interface CustomBoardTile {
    * static boards).
    */
   target?: string;
+  /** Last-edit timestamp (ms epoch). Drives sync conflict resolution. */
+  updatedAt?: number;
+  /** Who last edited this tile. 'user' wins ties over 'caregiver' during merge. */
+  updatedBy?: 'user' | 'caregiver';
 }
 
 export interface TaskTag {
@@ -386,4 +423,6 @@ export type Action =
   | { type: 'DELETE_PRONUNCIATION'; payload: string }
   | { type: 'SET_PASSPORT'; payload: Partial<CommunicationPassport> }
   | { type: 'SET_FAVOURITES_BY_MODE'; payload: { board: string; ids: string[] } }
-  | { type: 'SET_ALL_FAVOURITES'; payload: Partial<Record<string, string[]>> };
+  | { type: 'SET_ALL_FAVOURITES'; payload: Partial<Record<string, string[]>> }
+  | { type: 'SET_APP_MODE'; payload: 'learn' | 'communicate' }
+  | { type: 'SET_SYNC_IN_PROGRESS'; payload: boolean };

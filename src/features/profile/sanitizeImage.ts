@@ -6,7 +6,7 @@
  *  • Writes into the app sandbox — never keeps the picker URI.
  */
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 
 const DEST_DIR = `${FileSystem.documentDirectory}custom-symbols/`;
@@ -20,7 +20,7 @@ export class SanitizeImageError extends Error {
 }
 
 export async function sanitizeImage(uri: string): Promise<string> {
-  const info = await FileSystem.getInfoAsync(uri, { size: true });
+  const info = await FileSystem.getInfoAsync(uri);
   if (!info.exists) throw new SanitizeImageError('read_failed', 'Image not found');
   if ((info.size ?? 0) > MAX_BYTES) {
     throw new SanitizeImageError('too_large', 'Image over 8MB');

@@ -15,7 +15,7 @@
  * the default Expo managed workflow.
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Share, Alert } from 'react-native';
 import type { AppState } from '../context/types';
 

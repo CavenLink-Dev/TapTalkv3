@@ -3,14 +3,13 @@
  * audio (music, podcasts) is playing by ducking those sources instead of
  * pausing them. Called once from SpeechService.init().
  */
-import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-audio';
+import { setAudioModeAsync } from 'expo-audio';
 
 export async function configureAudioSession(): Promise<void> {
-  await Audio.setAudioModeAsync({
-    playsInSilentModeIOS: true,
-    interruptionModeIOS: InterruptionModeIOS.DuckOthers,
-    shouldDuckAndroid: true,
-    interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-    staysActiveInBackground: false,
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    // 'duckOthers' lowers background music/podcasts instead of pausing them,
+    // and works on both iOS and Android in the current expo-audio API.
+    interruptionMode: 'duckOthers',
   });
 }

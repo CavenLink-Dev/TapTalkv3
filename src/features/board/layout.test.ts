@@ -104,8 +104,8 @@ describe('reflowLayoutSlots', () => {
   it('preserves fw/fh', () => {
     const layout: TilePlacement[] = [{ id: 'x', slot: 7, fw: 4, fh: 4 }];
     const [r] = reflowLayoutSlots(layout);
-    expect(r.fw).toBe(4);
-    expect(r.fh).toBe(4);
+    expect(r?.fw).toBe(4);
+    expect(r?.fh).toBe(4);
   });
 
   it('does not mutate the input array', () => {
