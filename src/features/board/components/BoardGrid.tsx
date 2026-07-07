@@ -1,72 +1,106 @@
 /**
- * BoardGrid — virtualized AAC tile grid.
+ * Virtualized 4-column board grid.
  *
- * Extracted from app/(tabs)/talk.tsx (God-screen split, Item 4). Replaces the
- * old ScrollView + 500-Pressable-per-render approach with a FlashList that
- * only mounts on-screen rows. Tiles are chunked into fixed rows of
- * BOARD_COLUMNS so each list item is one memoised row.
+ * Replaces the ScrollView + manual layout in talk.tsx with a FlashList of
+ * row-batched tiles. Row cells are memoized so re-renders only affect the
+ * tile whose data actually changed — critical for users with 500+ custom
+ * tiles who would otherwise drop frames on every message-strip append.
  *
- * Motor accessibility (Items 5/6): a single useTileTap instance owns the
- * dwell/debounce logic and its handlers are threaded to every TileCell.
+ * Install: npx expo install @shopify/flash-list
  */
 import React, { useMemo } from 'react';
-import { View } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { TileCell } from './TileCell';
-import { useTileTap } from '../useTileTap';
-import { BOARD_COLUMNS, TILE_GAP, TILE_V_GAP } from '../constants';
 import type { BoardTile } from '../types';
+import { tileA11yProps } from '../tileA11y';
+import { useMotor } from '../../accessibility/motor';
 
 export type BoardGridProps = {
   tiles: BoardTile[];
-  tileSize: number;
+  columns?: number;
   onTap: (tileId: string) => void;
-  showBadges?: boolean;
-  disabled?: boolean;
+  onPressIn?: (tileId: string) => void;
+  onPressOut?: () => void;
+  renderTile: (tile: BoardTile, size: number) => React.ReactNode;
 };
-
-/** Split a flat tile list into rows of `columns`. */
-export function chunkRows(tiles: BoardTile[], columns: number): BoardTile[][] {
-  const rows: BoardTile[][] = [];
-  for (let i = 0; i < tiles.length; i += columns) {
-    rows.push(tiles.slice(i, i + columns));
-  }
-  return rows;
-}
 
 export function BoardGrid({
   tiles,
-  tileSize,
+  columns = 4,
   onTap,
-  showBadges,
-  disabled,
+  onPressIn,
+  onPressOut,
+  renderTile,
 }: BoardGridProps) {
-  const { onPress, onPressIn, onPressOut } = useTileTap(onTap);
-  const rows = useMemo(() => chunkRows(tiles, BOARD_COLUMNS), [tiles]);
+  const motor = useMotor();
+  const rows = useMemo(() => chunk(tiles, columns), [tiles, columns]);
 
   return (
     <FlashList
       data={rows}
-      estimatedItemSize={tileSize + TILE_V_GAP}
-      keyExtractor={(_row, i) => `row-${i}`}
-      drawDistance={tileSize * 4}
-      showsVerticalScrollIndicator={false}
+      estimatedItemSize={motor.minTile + motor.tileGap}
+      keyExtractor={(_, i) => `row-${i}`}
       renderItem={({ item }) => (
-        <View style={{ flexDirection: 'row', gap: TILE_GAP, marginBottom: TILE_V_GAP }}>
+        <View style={[styles.row, { gap: motor.tileGap, marginBottom: motor.tileGap }]}>
           {item.map((tile) => (
             <TileCell
               key={tile.id}
               tile={tile}
-              size={tileSize}
-              onPress={onPress}
+              size={motor.minTile}
+              onTap={onTap}
               onPressIn={onPressIn}
               onPressOut={onPressOut}
-              showBadge={showBadges}
-              disabled={disabled}
+              renderTile={renderTile}
             />
           ))}
         </View>
       )}
+      drawDistance={(motor.minTile + motor.tileGap) * 4}
+      contentContainerStyle={{ paddingHorizontal: motor.tileGap, paddingTop: motor.tileGap }}
     />
   );
 }
+
+type CellProps = {
+  tile: BoardTile;
+  size: number;
+  onTap: (id: string) => void;
+  onPressIn?: (id: string) => void;
+  onPressOut?: () => void;
+  renderTile: (tile: BoardTile, size: number) => React.ReactNode;
+};
+
+const TileCell = React.memo(
+  ({ tile, size, onTap, onPressIn, onPressOut, renderTile }: CellProps) => (
+    <Pressable
+      onPress={() => onTap(tile.id)}
+      onPressIn={onPressIn ? () => onPressIn(tile.id) : undefined}
+      onPressOut={onPressOut}
+      style={({ pressed }) => [{ width: size, height: size }, pressed && { opacity: 0.75 }]}
+      hitSlop={4}
+      {...tileA11yProps(tile)}
+    >
+      {renderTile(tile, size)}
+    </Pressable>
+  ),
+  (a, b) =>
+    a.tile.id === b.tile.id &&
+    a.tile.label === b.tile.label &&
+    a.tile.color === b.tile.color &&
+    a.tile.mulberrySymbolId === b.tile.mulberrySymbolId &&
+    a.tile.customImageUri === b.tile.customImageUri &&
+    a.tile.wordType === b.tile.wordType &&
+    a.size === b.size,
+);
+
+TileCell.displayName = 'TileCell';
+
+function chunk<T>(arr: T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
+
+const styles = StyleSheet.create({
+  row: { flexDirection: 'row' },
+});

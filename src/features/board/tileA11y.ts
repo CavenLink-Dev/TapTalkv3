@@ -1,18 +1,13 @@
 /**
  * VoiceOver / TalkBack labelling helpers. One place to keep tile a11y
- * consistent across TileCell, MessageStrip, and the edit-mode overlay.
+ * consistent across TileRenderer, MessageStrip, and the edit-mode overlay.
  *
  * Every tile a screen-reader user encounters should announce WHAT it says
  * when tapped — not just its written label.
  */
-type BoardTileLike = {
-  label: string;
-  speech?: string;
-  wordType?: string;
-  kind: 'word' | 'folder' | 'action';
-};
+import type { BoardTile } from './types';
 
-export function tileA11yProps(tile: BoardTileLike) {
+export function tileA11yProps(tile: Pick<BoardTile, 'label' | 'speech' | 'kind' | 'wordType'>) {
   const spoken = tile.speech ?? tile.label;
   const hint =
     tile.kind === 'folder'

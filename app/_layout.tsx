@@ -4,6 +4,7 @@ import { Text, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { AppProvider } from '../src/context/AppContext';
 import { useAppContext } from '../src/hooks/useAppContext';
@@ -11,6 +12,11 @@ import { useSession } from '../src/hooks/useSession';
 import { useTapTalkFonts } from '../src/theme/fonts';
 import { useTheme } from '../src/theme/useTheme';
 import { colorsLight, typography } from '../src/theme/tokens';
+import { SpeechService } from '../src/features/speech/SpeechService';
+
+// Keep the iOS/Android splash up until fonts are ready. Prevents the
+// black-frame flash between splash-hide and first render.
+SplashScreen.preventAutoHideAsync().catch(() => undefined);
 import {
   ScanningProvider,
   SwitchInputCapture,
@@ -73,12 +79,17 @@ function SwitchInputBridge(): null {
 export default function RootLayout() {
   const [fontsLoaded] = useTapTalkFonts();
 
-  // Block the first paint until SF Compact is registered. Without this guard
-  // the very first frame would draw with the system fallback and snap to the
-  // custom face a tick later — a flash everyone notices.
-  if (!fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: colorsLight.background }} />;
-  }
+  // Initialise the audio session once — needed before the first tile-tap TTS.
+  useEffect(() => { SpeechService.init(); }, []);
+
+  // Hide the native splash only after fonts are ready — no black frame,
+  // no fallback-face flash.
+  useEffect(() => {
+    if (fontsLoaded) SplashScreen.hideAsync().catch(() => undefined);
+  }, [fontsLoaded]);
+
+  // Native splash is still up; render nothing rather than a black View.
+  if (!fontsLoaded) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
