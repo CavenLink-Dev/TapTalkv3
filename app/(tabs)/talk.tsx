@@ -69,6 +69,37 @@ import { setTabBarHidden } from '../../src/features/board/chromeVisibility';
 // The underlying schema (`state.ngramModel`) is kept @deprecated so
 // persisted user data still hydrates without a migration.
 import { SymbolPackFolder, SymbolPackNode } from '../../src/data/symbolPacks';
+// Extracted tile leaves — presentational, memoisable, testable in isolation.
+import {
+  TileSymbol,
+  BoardFolderTile,
+  CustomTilePicture,
+  BoardWordTile,
+  GhostTileClone,
+  TILE_ASSETS,
+  WORD_TYPE_COLOR,
+  wordTypeColour,
+  wordBackgroundForTile,
+} from '../../src/features/board/components/TileRenderer';
+// Extracted edit-mode overlays — Reanimated leaves, no context reads.
+import {
+  GridOverlay,
+  DragPlaceholder,
+  MultiCell,
+  SourceGhost,
+} from '../../src/features/board/components/EditModeOverlay';
+// Extracted floating "way back" pill.
+import { DockPeekPill } from '../../src/features/board/components/DockPeekPill';
+// Pure layout math — the God-screen originals were byte-identical duplicates.
+import {
+  reflowLayoutSlots,
+  reflowAroundPinned,
+  footprintAt,
+  footprintsOverlap,
+  coarseCols,
+  coarseRows,
+  type CellFootprint,
+} from '../../src/features/board/layout';
 
 // ─── TODO: Board Chrome Overcrowding (Phase 4) ─────────────────────────────
 // Documented, NOT yet redesigned. The Talk screen currently competes with the
@@ -166,12 +197,10 @@ type TilePlacement = {
 
 type BoardLayout = TilePlacement[];
 
-/** Re-pack anchor slots in row-major order (e.g. after column count changes). */
-function reflowLayoutSlots(layout: BoardLayout): BoardLayout {
-  return [...layout]
-    .sort((a, b) => a.slot - b.slot)
-    .map((p, i) => ({ ...p, slot: i }));
-}
+// reflowLayoutSlots / reflowAroundPinned / footprintAt / footprintsOverlap /
+// coarseCols / coarseRows moved to src/features/board/layout.ts (pure,
+// unit-tested — see src/features/board/layout.test.ts). Imported at the top
+// of this file with the other feature imports.
 
 type GhostTile = {
   id: string;
@@ -219,84 +248,9 @@ const DOCK_ICON_TOGGLE = boardSizes.controlBarToggleIcon; // 22
 const DOCK_ICON_ACTION = boardSizes.controlBarIcon;       // 22
 const DOCK_ICON_ROW = boardSizes.controlBarIcon;          // 22
 const DOCK_ROW_LABEL = 14;
-// Coarse tile-cell footprint of a placement — used for collision math
-// and multi-cell highlights. fw=2 → 1 col, fw=3 or 4 → 2 cols, fw=5 or 6 → 3.
-const coarseCols = (fw: number) => Math.ceil(fw / 2);
-const coarseRows = (fh: number) => Math.ceil(fh / 2);
-
-// ── Footprint helpers ────────────────────────────────────────────────────────
-// Shared by resize AND drag-drop so multi-cell tiles can never be committed
-// on top of each other. A footprint is the coarse-cell rectangle a placement
-// occupies, anchored at its slot.
-type CellFootprint = {
-  startCol: number;
-  startRow: number;
-  endCol: number;
-  endRow: number;
-};
-
-const footprintAt = (slot: number, fw: number, fh: number): CellFootprint => {
-  const startCol = slot % BOARD_COLUMNS;
-  const startRow = Math.floor(slot / BOARD_COLUMNS);
-  return {
-    startCol,
-    startRow,
-    endCol: startCol + coarseCols(fw) - 1,
-    endRow: startRow + coarseRows(fh) - 1,
-  };
-};
-
-const footprintsOverlap = (a: CellFootprint, b: CellFootprint) =>
-  !(a.startCol > b.endCol || b.startCol > a.endCol ||
-    a.startRow > b.endRow || b.startRow > a.endRow);
-
-/**
- * Push-aside reflow around one pinned placement. Every other tile keeps its
- * slot when possible; tiles whose footprint now collides walk forward to the
- * nearest empty slot that fits (wrapping rows). Returns the full layout with
- * the pinned placement included. Used by both resize and drag-drop commits so
- * a multi-cell tile can never end up overlapping a neighbour.
- */
-function reflowAroundPinned(
-  others: TilePlacement[],
-  pinned: TilePlacement,
-): BoardLayout {
-  const placed: { p: TilePlacement; fp: CellFootprint }[] = [
-    { p: pinned, fp: footprintAt(pinned.slot, pinned.fw, pinned.fh) },
-  ];
-  const sorted = [...others].sort((a, b) => a.slot - b.slot);
-
-  for (const other of sorted) {
-    const desiredFp = footprintAt(other.slot, other.fw, other.fh);
-    const fits = (fp: CellFootprint) =>
-      fp.endCol < BOARD_COLUMNS &&
-      !placed.some(pl => footprintsOverlap(pl.fp, fp));
-
-    if (fits(desiredFp)) {
-      placed.push({ p: other, fp: desiredFp });
-      continue;
-    }
-
-    // Search forward for the nearest slot that fits.
-    const cw = coarseCols(other.fw);
-    let found = false;
-    for (let s = other.slot + 1; s < 500; s++) {
-      if ((s % BOARD_COLUMNS) + cw > BOARD_COLUMNS) continue;
-      const testFp = footprintAt(s, other.fw, other.fh);
-      if (fits(testFp)) {
-        placed.push({ p: { ...other, slot: s }, fp: testFp });
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      // Give up gracefully — keep in original slot (may overlap; unlikely).
-      placed.push({ p: other, fp: desiredFp });
-    }
-  }
-
-  return placed.map(x => x.p);
-}
+// Layout math (coarseCols/coarseRows, footprintAt, footprintsOverlap,
+// reflowAroundPinned) lives in src/features/board/layout.ts. Imported at the
+// top of this file. Unit tests: src/features/board/layout.test.ts.
 // All board tiles — folders and words alike — render as perfect squares so
 // the grid reads as a single rhythm. The previous `FOLDER_HEIGHT_RATIO`
 // made folders ~3% taller than words, which showed up as "Foods looks
@@ -308,21 +262,17 @@ const MESSAGE_CHIP_SIZE = 40;
 const MESSAGE_SLOT_COUNT = 6;
 const MESSAGE_SLOT_GAP = 5;
     
-const TILE_ASSETS = {
-  loud: require('../../assets/aac/board_tiles/symbol-loud.png'),
-  straw: require('../../assets/aac/board_tiles/symbol-straw.png'),
-  green: require('../../assets/aac/board_tiles/symbol-green.png'),
-  red: require('../../assets/aac/board_tiles/symbol-red.png'),
-  yellow: require('../../assets/aac/board_tiles/symbol-yellow.png'),
-  cyan: require('../../assets/aac/board_tiles/symbol-cyan.png'),
-  blue: require('../../assets/aac/board_tiles/symbol-blue.png'),
-  coral: require('../../assets/aac/board_tiles/symbol-coral.png'),
-  purple: require('../../assets/aac/board_tiles/symbol-purple.png'),
-};
-
-function wordBackgroundForTile(tile: BoardTile) {
-  return TILE_ASSETS[tile.background ?? 'cyan'];
-}
+// TILE_ASSETS, WORD_TYPE_COLOR, wordTypeColour, wordBackgroundForTile,
+// and the SYMBOL_* palette constants moved to
+// src/features/board/components/TileRenderer.tsx (imported at top of file).
+// Local aliases are kept below for the tile-data literals that reference the
+// palette by short name — SYMBOL_RED, SYMBOL_GREEN, etc.
+const SYMBOL_RED    = '#FF3B30';
+const SYMBOL_ORANGE = '#FF9F0A';
+const SYMBOL_YELLOW = '#FFD60A';
+const SYMBOL_GREEN  = '#34C759';
+const SYMBOL_BLUE   = '#0A84FF';
+const SYMBOL_PURPLE = '#BF5AF2';
 
 // Top-nav tab metadata. Replaces the brightly-coloured cartoon PNGs with
 // neutral outlined Ionicons + uppercase text labels — matches the bottom
@@ -333,37 +283,6 @@ const TOP_TAB_META: Record<TopTab, { icon: React.ComponentProps<typeof Ionicons>
   saved:    { icon: 'bookmark', label: 'SAVED'    },
   settings: { icon: 'settings', label: 'SETTINGS' },
 };
-
-// ─── Symbol palette ──────────────────────────────────────────────────────────
-// Vibrant, matte primaries chosen from the iOS system palette. The tile
-// background renders these flat (no PNG) at 30% opacity so the boards read
-// as clean, soft-coloured chips rather than busy stickers.
-const SYMBOL_RED    = '#FF3B30';
-const SYMBOL_ORANGE = '#FF9F0A';
-const SYMBOL_YELLOW = '#FFD60A';
-const SYMBOL_GREEN  = '#34C759';
-const SYMBOL_BLUE   = '#0A84FF';
-const SYMBOL_PURPLE = '#BF5AF2';
-
-// Fitzgerald word-type → tile colour. Mirrors the palette in AddSymbolModal
-// so a bulk pack import lands with the same colours as a single Add Symbol
-// tap (Rule 23 — colour is never the only signal, but it must stay
-// consistent across entry points). Unknown wordTypes fall back to noun.
-const WORD_TYPE_COLOR: Record<string, string> = {
-  person:       SYMBOL_YELLOW,
-  verb:         SYMBOL_GREEN,
-  noun:         SYMBOL_ORANGE,
-  emotion:      SYMBOL_RED,
-  adjective:    SYMBOL_BLUE,
-  social:       SYMBOL_PURPLE,
-  interjection: SYMBOL_PURPLE,
-  question:     SYMBOL_PURPLE,
-  adverb:       SYMBOL_BLUE,
-  number:       SYMBOL_ORANGE,
-  letter:       SYMBOL_ORANGE,
-};
-const wordTypeColour = (wt?: string): string =>
-  (wt && WORD_TYPE_COLOR[wt]) || WORD_TYPE_COLOR.noun!;
 
 // Mulberry symbols selected to match the existing tile labels. Asset-map
 // IDs (production-quality bundled SVGs) are preferred; curated `name`
@@ -1049,597 +968,19 @@ function DockSubControls({
   );
 }
 
-// ── DockPeekPill ─────────────────────────────────────────────────────────
-// Persistent "way back" while the control bar is hidden. A soft blob pill
-// hugging the left edge, vertically centred where the dock used to sit,
-// with a vertical grip (three stacked bars) so it reads as a floating
-// handle above the board. Tap restores the controls; long-press opens a
-// small popover with partial-hide toggles (Nav Bar / Control Bar). Springs
-// in from the left edge when the dock hides; instant under Reduce Motion.
-function DockPeekPill({
-  onPress,
-  onLongPress,
-}: {
-  onPress: () => void;
-  onLongPress: () => void;
-}) {
-  const t = useTheme();
-  const reduceMotion = useReduceMotion();
-  const anim = useRef(new RNAnimated.Value(0)).current;
-
-  useEffect(() => {
-    if (reduceMotion) { anim.setValue(1); return; }
-    anim.setValue(0);
-    RNAnimated.spring(anim, {
-      toValue: 1,
-      friction: 7,
-      tension: 64,
-      useNativeDriver: true,
-    }).start();
-  }, [anim, reduceMotion]);
-
-  return (
-    <RNAnimated.View
-      style={[
-        styles.dockPeekPillMount,
-        {
-          opacity: anim,
-          transform: [{
-            translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [-64, 0] }),
-          }],
-        },
-      ]}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Show controls"
-        accessibilityHint="Double tap to bring back the control bar and navigation bar. Long press for partial options."
-        onPress={onPress}
-        onLongPress={onLongPress}
-        delayLongPress={350}
-        hitSlop={{ top: 10, bottom: 10, left: 0, right: 10 }}
-        style={({ pressed }) => [
-          styles.dockPeekPill,
-          {
-            backgroundColor: t.isDark ? t.colors.navBackground : '#FFFFFF',
-            borderColor: t.colors.symbolOutline,
-            // Brief dim on press — opacity feedback, no colour switch.
-            opacity: pressed ? 0.7 : 1,
-          },
-        ]}
-      >
-        {/* Vertical "burger" grip — three short stacked bars. */}
-        <View style={styles.dockPeekGrip}>
-          <View style={[styles.dockPeekGripBar, { backgroundColor: t.colors.textMuted }]} />
-          <View style={[styles.dockPeekGripBar, { backgroundColor: t.colors.textMuted }]} />
-          <View style={[styles.dockPeekGripBar, { backgroundColor: t.colors.textMuted }]} />
-        </View>
-      </Pressable>
-    </RNAnimated.View>
-  );
-}
+// DockPeekPill moved to src/features/board/components/DockPeekPill.tsx
+// (imported at top of file). The `styles.dockPeekPill*` entries at the
+// bottom are now unused and can be pruned in a follow-up sweep.
 
 // Persisted Quick-tag storage key — the user's pinned Quick symbols
 // survive app restarts (session-independent, all boards share one list).
 const QUICK_TAGS_STORAGE_KEY = 'taptalk.quickTaggedIds.v1';
 
-// Mulberry pictograms render inside the `symbolMount` region at ~52% of
-// the tile size, which keeps them comfortably below the label without
-// crowding. Returns null when the tile has no symbol assigned so existing
-// tiles (e.g. People, Places) stay clean until we curate one for them.
-function TileSymbol({ tile, width, height, resolved, horizontal }: {
-  tile: BoardTile; width: number; height: number; resolved?: ResolvedSymbol; horizontal?: boolean;
-}) {
-  const symbolId = tile.mulberrySymbolId ?? resolved?.symbol.id;
-  const symbolName = tile.mulberryName;
-  if (!symbolId && !symbolName) return null;
-  // Two layout modes:
-  //  • horizontal — for wide (landscape) tiles: symbol fills the LEFT half,
-  //    label on the right. Symbol size = height * 0.78 (fills vertically).
-  //  • vertical (default) — label at top, symbol fills remaining area.
-  //    Symbol size scales with the smaller dimension bumped to 0.72 so
-  //    it reads MUCH bigger than the previous 0.58 baseline.
-  if (horizontal) {
-    const size = Math.round(Math.min(width * 0.42, height * 0.78));
-    return (
-      <View
-        style={{
-          position: 'absolute', left: 4, top: 0, bottom: 0,
-          width: Math.round(width * 0.42),
-          alignItems: 'center', justifyContent: 'center',
-        }}
-        pointerEvents="none"
-      >
-        <MulberrySymbol symbolId={symbolId} name={symbolName} size={size} />
-      </View>
-    );
-  }
-  // Phase 3 — Tile Symbol/Text Hierarchy: symbols dominate the tile; the
-  // label sits in a small band at the bottom. Ratios bumped from
-  // (0.85, 0.72) to (0.90, 0.70) — a hair narrower vertically to leave
-  // clean space for the smaller bottom label, wider horizontally so
-  // narrow tiles still read as symbol-first.
-  const size = Math.round(Math.min(width * 0.90, height * 0.70));
-  return (
-    <View style={styles.symbolMount} pointerEvents="none">
-      <MulberrySymbol symbolId={symbolId} name={symbolName} size={size} />
-    </View>
-  );
-}
+// TileSymbol, BoardFolderTile, CustomTilePicture, BoardWordTile, GhostTileClone
+// moved to src/features/board/components/TileRenderer.tsx (imported at top).
 
-function BoardFolderTile({ tile, width, height, resolved }: { tile: BoardTile; width: number; height: number; resolved?: ResolvedSymbol }) {
-  const t = useTheme();
-  // Phase 3 — Folder Outline Pass: make the outline barely visible so the
-  // board grid reads as a field of symbols first, folders second. Uses the
-  // theme's `border` (never `primary`) so the outline sits in the same
-  // muted family as other chrome dividers regardless of light/dark mode.
-  const edgeColor = t.colors.border;
-  // When the tile is much wider than tall (aspect > 1.5), use a
-  // horizontal layout: symbol on the left, label on the right. This
-  // keeps the symbol readable on landscape resized tiles instead of
-  // shrinking it to fit the short height.
-  const horizontal = width > height * 1.5;
-  const tabWidth = Math.round(width * 0.48);
-  const tabHeight = Math.round(height * 0.17);
-  const faceTop = Math.round(height * 0.08);
-  return (
-    <View style={[styles.tileShell, { width, height }]}>
-      <View
-        pointerEvents="none"
-        style={[
-          styles.folderTab,
-          {
-            width: tabWidth,
-            height: tabHeight,
-            backgroundColor: tile.color,
-            borderColor: edgeColor,
-          },
-        ]}
-      />
-      <View
-        pointerEvents="none"
-        style={[
-          styles.folderFace,
-          {
-            top: faceTop,
-            backgroundColor: tile.color,
-            borderColor: edgeColor,
-          },
-        ]}
-      />
-      <Text
-        style={[
-          styles.folderLabel,
-          horizontal
-            ? { left: Math.round(width * 0.44), right: 8, textAlign: 'left' as const,
-                bottom: 0, top: 0, ...({ textAlignVertical: 'center' } as any) }
-            : { color: t.colors.text },
-          { color: t.colors.text },
-        ]}
-        numberOfLines={horizontal ? 2 : 1}
-        adjustsFontSizeToFit
-      >
-        {tile.label}
-      </Text>
-      <TileSymbol tile={tile} width={width} height={height} resolved={resolved} horizontal={horizontal} />
-    </View>
-  );
-}
-
-function CustomTilePicture({
-  tile,
-  width,
-  height,
-  horizontal,
-}: {
-  tile: BoardTile;
-  width: number;
-  height: number;
-  horizontal: boolean;
-}) {
-  if (!tile.customImageUri) return null;
-  const size = Math.round(horizontal ? Math.min(height * 0.58, width * 0.28) : Math.min(width, height) * 0.44);
-  const top = horizontal ? Math.round((height - size) / 2) : Math.round(height * 0.17);
-  const left = horizontal ? Math.round(width * 0.09) : Math.round((width - size) / 2);
-  const initial = tile.label.trim().charAt(0).toUpperCase() || '+';
-  return (
-    <View
-      pointerEvents="none"
-      style={[
-        styles.customTilePicture,
-        {
-          width: size,
-          height: size,
-          top,
-          left,
-        },
-      ]}
-    >
-      <AvatarView
-        value={tile.customImageUri}
-        size={size}
-        initial={initial}
-        borderRadius={TILE_CORNER_RADIUS}
-      />
-    </View>
-  );
-}
-
-function BoardWordTile({ tile, width, height, resolved }: { tile: BoardTile; width: number; height: number; resolved?: ResolvedSymbol }) {
-  const t = useTheme();
-  const isFallback =
-    resolved != null &&
-    !tile.mulberrySymbolId &&
-    !tile.mulberryName &&
-    (resolved.tier === 'fuzzy' || resolved.tier === 'semantic' ||
-      resolved.tier === 'category' || resolved.tier === 'unknown');
-  const horizontal = width > height * 1.5;
-  const fillColor = tile.color;
-  const fillOpacity = tile.backgroundOpacity ?? 0.3;
-  const outlineOpacity = tile.outlineOpacity ?? 0;
-  return (
-    <View style={[styles.wordTile, { width, height }]}>
-      <View
-        style={[
-          styles.wordTileFill,
-          { width, height, backgroundColor: fillColor, opacity: fillOpacity },
-        ]}
-      />
-      {outlineOpacity > 0 ? (
-        <View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFillObject,
-            styles.wordTileCustomOutline,
-            {
-              borderColor: tile.outlineColor ?? t.colors.primary,
-              opacity: outlineOpacity,
-            },
-          ]}
-        />
-      ) : null}
-      {isFallback ? (
-        <View
-          style={[
-            StyleSheet.absoluteFillObject,
-            styles.wordTileFallbackBorder,
-            { borderColor: t.isDark ? t.colors.textTertiary : '#8A8F95' },
-          ]}
-          pointerEvents="none"
-        />
-      ) : null}
-      <Text
-        style={[
-          styles.wordLabel,
-          horizontal
-            ? {
-                left: Math.round(width * 0.44), right: 8,
-                top: 0, bottom: 0,
-                textAlign: 'left' as const,
-                ...({ textAlignVertical: 'center' } as any),
-              }
-            : null,
-          { color: t.colors.text },
-        ]}
-        numberOfLines={horizontal ? 2 : 1}
-        adjustsFontSizeToFit
-      >
-        {isFallback ? '≈ ' : ''}{tile.label}
-      </Text>
-      {tile.customImageUri ? (
-        <CustomTilePicture tile={tile} width={width} height={height} horizontal={horizontal} />
-      ) : (
-        <TileSymbol tile={tile} width={width} height={height} resolved={resolved} horizontal={horizontal} />
-      )}
-    </View>
-  );
-}
-
-function GhostTileClone({
-  ghost,
-  onDone,
-}: {
-  ghost: GhostTile;
-  onDone: (id: string) => void;
-}) {
-  // Item 1 — Reduce Motion: skip the arc-fly and instead fade in-place
-  // at the source tile position. Full motion keeps the arc + shrink.
-  const reduceMotion = useReduceMotion();
-  const progress = useSharedValue(0);
-  const fromX = ghost.from.x + ghost.from.width / 2 - ghost.size / 2;
-  const fromY = ghost.from.y + ghost.from.height / 2 - ghost.size / 2;
-  const toX = ghost.to.x + ghost.to.width / 2 - ghost.size / 2;
-  const toY = ghost.to.y + ghost.to.height / 2 - ghost.size / 2;
-
-  useEffect(() => {
-    progress.value = withTiming(
-      1,
-      {
-        duration: reduceMotion ? animation.durReduced : 430,
-        easing: reduceMotion ? undefined : ReanimatedEasing.bezier(0.22, 1, 0.36, 1),
-      },
-      finished => {
-        if (finished) runOnJS(onDone)(ghost.id);
-      },
-    );
-  }, [ghost.id, onDone, progress, reduceMotion]);
-
-  const animatedStyle = useAnimatedStyle(() => {
-    if (reduceMotion) {
-      // Fade in-place only — no translate, no shrink.
-      return { opacity: 0.55 * (1 - progress.value) };
-    }
-    return {
-      opacity: 0.55 * (1 - progress.value),
-      transform: [
-        { translateX: fromX + (toX - fromX) * progress.value },
-        { translateY: fromY + (toY - fromY) * progress.value },
-        { scale: 1 - 0.55 * progress.value },
-      ],
-    };
-  });
-
-  // Folder and word tiles now share the same square footprint, so the
-  // ghost clone tracks the unified size directly. `TILE_HEIGHT_RATIO`
-  // stays available in case we later differentiate kinds again.
-  const cloneHeight = Math.round(ghost.size * TILE_HEIGHT_RATIO);
-
-  return (
-    <Reanimated.View
-      pointerEvents="none"
-      style={[
-        styles.ghostTile,
-        {
-          width: ghost.size,
-          height: cloneHeight,
-          // RM: position absolutely at the source tile so the fade
-          // happens where the tile actually is, not at the origin.
-          ...(reduceMotion ? { left: fromX, top: fromY } : {}),
-        },
-        animatedStyle,
-      ]}
-    >
-      {ghost.tile.kind === 'folder' ? (
-        <BoardFolderTile tile={ghost.tile} width={ghost.size} height={ghost.size} />
-      ) : (
-        <BoardWordTile tile={ghost.tile} width={ghost.size} height={ghost.size} />
-      )}
-    </Reanimated.View>
-  );
-}
-
-// ── GridOverlay ──────────────────────────────────────────────────────────────
-// Renders dashed slot outlines behind all tiles. Opacity is driven by a
-// Reanimated shared value so it fades in/out with a spring when edit mode
-// toggles — no JS-thread involvement during the transition.
-function GridOverlay({
-  cols,
-  totalSlots,
-  tileSize,
-  gap,
-  rowGap,
-  opacity,
-  alwaysVisible = false,
-}: {
-  cols: number;
-  totalSlots: number;
-  tileSize: number;
-  gap: number;
-  rowGap?: number;
-  opacity: SharedValue<number>;
-  alwaysVisible?: boolean;
-}) {
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: alwaysVisible ? 1 : opacity.value,
-  }));
-  const colStep = tileSize + gap;
-  const rowStep = tileSize + (rowGap ?? gap);
-  return (
-    <Reanimated.View
-      pointerEvents="none"
-      style={[StyleSheet.absoluteFillObject, animatedStyle]}
-    >
-      {Array.from({ length: totalSlots }).map((_, slot) => {
-        const col = slot % cols;
-        const row = Math.floor(slot / cols);
-        return (
-          <View
-            key={slot}
-            style={{
-              position: 'absolute',
-              left: col * colStep,
-              top: row * rowStep,
-              width: tileSize,
-              height: tileSize,
-              borderWidth: 1.5,
-              borderStyle: 'dashed',
-              borderRadius: TILE_CORNER_RADIUS,
-              borderColor: alwaysVisible
-                ? 'rgba(120, 140, 200, 0.38)'
-                : 'rgba(100, 130, 255, 0.55)',
-              backgroundColor: alwaysVisible
-                ? 'rgba(120, 140, 200, 0.06)'
-                : 'rgba(100, 130, 255, 0.08)',
-            }}
-          />
-        );
-      })}
-    </Reanimated.View>
-  );
-}
-
-// ── DragPlaceholder ───────────────────────────────────────────────────────────
-// A highlighted slot outline that tracks the snap target while the user drags.
-// Driven entirely from the UI thread via snapSlot shared value.
-function DragPlaceholder({
-  snapSlot,
-  dragFw,
-  dragFh,
-  tileSize,
-  gap,
-  rowGap,
-  cols,
-}: {
-  snapSlot: SharedValue<number>;
-  /** FINE units of the dragged tile — highlight cells = ceil(fw/2) × ceil(fh/2). */
-  dragFw: SharedValue<number>;
-  dragFh: SharedValue<number>;
-  tileSize: number;
-  gap: number;
-  rowGap?: number;
-  cols: number;
-}) {
-  const colStep = tileSize + gap;
-  const rowStep = tileSize + (rowGap ?? gap);
-  // Render a single wrapper positioned at snapSlot, then N×M individual
-  // cell outlines inside it so the highlight matches the dragged tile's
-  // footprint (e.g. a 2×2 shows 4 cells).
-  const wrapperStyle = useAnimatedStyle(() => {
-    if (snapSlot.value < 0) return { opacity: 0, transform: [] };
-    const col = snapSlot.value % cols;
-    const row = Math.floor(snapSlot.value / cols);
-    return {
-      opacity: 1,
-      transform: [
-        { translateX: col * colStep },
-        { translateY: row * rowStep },
-      ],
-    };
-  });
-  // Cell grid style: recomputed when dragFw/dragFh change (which happens
-  // on drag start). Uses fixed width/height (up to MAX_FW) to render all
-  // cells; opacity of cells beyond the tile's footprint drops to 0.
-  const cellsStyle = useAnimatedStyle(() => {
-    const cCols = Math.max(1, Math.ceil(dragFw.value / 2));
-    const cRows = Math.max(1, Math.ceil(dragFh.value / 2));
-    return {
-      width: cCols * colStep - gap,
-      height: cRows * rowStep - (rowGap ?? gap),
-    };
-  });
-  // For each possible cell in the max footprint, decide whether it's active.
-  const maxC = Math.ceil(MAX_FW / 2);
-  return (
-    <Reanimated.View
-      pointerEvents="none"
-      style={[
-        { position: 'absolute', left: 0, top: 0 },
-        wrapperStyle,
-        cellsStyle,
-      ]}
-    >
-      {Array.from({ length: maxC * maxC }).map((_, i) => {
-        const c = i % maxC;
-        const r = Math.floor(i / maxC);
-        return (
-          <MultiCell
-            key={i}
-            c={c}
-            r={r}
-            dragFw={dragFw}
-            dragFh={dragFh}
-            tileSize={tileSize}
-            colStep={colStep}
-            rowStep={rowStep}
-          />
-        );
-      })}
-    </Reanimated.View>
-  );
-}
-
-// One highlight cell — only visible when it falls inside the dragged tile's
-// coarse footprint. Drives visibility from dragFw/dragFh so highlight cell
-// count matches the tile's size on every drag start.
-function MultiCell({
-  c, r, dragFw, dragFh, tileSize, colStep, rowStep,
-}: {
-  c: number; r: number;
-  dragFw: SharedValue<number>;
-  dragFh: SharedValue<number>;
-  tileSize: number;
-  colStep: number;
-  rowStep: number;
-}) {
-  const style = useAnimatedStyle(() => {
-    const cCols = Math.max(1, Math.ceil(dragFw.value / 2));
-    const cRows = Math.max(1, Math.ceil(dragFh.value / 2));
-    const active = c < cCols && r < cRows;
-    return { opacity: active ? 1 : 0 };
-  });
-  return (
-    <Reanimated.View
-      pointerEvents="none"
-      style={[
-        {
-          position: 'absolute',
-          left: c * colStep,
-          top: r * rowStep,
-          width: tileSize,
-          height: tileSize,
-          borderRadius: TILE_CORNER_RADIUS,
-          borderWidth: 2.5,
-          borderStyle: 'dashed',
-          borderColor: 'rgba(60, 120, 255, 0.65)',
-          backgroundColor: 'rgba(60, 120, 255, 0.10)',
-        },
-        style,
-      ]}
-    />
-  );
-}
-
-// ── SourceGhost ───────────────────────────────────────────────────────────────
-// A low-opacity card outline that hovers at the slot the dragged tile left
-// behind — the "phantom" trail that shows where the displaced tile will land.
-function SourceGhost({
-  dragSourceSlot: sourceSlot,
-  tileSize,
-  gap,
-  rowGap,
-  cols,
-}: {
-  dragSourceSlot: SharedValue<number>;
-  tileSize: number;
-  gap: number;
-  rowGap?: number;
-  cols: number;
-}) {
-  const colStep = tileSize + gap;
-  const rowStep = tileSize + (rowGap ?? gap);
-  const animatedStyle = useAnimatedStyle(() => {
-    if (sourceSlot.value < 0) return { opacity: 0, transform: [] };
-    const col = sourceSlot.value % cols;
-    const row = Math.floor(sourceSlot.value / cols);
-    return {
-      opacity: 1,
-      transform: [
-        { translateX: col * colStep },
-        { translateY: row * rowStep },
-      ],
-    };
-  });
-  return (
-    <Reanimated.View
-      pointerEvents="none"
-      style={[
-        {
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          width: tileSize,
-          height: tileSize,
-          borderRadius: TILE_CORNER_RADIUS,
-          borderWidth: 1.5,
-          borderStyle: 'dashed',
-          borderColor: 'rgba(180, 180, 200, 0.45)',
-          backgroundColor: 'rgba(180, 180, 200, 0.08)',
-        },
-        animatedStyle,
-      ]}
-    />
-  );
-}
+// GridOverlay, DragPlaceholder, MultiCell, SourceGhost moved to
+// src/features/board/components/EditModeOverlay.tsx (imported at top).
 
 // Rect in board-content coordinate space (relative to the ScrollView's
 // content container). Kept for type-compat; no longer used for drag logic.

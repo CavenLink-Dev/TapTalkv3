@@ -25,13 +25,15 @@ Full-width bar fixed to the very bottom of every main screen. 78 pt tall. Four e
 ---
 
 ### ◆ TAP BOARD (Talk Screen)
-`app/(tabs)/talk.tsx` — ~6 000 lines, all board sub-components defined here
+`app/(tabs)/talk.tsx` — ~6 400 lines, orchestrator only; presentational leaves live under `src/features/board/components/`
 
 The main AAC screen. Takes up the full display between the status bar and the bottom nav bar. Manages all board state: which board is active, edit mode, drag-and-drop layout, dock visibility, and speech.
 
 **Contains:** Message Strip · Top Nav Panel · Board Grid · Bottom Control Bar · Add Symbol Modal · Add Folder Modal · Custom Symbol Editor
 
-**AI guidance:** Single ~6k-line file; all board sub-components live here — add new board pieces here, not new files, to keep shared state co-located. Speak via `useSpeech` + `buildMessageUtterances` (never call `expo-speech` directly). Board/custom tiles persist through `AppContext`. Prewarm symbols with `prewarmMulberryAssets`. Gate all animation on `useReduceMotion()`.
+**Presentational leaves extracted** (God-screen split, problem #1 — see `docs/COMPONENT_MAP.md` entries below): tile renderers → `TileRenderer.tsx` · edit-mode overlays → `EditModeOverlay.tsx` · "way back" pill → `DockPeekPill.tsx` · pure layout math → `src/features/board/layout.ts` (unit-tested in `layout.test.ts`).
+
+**AI guidance:** Import presentational leaves — do NOT re-inline them. Keep `TalkScreen()` as the state orchestrator (context reads, dispatches, refs, gestures); push any new pure/prop-only component into `src/features/board/components/`. Speak via `useSpeech` + `buildMessageUtterances` (never call `expo-speech` directly). Board/custom tiles persist through `AppContext`. Prewarm symbols with `prewarmMulberryAssets`. Gate all animation on `useReduceMotion()`. Do NOT duplicate layout math from `layout.ts` — import it.
 
 ---
 
@@ -69,24 +71,68 @@ Scrollable grid of tiles filling the main area of the Tap Board between the Mess
 ---
 
 ### ◆ WORD TILE
-`app/(tabs)/talk.tsx` — `BoardWordTile` inside `BoardTileButton`
+`src/features/board/components/TileRenderer.tsx` — `BoardWordTile` (mounted inside `BoardTileButton` in `talk.tsx`)
 
 A coloured square tile on the Board Grid. Has a tinted background, a Mulberry symbol image in the upper portion, and a one-word label at the bottom. Minimum 88 × 88 pt, can span 2× or 3× columns/rows. Tap speaks the word and appends it to the Message Strip with a flying ghost animation.
 
 **Contains:** Background fill · Mulberry symbol · Label text · (edit mode) Resize handles · Selection indicator · Favourite star badge
 
-**AI guidance:** Tile label is ONE word (locked) — full spoken phrase goes in the tile `speech` field. Render the pictogram only via `<MulberrySymbol>`. Tap speaks + appends to the strip. Keep the tinted background as the Fitzgerald word-type colour. Min 88×88 pt; forgiving hit area (principle 20).
+**AI guidance:** Tile label is ONE word (locked) — full spoken phrase goes in the tile `speech` field. Render the pictogram only via `<MulberrySymbol>`. Tap speaks + appends to the strip. Keep the tinted background as the Fitzgerald word-type colour. Min 88×88 pt; forgiving hit area (principle 20). Component is a pure prop leaf — never add context reads or dispatches here; do it in the `BoardTileButton` wrapper in `talk.tsx`.
 
 ---
 
 ### ◆ FOLDER TILE
-`app/(tabs)/talk.tsx` — `BoardFolderTile` inside `BoardTileButton`
+`src/features/board/components/TileRenderer.tsx` — `BoardFolderTile` (mounted inside `BoardTileButton` in `talk.tsx`)
 
 A tile visually distinguished by a small tabbed corner at the top, signalling it opens a sub-board. Has a symbol icon and a one-word label. Same sizing rules as Word Tile. Tap navigates into the folder's child board; the Bottom Control Bar gains a Back button.
 
 **Contains:** Tab corner shape · Symbol icon · Label text · (edit mode) same handles as Word Tile
 
-**AI guidance:** Folders are always icon + one-word label — never text-only (locked). Tap pushes the child board and the dock switches to Folder mode (adds Back). Keep the tabbed-corner shape as the only visual signal distinguishing folders from word tiles.
+**AI guidance:** Folders are always icon + one-word label — never text-only (locked). Tap pushes the child board and the dock switches to Folder mode (adds Back). Keep the tabbed-corner shape as the only visual signal distinguishing folders from word tiles. Same purity rule as Word Tile — presentational only.
+
+---
+
+### ◆ TILE RENDERER BUNDLE
+`src/features/board/components/TileRenderer.tsx`
+
+Extracted from `app/(tabs)/talk.tsx` (God-screen split, problem #1). Bundles every pure, prop-only board-tile leaf so the tile grid can re-render one tile at a time without dragging the whole screen with it.
+
+**Exports:** `TileSymbol` (Mulberry mount) · `BoardFolderTile` · `CustomTilePicture` (user-photo tile) · `BoardWordTile` · `GhostTileClone` (tile-fly Reanimated clone) · `TILE_ASSETS` (background PNG map) · `WORD_TYPE_COLOR` / `wordTypeColour` (Fitzgerald palette) · `wordBackgroundForTile`.
+
+**AI guidance:** These components are LEAVES. Never add `useAppContext`, `useSpeech`, `useRouter`, dispatches, or AsyncStorage here — that lives in `talk.tsx`. Styles are duplicated locally by intent (never import styles across screen boundaries). Types (`BoardTile`, `GhostTile`) come from `src/features/board/types.ts`.
+
+---
+
+### ◆ EDIT-MODE OVERLAY LAYERS
+`src/features/board/components/EditModeOverlay.tsx`
+
+Extracted from `app/(tabs)/talk.tsx` (God-screen split, problem #1). The four Reanimated-driven overlays that render behind, over, and around tiles while the board is in Edit / Move mode. All animation runs on the UI thread via `SharedValue` reads.
+
+**Exports:** `GridOverlay` (dashed slot outlines) · `DragPlaceholder` (multi-cell snap highlight) · `MultiCell` (one cell inside DragPlaceholder) · `SourceGhost` (dashed outline at the vacated slot).
+
+**AI guidance:** Parent (`talk.tsx`) owns the shared values — `snapSlot`, `dragFw`/`dragFh`, `dragSourceSlot`, `opacity`. Thread them in as props. Do NOT read context from these components — they must remain pure so drag/resize doesn't remount the grid. Layout constants come from `src/features/board/constants.ts` (`MAX_FW`, `TILE_CORNER_RADIUS`).
+
+---
+
+### ◆ DOCK PEEK PILL
+`src/features/board/components/DockPeekPill.tsx`
+
+Extracted from `app/(tabs)/talk.tsx` (God-screen split, problem #1). Floating "way back" affordance that appears at the left edge when the bottom control bar is hidden. Springs in from off-screen; instant under Reduce Motion.
+
+**Contains:** Blob pill background · Three-bar vertical grip · Tap / long-press handlers (owned by parent).
+
+**AI guidance:** Pure prop leaf — parent owns both `onPress` (restore controls) and `onLongPress` (open partial-hide popover). Bottom offset derives from `DOCK_BOTTOM_GAP` + `DOCK_ACTION_SIZE` in `constants.ts`; do not hard-code. Popover itself still lives in `talk.tsx` (owns state).
+
+---
+
+### ◆ BOARD LAYOUT MATH (PURE)
+`src/features/board/layout.ts` · tests: `src/features/board/layout.test.ts`
+
+The pure functions that decide where a tile ends up on the grid — anchor slots, coarse-cell footprints, collision detection, push-aside reflow. Zero React, zero Reanimated, zero side effects. Runs in unit tests without mounting a component tree.
+
+**Exports:** `coarseCols` / `coarseRows` · `footprintAt` · `footprintsOverlap` · `reflowLayoutSlots` · `reflowAroundPinned` · types `TilePlacement`, `BoardLayout`, `CellFootprint`.
+
+**AI guidance:** Any change to slot-packing must also update `layout.test.ts`. Never inline these calculations in `talk.tsx` — the tests are the safety net. Constants (`BOARD_COLUMNS`, `MAX_FW`) come from `./constants`.
 
 ---
 
