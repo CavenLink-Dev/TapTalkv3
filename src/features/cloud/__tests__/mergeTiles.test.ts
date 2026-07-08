@@ -15,8 +15,10 @@ describe('mergeTiles', () => {
       [mk('a', 'local', 10, 'user')],
       [mk('a', 'remote', 20, 'caregiver')],
     );
-    expect(merged[0].label).toBe('remote');
-    expect(conflicts[0].kept).toBe('remote');
+    expect(merged).toHaveLength(1);
+    expect(conflicts).toHaveLength(1);
+    expect(merged[0]!.label).toBe('remote');
+    expect(conflicts[0]!.kept).toBe('remote');
   });
 
   it('user beats caregiver on a timestamp tie', () => {
@@ -24,7 +26,8 @@ describe('mergeTiles', () => {
       [mk('a', 'user-edit', 10, 'user')],
       [mk('a', 'care-edit', 10, 'caregiver')],
     );
-    expect(merged[0].label).toBe('user-edit');
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.label).toBe('user-edit');
   });
 
   it('deletions filter out and beat older edits', () => {

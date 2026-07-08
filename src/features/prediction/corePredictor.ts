@@ -35,11 +35,11 @@ const BIGRAMS: Record<string, string[]> = {
   are:       ['you', 'nice', 'okay'],
 };
 
-const DEFAULT_START = BIGRAMS['<start>'];
+const DEFAULT_START = BIGRAMS['<start>'] ?? [];
 
 export function predictNext(prev: string | undefined, max = 4): string[] {
   const key = (prev ?? '').trim().toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-  const list = key && BIGRAMS[key] ? BIGRAMS[key] : DEFAULT_START;
+  const list = (key ? BIGRAMS[key] : undefined) ?? DEFAULT_START;
   return list.slice(0, Math.max(1, Math.min(max, 8)));
 }
 

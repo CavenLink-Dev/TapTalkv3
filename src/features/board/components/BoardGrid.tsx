@@ -38,7 +38,6 @@ export function BoardGrid({
   return (
     <FlashList
       data={rows}
-      estimatedItemSize={motor.minTile + motor.tileGap}
       keyExtractor={(_, i) => `row-${i}`}
       renderItem={({ item }) => (
         <View style={[styles.row, { gap: motor.tileGap, marginBottom: motor.tileGap }]}>

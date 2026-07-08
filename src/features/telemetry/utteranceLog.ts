@@ -26,7 +26,7 @@ export type UtteranceEntry = {
 export async function logUtterance(entry: Omit<UtteranceEntry, 'ts'>): Promise<void> {
   const line = JSON.stringify({ ts: Date.now(), ...entry }) + '\n';
   try {
-    const info = await FileSystem.getInfoAsync(PATH, { size: true });
+    const info = await FileSystem.getInfoAsync(PATH);
     if (info.exists && (info.size ?? 0) > MAX_BYTES) {
       await FileSystem.deleteAsync(ROTATED_2, { idempotent: true });
       await FileSystem.moveAsync({ from: ROTATED_1, to: ROTATED_2 }).catch(() => undefined);

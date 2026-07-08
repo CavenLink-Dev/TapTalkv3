@@ -74,6 +74,7 @@ import { DockPopover } from '../../src/features/board/components/DockPopover';
 import { DockSubControls } from '../../src/features/board/components/DockSubControls';
 import { BoardTileCell } from '../../src/features/board/components/BoardTileButton';
 import { TopNav } from '../../src/features/board/components/TopNav';
+import { ScanHighlight, useScanning } from '../../src/features/scanning';
 // Pure layout math — the God-screen originals were byte-identical duplicates.
 import {
   reflowLayoutSlots,
@@ -161,6 +162,18 @@ import { useBoardEditActions } from '../../src/features/board/talk/useBoardEditA
 // app/board/hidden-tiles.tsx) keep working during the refactor.
 export { BOARD_TILES };
 
+// Board mode → Symbol Brain domain hint. Passed as `context.domain` to
+// `resolveSymbolForKeyword` so the scorer can boost candidates whose
+// category overlaps the active board's semantic area (e.g. "food" on the
+// Foods board, "healthcare" on the Emergency board). Only modes with a
+// clear semantic bias are mapped — mixed boards (home, quick, settings)
+// omit a domain so the resolver falls back to keyword-only scoring.
+const BOARD_DOMAIN: Partial<Record<string, string>> = {
+  foods: 'food',
+  feelings: 'feelings',
+  emergency: 'healthcare',
+};
+
 // reflowLayoutSlots / reflowAroundPinned / footprintAt / footprintsOverlap /
 // coarseCols / coarseRows moved to src/features/board/layout.ts (pure,
 // unit-tested — see src/features/board/layout.test.ts). Imported at the top
@@ -183,6 +196,7 @@ export default function TalkScreen() {
   const { speak, stop: stopSpeech, lastError, clearError } = useSpeech();
   const router = useRouter();
   const t = useTheme();
+  const scan = useScanning();
   const motorAccessEnabled = state.accessibility.motorAccessMode;
   // Default to closed — board is the hero, top nav stays out of the way
   // until the user explicitly taps the chevron to open it.
@@ -387,6 +401,9 @@ export default function TalkScreen() {
   const hapticIfEnabled = useCallback(() => {
     if (state.accessibility.hapticsEnabled !== false) hapticSelection();
   }, [state.accessibility.hapticsEnabled]);
+  const announce = useCallback((message: string) => {
+    AccessibilityInfo.announceForAccessibility(message);
+  }, []);
 
   const {
     hideMenuVisible,
@@ -1005,6 +1022,34 @@ export default function TalkScreen() {
     const rest = ordered.filter(p => !quickTaggedIds.has(p.id));
     return [...quickSymbols, ...quickFolders, ...rest].map((p, i) => ({ ...p, slot: i }));
   }, [activeLayout, quickOrderActive, quickTaggedIds, tileMapForMode]);
+  const scanRowSlots = useMemo(() => {
+    const rows = new Set<number>();
+    displayLayout.forEach((placement) => rows.add(Math.floor(placement.slot / BOARD_COLUMNS)));
+    return [...rows].sort((a, b) => a - b);
+  }, [displayLayout]);
+
+  const handleAccessibilityReorder = useCallback((tileId: string, direction: 'forward' | 'back') => {
+    const placement = activeLayout.find(p => p.id === tileId);
+    const tile = tileMapForMode.get(tileId);
+    if (!placement || !tile) return;
+
+    const targetSlot = direction === 'forward' ? placement.slot + 1 : placement.slot - 1;
+    const maxSlot = Math.max(...activeLayout.map(p => p.slot));
+    if (targetSlot < 0 || targetSlot > maxSlot) {
+      announce(direction === 'forward' ? 'Already at the end' : 'Already at the start');
+      return;
+    }
+
+    const targetFootprint = footprintAt(targetSlot, placement.fw, placement.fh);
+    if (targetFootprint.endCol >= BOARD_COLUMNS) {
+      announce('This tile cannot move there');
+      return;
+    }
+
+    hapticIfEnabled();
+    handleMoveToSlot(tileId, targetSlot);
+    announce(`${tile.label} moved ${direction === 'forward' ? 'forward' : 'back'}`);
+  }, [activeLayout, announce, handleMoveToSlot, hapticIfEnabled, tileMapForMode]);
 
   // Fast lookup: slot index → placement (for collision checks + swap).
   const layoutBySlot = useMemo(() => {
@@ -1156,7 +1201,14 @@ export default function TalkScreen() {
     (dockMode === 'homeExpanded' || dockMode === 'folderExpanded');
 
   // Keep `tiles` for the Mulberry prewarm effect (all tiles in active mode).
-  const tiles = useMemo(() => BOARD_TILES[activeMode], [activeMode]);
+  // Includes custom user tiles so they also get Symbol Brain resolution.
+  const tiles = useMemo(() => {
+    const base = BOARD_TILES[activeMode] ?? [];
+    const custom = state.customBoardTiles
+      .filter(t => t.board === activeMode)
+      .map(t => boardTileFromCustomTile(t));
+    return [...base, ...custom];
+  }, [activeMode, state.customBoardTiles]);
 
   useEffect(() => {
     const y = scrollPositions.current[activeMode] ?? 0;
@@ -1211,9 +1263,10 @@ export default function TalkScreen() {
     );
     if (toResolve.length === 0) return;
     let alive = true;
+    const domain = BOARD_DOMAIN[activeMode];
     Promise.all(
       toResolve.map(t =>
-        resolveSymbolForKeyword(t.speech ?? t.label).then(r => ({ id: t.id, r })),
+        resolveSymbolForKeyword(t.speech ?? t.label, 'local-user', { domain }).then(r => ({ id: t.id, r })),
       ),
     )
       .then(results => {
@@ -1228,7 +1281,7 @@ export default function TalkScreen() {
     return () => {
       alive = false;
     };
-  }, [tiles]);
+  }, [tiles, activeMode]);
   const chipTileLookup = useMemo(() => {
     const lookup = new Map<string, BoardTile>();
     Object.values(BOARD_TILES).flat().forEach(tile => {
@@ -1236,10 +1289,6 @@ export default function TalkScreen() {
       lookup.set(tile.label.toLowerCase(), tile);
     });
     return lookup;
-  }, []);
-
-  const announce = useCallback((message: string) => {
-    AccessibilityInfo.announceForAccessibility(message);
   }, []);
 
   // Chained clause runner — cancels any in-flight run, then walks the
@@ -2094,6 +2143,16 @@ export default function TalkScreen() {
               const gridRows = Math.max(tileRows, viewportRows);
               const totalGridSlots = gridRows * BOARD_COLUMNS;
               const gridH = gridRows * rowStep - TILE_V_GAP;
+              const activeScanRow = scan?.activeRow == null ? null : scanRowSlots[scan.activeRow] ?? null;
+              const scanRowRect: LayoutRectangle | null =
+                scan?.enabled && scan.phase === 'row' && activeScanRow != null
+                  ? {
+                      x: 0,
+                      y: activeScanRow * rowStep,
+                      width: boardWidth - TILE_LEFT_PADDING * 2,
+                      height: tileSize,
+                    }
+                  : null;
               return (
                 <GestureDetector gesture={sweepPan}>
                 <View style={{ width: boardWidth - TILE_LEFT_PADDING * 2, height: gridH, position: 'relative' }}>
@@ -2139,6 +2198,7 @@ export default function TalkScreen() {
                           editMode={editMode}
                           onLongPressEnterEdit={handleTileLongPress}
                           onMoveToSlot={handleMoveToSlot}
+                          onAccessibilityReorder={handleAccessibilityReorder}
                           onHide={handleHide}
                           onResize={handleResize}
                           snapSlot={snapSlot}
@@ -2154,6 +2214,7 @@ export default function TalkScreen() {
                           isSelected={quickManageOpen ? manageSelectedIds.has(tile.id) : selectedTileIds.has(tile.id)}
                           moveDestinationMode={editControlsOpen && activeEditTool === 'move'}
                           isFavourite={favouriteIds.includes(tile.id)}
+                          speaksOnPress={state.accessibility.wordSpeechMode !== 'sentence'}
                         />
                         {editMode && state.showUsageHeatmap && (state.tileTapCounts[tile.id] ?? 0) > 0 && (
                           <View
@@ -2193,6 +2254,7 @@ export default function TalkScreen() {
                       </View>
                     );
                   })}
+                  <ScanHighlight rect={scanRowRect} variant="row" />
                   {editMode ? (
                     <>
                       <DragPlaceholder

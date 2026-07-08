@@ -4,6 +4,7 @@ import { useTheme } from '../../theme/useTheme';
 import { radii, spacing, typography } from '../../theme/tokens';
 import { SearchResult } from '../symbol-brain/types';
 import { searchSymbols } from '../symbol-brain/symbolSearchService';
+import { clearResolveCache } from '../symbol-brain/resolveSymbolForKeyword';
 import { userPreferenceService } from '../symbol-brain/userPreferenceService';
 import { SymbolResultCard } from '../../components/aac/symbols/SymbolResultCard';
 
@@ -35,6 +36,7 @@ export function GuardianSymbolOverrideScreen({
       preferredSymbolId: result.symbol.id,
       selectedBy: 'guardian',
     });
+    clearResolveCache();
     setSavingId(null);
     onSaved?.(result);
   }

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { AccessibilityActionEvent, Animated as RNAnimated, Pressable, View } from 'react-native';
+import { AccessibilityActionEvent, Animated as RNAnimated, Pressable, View, type LayoutRectangle } from 'react-native';
 import Reanimated, {
   Easing as ReanimatedEasing,
   runOnJS,
@@ -17,7 +17,9 @@ import { useReduceMotion } from '../../../hooks/useReduceMotion';
 import { animation } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/useTheme';
 import { hapticSelection } from '../../../utils/haptics';
+import { ScanHighlight, useScanning, useScanTarget } from '../../scanning';
 import type { ResolvedSymbol } from '../../symbol-brain/resolveSymbolForKeyword';
+import { tileA11yProps, type TileA11yMode } from '../tileA11y';
 import { BOARD_COLUMNS, TILE_GAP, TILE_V_GAP } from '../talk/constants';
 import { styles } from '../talk/styles';
 import type { BoardTile, WindowRect } from '../talk/types';
@@ -77,6 +79,8 @@ interface BoardTileButtonProps {
   moveDestinationMode?: boolean;
   /** Favourite: draws a small star badge (pinned to the top of the board). */
   isFavourite?: boolean;
+  /** Whether activating a word tile also starts app speech immediately. */
+  speaksOnPress?: boolean;
 }
 
 function BoardTileButton({
@@ -110,6 +114,7 @@ function BoardTileButton({
   isSelected = false,
   moveDestinationMode = false,
   isFavourite = false,
+  speaksOnPress = false,
 }: BoardTileButtonProps) {
   // Actual visual dimensions default to a square of `size` for backwards
   // compatibility with existing single-slot tiles.
@@ -120,6 +125,7 @@ function BoardTileButton({
   const scale = useRef(new RNAnimated.Value(1)).current;
   const tileOpacity = useRef(new RNAnimated.Value(1)).current;
   const reduceMotion = useReduceMotion();
+  const scan = useScanning();
 
   // ── Drag state (Reanimated SVs so the gesture runs on the UI thread)
   const dragX = useSharedValue(0);
@@ -281,11 +287,23 @@ function BoardTileButton({
     });
   }, [editMode, moveDestinationMode, onEditTap, onLayoutSelect, onMeasuredPress, onPress, selectable, tile.id]);
 
-  // Item 7 — word-type hint for VoiceOver (principle 23: don't rely on
-  // colour alone). Folder tiles already say "Open …" in the label.
-  const a11yHint = tile.kind === 'word' && tile.wordType
-    ? `Word type: ${tile.wordType}`
-    : undefined;
+  const scanTarget = useMemo(() => ({
+    id: tile.id,
+    rowIndex: Math.floor(slot / BOARD_COLUMNS),
+    columnIndex: slot % BOARD_COLUMNS,
+    onSelect: handlePress,
+    accessibilityLabel: tile.kind === 'folder' && !isNav ? `Open ${tile.label}` : tile.label,
+    group: 'talk-board',
+  }), [handlePress, isNav, slot, tile.id, tile.kind, tile.label]);
+  useScanTarget(scanTarget, [scanTarget]);
+
+  const scanHighlightRect = useMemo<LayoutRectangle>(() => ({
+    x: 0,
+    y: 0,
+    width: tileWidth,
+    height: tileHeight,
+  }), [tileHeight, tileWidth]);
+  const isScanActive = !!scan?.enabled && scan.phase === 'column' && scan.activeTargetId === tile.id;
 
   // ── Drag gesture — swap on release, no spring/rubber-band ────────────────
   // Uses currentSlotSV so the gesture closure is never recreated mid-drag.
@@ -425,20 +443,47 @@ function BoardTileButton({
   });
 
   const handleAccessibilityAction = useCallback((event: AccessibilityActionEvent) => {
-    if (!onAccessibilityReorder) return;
     if (event.nativeEvent.actionName === 'increment') {
-      onAccessibilityReorder(tile.id, 'forward');
+      onAccessibilityReorder?.(tile.id, 'forward');
     } else if (event.nativeEvent.actionName === 'decrement') {
-      onAccessibilityReorder(tile.id, 'back');
+      onAccessibilityReorder?.(tile.id, 'back');
+    } else if (event.nativeEvent.actionName === 'longpress') {
+      onLongPressEnterEdit?.(tile.id);
+    } else if (event.nativeEvent.actionName === 'remove') {
+      onHide?.(tile);
     }
-  }, [onAccessibilityReorder, tile.id]);
+  }, [onAccessibilityReorder, onHide, onLongPressEnterEdit, tile]);
 
-  const accessibilityActions = canShowEditAffordance
-    ? [
-        { name: 'increment' as const, label: 'Move forward' },
-        { name: 'decrement' as const, label: 'Move back' },
-      ]
-    : undefined;
+  const tileA11yMode: TileA11yMode = selectable
+    ? 'select'
+    : moveDestinationMode
+      ? 'move'
+      : editMode
+        ? 'layout'
+        : 'normal';
+  const tileA11y = useMemo(() => tileA11yProps(tile, {
+    mode: tileA11yMode,
+    isSelected: selectable ? isSelected : resizeHandlesVisible,
+    isNav,
+    speaksOnPress,
+    canOpenEditMenu: !editMode && !selectable && !moveDestinationMode && Boolean(onLongPressEnterEdit),
+    canReorder: canShowEditAffordance && Boolean(onAccessibilityReorder),
+    canRemove: canShowEditAffordance && Boolean(onHide) && !tile.isProtected,
+  }), [
+    canShowEditAffordance,
+    editMode,
+    isNav,
+    isSelected,
+    moveDestinationMode,
+    onAccessibilityReorder,
+    onHide,
+    onLongPressEnterEdit,
+    resizeHandlesVisible,
+    selectable,
+    speaksOnPress,
+    tile,
+    tileA11yMode,
+  ]);
 
   const tileContent = (
     <>
@@ -451,8 +496,11 @@ function BoardTileButton({
       )}
       {canShowEditAffordance && onHide && !tile.isProtected ? (
         <Pressable
+          accessible={false}
           accessibilityRole="button"
           accessibilityLabel={`Remove ${tile.label}`}
+          accessibilityElementsHidden
+          importantForAccessibility="no"
           onPress={() => onHide(tile)}
           hitSlop={10}
           style={[styles.deleteBadge, { backgroundColor: t.colors.danger }]}
@@ -512,37 +560,14 @@ function BoardTileButton({
   const inner = (
     <Reanimated.View
       style={[
-        { width: tileWidth, height: tileHeight },
+        { width: tileWidth, height: tileHeight, position: 'relative' },
         animatedDragStyle,
       ]}
     >
       <RNAnimated.View style={{ flex: 1, transform: [{ scale }], opacity: tileOpacity }}>
         <Pressable
           ref={pressableRef}
-          accessibilityRole="button"
-          accessibilityLabel={(() => {
-            if (selectable && !isNav) {
-              return `${tile.label}, ${isSelected ? 'selected' : 'not selected'}`;
-            }
-            if (moveDestinationMode && tile.kind === 'folder' && !isNav) {
-              return `Move to ${tile.label}`;
-            }
-            if (isNav) return tile.label;
-            return tile.kind === 'folder' ? `Open ${tile.label}` : `Say ${tile.label}`;
-          })()}
-          accessibilityHint={
-            selectable && !isNav
-              ? 'Double tap to toggle selection'
-              : moveDestinationMode && tile.kind === 'folder' && !isNav
-                ? 'Sends the selected items to this folder'
-                : a11yHint
-          }
-          accessibilityState={
-            selectable && !isNav
-              ? { selected: isSelected }
-              : undefined
-          }
-          accessibilityActions={accessibilityActions}
+          {...tileA11y}
           onAccessibilityAction={handleAccessibilityAction}
           onPress={handlePress}
           onLongPress={!editMode && !isNav && !selectable && !moveDestinationMode ? () => onLongPressEnterEdit?.(tile.id) : undefined}
@@ -557,6 +582,7 @@ function BoardTileButton({
           {tileContent}
         </Pressable>
       </RNAnimated.View>
+      <ScanHighlight rect={isScanActive ? scanHighlightRect : null} variant="column" />
       {/* Resize handles — visible in edit mode, absolute-positioned around
           the tile edges. All 4 edges + 4 corners are functional; left/top
           shift the anchor slot in whole cells. Nav tiles skip handles. */}
@@ -613,6 +639,8 @@ export const BoardTileCell = React.memo(function BoardTileCell({
   isSelected,
   moveDestinationMode,
   isFavourite,
+  speaksOnPress,
+  onAccessibilityReorder,
 }: {
   tile: BoardTile;
   size: number;
@@ -642,6 +670,8 @@ export const BoardTileCell = React.memo(function BoardTileCell({
   isSelected?: boolean;
   moveDestinationMode?: boolean;
   isFavourite?: boolean;
+  speaksOnPress?: boolean;
+  onAccessibilityReorder?: (tileId: string, direction: 'forward' | 'back') => void;
 }) {
   const handlePress = useCallback(
     (rect: WindowRect | null) => onTilePress(tile, rect),
@@ -677,6 +707,8 @@ export const BoardTileCell = React.memo(function BoardTileCell({
       isSelected={isSelected}
       moveDestinationMode={moveDestinationMode}
       isFavourite={isFavourite}
+      speaksOnPress={speaksOnPress}
+      onAccessibilityReorder={onAccessibilityReorder}
     />
   );
 });
